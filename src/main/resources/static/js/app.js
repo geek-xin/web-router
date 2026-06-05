@@ -161,7 +161,7 @@
 
     function isValidLocalPort(localPort) {
         if (!localPort) {
-            return true;
+            return false;
         }
         const value = Number(localPort);
         return Number.isInteger(value) && value >= 1 && value <= 65535;
@@ -240,6 +240,11 @@
         }
         const button = card.querySelector('.btn-toggle-status');
         return button ? button.dataset.enabled === 'true' : false;
+    }
+
+    function routeHasLocalPort(routeId) {
+        const card = routeCard(routeId);
+        return card ? card.dataset.hasLocalPort === 'true' : false;
     }
 
     function existingRouteValues(datasetKey) {
@@ -972,6 +977,10 @@
 
     async function toggleRouteStatus(routeId, enabled) {
         try {
+            if (!enabled && !routeHasLocalPort(routeId)) {
+                showToast('请先编辑路由并填写本地端口后再启用', 'error');
+                return;
+            }
             const cfg = await fetchJson('/admin/api/routes/' + encodeURIComponent(routeId));
             const nextEnabled = !enabled;
             const pathPrefixes = cfg.pathPrefixes || [cfg.pathPrefix].filter(Boolean);
@@ -1104,7 +1113,7 @@
             return;
         }
         if (!isValidLocalPort(payload.localPort)) {
-            showToast('本地端口范围为 1-65535', 'error');
+            showToast('请输入本地端口，范围为 1-65535', 'error');
             return;
         }
         if (hasLocalBindingConflict(payload.localIp, payload.localPort, isEdit ? oldRouteId : '')) {

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
@@ -38,6 +39,7 @@ public class RouteConfigDto {
 
     @Min(value = 1, message = "本地端口范围为 1-65535")
     @Max(value = 65535, message = "本地端口范围为 1-65535")
+    @NotNull(message = "本地端口不能为空")
     private Integer localPort;
 
     private boolean enabled = false;

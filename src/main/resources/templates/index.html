@@ -73,6 +73,7 @@
                          th:data-id="${cfg.id}"
                          th:data-name="${cfg.name}"
                          th:data-target="${#strings.replace(#strings.replace(cfg.targetUrl, 'http://', ''), 'https://', '')}"
+                         th:data-has-local-port="${cfg.localPort != null}"
                          th:data-local-binding="${cfg.enabled && cfg.localPort != null ? cfg.effectiveLocalIp() + ':' + cfg.localPort : ''}">
                     <div class="route-card-top">
                         <label class="route-card-select" th:attr="aria-label='选择路由 ' + ${cfg.name}">
@@ -86,7 +87,7 @@
                             <button class="btn btn-sm btn-toggle-status"
                                     th:classappend="${cfg.enabled} ? ' btn-danger' : ' btn-primary'"
                                     type="button"
-                                    th:attr="data-id=${cfg.id},data-enabled=${cfg.enabled}"
+                                    th:attr="data-id=${cfg.id},data-enabled=${cfg.enabled},disabled=${!cfg.enabled && cfg.localPort == null},title=${!cfg.enabled && cfg.localPort == null ? '请先编辑路由并填写本地端口后再启用' : ''}"
                                     th:text="${cfg.enabled} ? '停用' : '启用'"></button>
                         </div>
                     </div>
@@ -157,13 +158,13 @@
             <div class="form-row form-row-local">
                 <div class="form-group">
                     <label for="localIp">本地 IP</label>
-                    <input type="text" id="localIp" placeholder="127.0.0.1">
-                    <small>本地端口代理监听地址，默认 127.0.0.1</small>
+                    <input type="text" id="localIp" value="127.0.0.1" readonly placeholder="127.0.0.1">
+                    <small>本地端口代理固定监听 127.0.0.1</small>
                 </div>
                 <div class="form-group">
-                    <label for="localPort">本地端口</label>
-                    <input type="number" id="localPort" min="1" max="65535" placeholder="如 18080">
-                    <small>留空则不启用本地端口访问</small>
+                    <label for="localPort">本地端口 <span class="required">*</span></label>
+                    <input type="number" id="localPort" min="1" max="65535" required placeholder="如 18080">
+                    <small>必填，用于本地端口访问</small>
                 </div>
             </div>
             <div class="form-group">
