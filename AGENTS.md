@@ -70,7 +70,8 @@
 - 监听地址为 `effectiveLocalIp():localPort`，`localIp` 为空时默认 `127.0.0.1`。
 - 刷新动态路由时会停止旧本地代理并按当前启用配置重启。
 - 本地端口代理使用 Reactor Netty `HttpServer` + `HttpClient`，会透传请求方法、请求体和大部分 Header，并把 `Host` 改为目标地址 Host。
-- 本地端口代理转发时不会按 `pathPrefixes` 剥离前缀，而是把原始请求 URI 追加到 `targetUrl` 后。
+- 本地端口代理转发时会先按当前路由的 `pathPrefixes` 做入口隔离；命中后不会按 `pathPrefixes` 剥离前缀，而是把原始请求 URI 追加到 `targetUrl` 后。
+- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）不会自动重新请求其前端配置/菜单，需要浏览器刷新或目标页面主动重新请求才能体现新入口。
 - 代理失败时返回 HTTP 502 和文本 `Proxy request failed`。
 
 ### 请求日志
@@ -176,4 +177,4 @@ mvn spring-boot:run
 - `config/routes` 是运行时目录，受启动工作目录影响。
 - 配置文件中的旧 `pathPrefix` 仍需兼容；写回 JSON 时应保持 `pathPrefix` 与 `pathPrefixes[0]` 同步。
 - 多路径前缀会产生派生 Gateway routeId；日志展示和统计通常应归并到基础 `id`。
-- 本地端口代理与 Gateway 转发语义不同：Gateway 会按前缀 `StripPrefix`，本地端口代理保留原始 URI。
+- 本地端口代理与 Gateway 转发语义不同：Gateway 会按前缀 `StripPrefix`，本地端口代理只按前缀隔离请求但保留原始 URI。

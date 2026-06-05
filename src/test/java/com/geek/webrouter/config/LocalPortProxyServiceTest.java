@@ -178,6 +178,43 @@ class LocalPortProxyServiceTest {
         }
     }
 
+    @Test
+    void localProxyForwardsConfiguredReportManagePrefix() throws IOException, InterruptedException {
+        AtomicInteger targetRequests = new AtomicInteger();
+        DisposableServer targetServer = HttpServer.create()
+                .host("127.0.0.1")
+                .port(0)
+                .handle((request, response) -> {
+                    targetRequests.incrementAndGet();
+                    return response.sendString(Mono.just("proxied " + request.uri()));
+                })
+                .bindNow();
+        LocalPortProxyService service = new LocalPortProxyService(new ProxyRequestLogService());
+        int localPort = freePort();
+        RouteConfig config = RouteConfig.builder()
+                .id("route-a")
+                .name("Route A")
+                .pathPrefixes(List.of("/iotmgr", "/sysmgr", "/idc-ui", "/portal", "/door", "/reportManage"))
+                .targetUrl("http://127.0.0.1:" + targetServer.port())
+                .localIp("127.0.0.1")
+                .localPort(localPort)
+                .enabled(true)
+                .build();
+
+        try {
+            service.refreshAll(List.of(config)).block(Duration.ofSeconds(3));
+
+            HttpResponse<String> response = getResponse(localPort, "/reportManage/api/configuration/");
+
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration/");
+            assertThat(targetRequests).hasValue(1);
+        } finally {
+            service.stopAll();
+            targetServer.disposeNow();
+        }
+    }
+
     private int freePort() {
         try (ServerSocket socket = new ServerSocket(0)) {
             socket.setReuseAddress(false);
