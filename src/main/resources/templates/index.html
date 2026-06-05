@@ -215,11 +215,6 @@
                     class="btn btn-sm btn-refresh-rate"
                     data-mode="live">实时刷新</button>
             </div>
-            <button type="button"
-                    class="modal-close-btn"
-                    id="btnCloseRouteLog"
-                    aria-label="关闭路由日志"
-                    title="关闭">×</button>
         </div>
         <div class="route-log-overview">
             <div class="log-summary">
@@ -234,20 +229,22 @@
             </div>
             <div class="log-card route-directory-card">
                 <h3>统计路径 Top 50</h3>
-                <table class="compact-table">
-                    <thead>
-                    <tr>
-                        <th>路径</th>
-                        <th>请求数</th>
-                        <th>总耗时</th>
-                    </tr>
-                    </thead>
-                    <tbody id="routeLogDirectoryStats">
-                    <tr data-empty="true">
-                        <td colspan="3" class="empty-small">暂无请求</td>
-                    </tr>
-                    </tbody>
-                </table>
+                <div class="route-directory-scroll">
+                    <table class="compact-table">
+                        <thead>
+                        <tr>
+                            <th>路径</th>
+                            <th>请求数</th>
+                            <th>总耗时</th>
+                        </tr>
+                        </thead>
+                        <tbody id="routeLogDirectoryStats">
+                        <tr data-empty="true">
+                            <td colspan="3" class="empty-small">暂无请求</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
         <div class="log-layout route-log-layout">
@@ -285,6 +282,12 @@
                 </table>
                 </div>
             </div>
+        </div>
+        <div class="route-log-footer">
+            <button type="button"
+                    class="btn modal-close-btn"
+                    id="btnCloseRouteLog"
+                    aria-label="关闭路由日志">关闭</button>
         </div>
     </div>
 </div>

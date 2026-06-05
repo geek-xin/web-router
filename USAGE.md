@@ -1,31 +1,32 @@
 # web-router 使用说明
 
-本文说明如何启动 `web-router`、管理路由配置、理解 Gateway 转发与本地端口代理的差异，以及调用管理 API。
+本文说明如何启动、配置和使用 `web-router`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
 
 ## 环境要求
 
 - JDK 21
 - Maven 3.9+
+- Git（用于版本管理和发布）
 
-## 快速启动
-
-在项目根目录执行：
+## 启动应用
 
 ```bash
 mvn test
 mvn spring-boot:run
 ```
 
-默认服务地址：`http://127.0.0.1:8090`。
+默认地址：`http://127.0.0.1:8090`。
 
-启动后访问：
+常用入口：
 
-- 管理后台：<http://localhost:8090/admin>
-- 健康检查：<http://localhost:8090/actuator/health>
+| 地址 | 说明 |
+| --- | --- |
+| `GET /` | 重定向到 `/admin` |
+| `GET /admin` | 管理后台 |
+| `GET /actuator/health` | 健康检查 |
+| `GET /actuator/info` | 应用信息 |
 
-`GET /` 会自动重定向到 `/admin`。
-
-## 配置文件位置
+## 路由配置文件
 
 路由配置保存在应用启动工作目录下：
 
@@ -33,7 +34,7 @@ mvn spring-boot:run
 config/routes/<id>.json
 ```
 
-示例配置：
+示例：
 
 ```json
 {
@@ -48,40 +49,42 @@ config/routes/<id>.json
 }
 ```
 
-字段说明：
-
 | 字段 | 说明 |
 | --- | --- |
-| `id` | 内部路由 ID；创建时自动生成，并作为配置文件名和 Gateway 路由 ID 基础值。 |
+| `id` | 内部路由 ID；创建时自动生成，用作配置文件名和 Gateway routeId 基础值。 |
 | `name` | 展示名称，不能为空，不能与其他路由重复。 |
-| `pathPrefixes` | 路径前缀列表，至少一项；同一前缀不能重复配置。 |
+| `pathPrefixes` | 路径前缀列表，至少一项；同一路由内和不同路由间都不能重复。 |
 | `pathPrefix` | 兼容旧配置的单路径字段，写回时与 `pathPrefixes[0]` 同步。 |
 | `targetUrl` | 目标服务地址；API 入参可省略协议，保存时默认补 `http://`。 |
-| `localIp` | 可选本地监听 IP；空值默认 `127.0.0.1`。 |
-| `localPort` | 可选本地监听端口；为空表示不启用本地端口代理。 |
-| `enabled` | 是否启用；禁用后保留配置文件，但不注册 Gateway 路由，也不启动本地端口代理。 |
+| `localIp` | 可选本地监听 IP；空值且配置了本地端口时默认 `127.0.0.1`。 |
+| `localPort` | 可选本地监听端口；为空表示不启用独立本地端口代理。 |
+| `enabled` | 是否启用；禁用后保留文件，但不注册 Gateway 路由，也不启动本地端口代理。 |
 
-## 管理后台使用
+## 管理后台
 
-1. 启动应用后打开 <http://localhost:8090/admin>。
-2. 点击新增路由，填写：
-   - 路由名称。
-   - 一个或多个路径前缀。
-   - 目标服务地址。
-   - 可选本地监听 IP 和端口。
-   - 是否启用。
-3. 保存后应用会立即刷新 Gateway 路由和本地端口代理。
-4. 可在列表中编辑、删除、启用/禁用路由，或查看原始 JSON 配置。
+打开 <http://localhost:8090/admin> 后可以：
 
-## Gateway 路径转发规则
+- 新增、编辑、删除路由。
+- 启用或禁用路由。
+- 为一条路由配置多个路径前缀。
+- 配置可选本地监听 IP/端口。
+- 查看原始 JSON 配置和配置目录。
+- 复制 Gateway 或本地端口访问地址。
+- 查看全部/单路由请求统计、Top 路径、最近请求日志和实时刷新状态。
+
+保存路由后，后台会立即刷新 Gateway 路由和本地端口代理。
+
+## Gateway 转发规则
 
 启用的路由会按每个 `pathPrefixes` 项注册一条 Gateway 路由：
 
+- 第 1 条使用基础 `id`。
+- 后续前缀使用 `<id>__<index>`，例如 `route-demo__1`。
 - `/` 匹配 `/**`。
 - `/test` 匹配 `/test/**`。
-- `/test/api` 会生成 `StripPrefix=2`。
+- `/test/api` 会执行 `StripPrefix=2`。
 
-例如配置：
+示例：
 
 ```json
 {
@@ -98,17 +101,15 @@ config/routes/<id>.json
 curl http://localhost:8090/test/hello
 ```
 
-会转发到：
+目标服务收到：
 
 ```text
-http://localhost:8081/hello
+/hello
 ```
-
-也就是说，Gateway 转发会按路径前缀层级剥离前缀。
 
 ## 本地端口代理规则
 
-如果路由配置了 `localPort`，应用会为该路由额外启动一个本地代理：
+如果启用路由配置了 `localPort`，应用会为该路由启动独立本地监听：
 
 ```json
 {
@@ -127,17 +128,25 @@ http://localhost:8081/hello
 curl http://127.0.0.1:18081/test/hello
 ```
 
-会按原始 URI 追加到目标地址后，转发到：
+目标服务收到：
 
 ```text
-http://localhost:8081/test/hello
+/test/hello
 ```
 
-注意：本地端口代理只使用 `pathPrefixes` 做入口隔离，不会执行 `StripPrefix`。
+本地端口代理特点：
+
+- 只对 `enabled=true` 且设置了 `localPort` 的路由启动。
+- `localIp` 为空时使用 `127.0.0.1`。
+- 只允许命中当前路由 `pathPrefixes` 的请求进入；未命中请求返回 `404`。
+- 不执行 `StripPrefix`，原始请求 URI 会追加到 `targetUrl` 后。
+- 透传请求方法、请求体和大部分 Header，并把 `Host` 改为目标地址 Host。
+- 响应设置 `Connection: close` 和禁用缓存头，减少配置刷新后的旧连接/旧缓存影响。
+- 代理失败时返回 HTTP 502，文本为 `Proxy request failed`。
 
 ## 管理 API
 
-所有管理 API 统一返回 `Result<T>` 结构：
+所有管理 API 统一返回：
 
 ```json
 {
@@ -149,13 +158,15 @@ http://localhost:8081/test/hello
 }
 ```
 
-业务错误通常返回 HTTP 200，但响应体中 `success=false`。参数校验错误的响应体 `code=400`。
+业务错误和参数校验错误通常返回 HTTP 200，但响应体 `success=false`；参数校验错误响应体 `code=400`。前端依赖这一语义。
 
 ### 路由配置 API
 
+> 路径变量当前由控制器命名为 `{name}`，实际传入的是配置文件 ID，例如 `route-20260603234846-4d2deb`。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/admin/api/routes` | 查询全部路由。 |
+| `GET` | `/admin/api/routes` | 查询全部路由，按配置文件最后修改时间倒序。 |
 | `GET` | `/admin/api/routes/{id}` | 查询单条路由。 |
 | `GET` | `/admin/api/routes/{id}/raw` | 查看原始 JSON 文件内容。 |
 | `POST` | `/admin/api/routes` | 创建路由并刷新代理。 |
@@ -198,7 +209,7 @@ curl -X PUT http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb \
 curl -X DELETE http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb
 ```
 
-## 请求日志 API
+### 请求日志 API
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -207,14 +218,15 @@ curl -X DELETE http://localhost:8090/admin/api/routes/route-20260603234846-4d2de
 | `GET` | `/admin/api/proxy-logs/stream` | 全部路由实时日志 SSE。 |
 | `GET` | `/admin/api/proxy-logs/routes/{routeId}/stream` | 指定路由实时日志 SSE。 |
 
-日志快照包含：
+快照内容包括：
 
-- `totalRequests`：请求总数。
-- `uniqueIpCount`：去重 IP 数。
-- `requestsByIp`：按 IP 聚合的请求数。
-- `recentLogs`：最近 100 条请求日志。
+- 总请求数。
+- 去重 IP 数。
+- 按 IP 请求次数排序。
+- Top 路径统计。
+- 最近 100 条请求日志。
 
-SSE 示例：
+订阅 SSE：
 
 ```bash
 curl -N http://localhost:8090/admin/api/proxy-logs/stream
@@ -225,16 +237,45 @@ curl -N http://localhost:8090/admin/api/proxy-logs/stream
 - `id` 只允许英文、数字、下划线和连字符。
 - `name` 不能为空，不能与其他路由重复。
 - `pathPrefixes` 至少一项；每项必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
-- 路径前缀冲突检查只判断完全相同前缀，不判断父子前缀包含关系。
-- `targetUrl` 入参格式为 `host:port` 或 `http(s)://host:port`，保存前会归一化为带协议 URL，且不能与其他路由重复。
+- 路径前缀会规范化：非根路径末尾 `/` 会被移除，例如 `/api/` -> `/api`。
+- 路径前缀冲突只判断“完全相同前缀”，不判断父子包含关系。
+- `targetUrl` 入参格式为 `host:port` 或 `http(s)://host:port`，保存前归一化为带协议 URL，且不能与其他路由重复。
 - `localPort` 范围为 `1-65535`。
-- `localIp` 允许空值、`localhost` 或 IPv4。
+- `localIp` 允许空值、`localhost` 或有效 IPv4；非空时即使未配置 `localPort` 也会校验。
 - `localIp:localPort` 不能与其他启用本地绑定的路由重复。
+
+## 打包发布
+
+生成发布包：
+
+```bash
+scripts/build-dist.sh
+```
+
+默认跳过测试；需要打包前运行测试：
+
+```bash
+scripts/build-dist.sh --with-tests
+```
+
+输出位置：
+
+```text
+target/dist/web-router-1.0.0-SNAPSHOT.tar.gz
+```
+
+发布包包含：
+
+- Spring Boot 可执行 JAR。
+- `run.sh`。
+- 空的 `config/routes` 目录。
+- `README.md`、`USAGE.md`、`CHANGELOG.md`。
 
 ## 常见注意事项
 
-- `config/routes` 是运行时目录，受应用启动工作目录影响。
+- `config/routes` 受应用启动工作目录影响。
 - 禁用路由会保留 JSON 文件，但不会注册 Gateway 路由或启动本地端口代理。
 - Gateway 转发会剥离路径前缀；本地端口代理不会剥离路径前缀。
-- 修改、删除或新增路径前缀后，应用会刷新本地端口代理；刷新只影响后续 HTTP 请求。
-- 本地端口代理失败时返回 HTTP 502，响应文本为 `Proxy request failed`。
+- 修改 `pathPrefixes` 后刷新只影响后续 HTTP 请求；已加载页面若没有重新请求，代理无法主动改变页面内状态。
+- 请求日志保存在内存中，应用重启后清空。
+- 当前项目没有 npm 构建流程，前端静态资源直接由 Spring Boot 提供。

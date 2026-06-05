@@ -1,27 +1,21 @@
 # web-router
 
-`web-router` 是一个轻量 Web 路由代理，用于在本机快速维护多组路径转发规则，并在不重启应用的情况下动态刷新代理配置。项目基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty 和 Thymeleaf 构建，适合开发、联调、测试环境中管理多个后端服务入口。
+`web-router` 是一个面向本地开发、联调和测试环境的轻量 Web 路由代理。它把多组路径转发规则保存为本地 JSON 文件，并通过 Spring Cloud Gateway、Reactor Netty 和 Thymeleaf 管理后台实现“配置即改即生效”。
 
-## 项目定位
+## 功能总览
 
-在多服务联调场景中，经常需要把不同路径前缀转发到不同目标服务，或临时为某个服务暴露一个独立本地端口。`web-router` 将这些规则保存为本地 JSON 文件，并提供管理后台/API 完成配置的增删改查和实时刷新。
-
-它重点解决：
-
-- 多个后端服务入口分散、切换成本高。
-- 路由配置修改后需要重启代理服务。
-- 单个目标服务需要独立本地监听地址或端口。
-- 缺少对代理请求量、访问 IP、最近请求记录的轻量观测。
-
-## 核心能力
-
-- **路径前缀转发**：按一个或多个 `pathPrefixes` 匹配请求并转发到目标服务。
-- **动态 Gateway 路由**：启用配置后自动注册 Spring Cloud Gateway 路由，写操作后即时刷新。
-- **独立本地端口代理**：单条路由可选监听独立 `localIp:localPort`，由 Reactor Netty 转发请求。
-- **本地 JSON 持久化**：每条路由保存为 `config/routes/<id>.json`，无需数据库。
-- **管理后台**：通过 Thymeleaf 页面管理路由配置、查看原始 JSON、复制访问地址。
-- **请求日志统计**：记录总请求数、去重 IP、按 IP 聚合、最近请求日志，并支持 SSE 实时推送。
-- **旧配置兼容**：保留 `pathPrefix` 单路径字段，并与 `pathPrefixes[0]` 同步。
+| 功能 | 当前行为 |
+| --- | --- |
+| 管理后台 | `GET /admin` 打开 Thymeleaf 管理页面；`GET /` 自动重定向到 `/admin`。 |
+| 路由配置 | 每条路由保存为 `config/routes/<id>.json`，创建时自动生成 `route-yyyyMMddHHmmss-xxxxxx` 形式 ID。 |
+| 多路径前缀 | 一条路由支持多个 `pathPrefixes`；旧字段 `pathPrefix` 会与第一项保持同步。 |
+| Gateway 转发 | 启用路由按每个路径前缀注册 Gateway 路由，并按层级执行 `StripPrefix`。 |
+| 独立本地端口代理 | 启用且配置了 `localPort` 的路由会启动独立 `localIp:localPort` 监听。 |
+| 本地代理入口隔离 | 本地端口代理只接受命中该路由 `pathPrefixes` 的请求，且保留原始 URI 转发。 |
+| 动态刷新 | 新增、更新、删除路由后即时刷新 Gateway 路由和本地端口代理，无需重启。 |
+| 请求观测 | Gateway 与本地端口代理都会记录请求统计、最近日志，并支持 SSE 实时推送。 |
+| 统一响应 | 管理 API 统一返回 `Result<T>`；业务/校验错误通常为 HTTP 200 + `success=false`。 |
+| 打包发布 | `scripts/build-dist.sh` 可生成包含 JAR、文档和 `run.sh` 的 `target/dist/*.tar.gz`。 |
 
 ## 技术栈
 
@@ -29,7 +23,7 @@
 | --- | --- |
 | 运行框架 | Spring Boot 3.5.2 |
 | 路由代理 | Spring Cloud Gateway 2024.0.1 |
-| 本地端口代理 | Reactor Netty |
+| 本地代理 | Reactor Netty |
 | 页面模板 | Thymeleaf |
 | 配置存储 | 本地 JSON 文件 |
 | 构建工具 | Maven |
@@ -39,50 +33,72 @@
 
 ```mermaid
 flowchart LR
-    Client["浏览器 / curl / 调用方"] --> Gateway["Spring Cloud Gateway\n:8090"]
-    Gateway --> DynamicRoutes["动态路由\nDynamicRouteService"]
+    Client["浏览器 / curl / 调用方"] --> Gateway["Spring Cloud Gateway\n127.0.0.1:8090"]
+    Gateway --> DynamicRoutes["DynamicRouteService\n动态 Gateway 路由"]
     DynamicRoutes --> Target["目标服务"]
 
-    Admin["管理后台 / API"] --> RouteService["RouteConfigServiceImpl"]
+    Admin["管理后台 / 管理 API"] --> RouteService["RouteConfigServiceImpl\nJSON 读写与校验"]
     RouteService --> JsonFiles["config/routes/*.json"]
     Admin --> DynamicRoutes
 
-    Client --> LocalProxy["可选本地端口代理\nLocalPortProxyService"]
+    Client --> LocalProxy["LocalPortProxyService\n可选每路由本地端口"]
     LocalProxy --> Target
 
-    Gateway --> Logs["ProxyRequestLogService"]
+    Gateway --> Logs["ProxyRequestLogService\n统计 / 最近日志 / SSE"]
     LocalProxy --> Logs
-    Logs --> SSE["日志快照 / SSE"]
+    Logs --> Admin
 ```
 
-## 关键模块
-
-- `src/main/java/com/geek/webrouter/Application.java`：应用入口。
-- `src/main/java/com/geek/webrouter/config/DynamicRouteService.java`：动态 Gateway 路由注册与刷新。
-- `src/main/java/com/geek/webrouter/config/LocalPortProxyService.java`：单路由独立本地端口代理。
-- `src/main/java/com/geek/webrouter/web/service/impl/RouteConfigServiceImpl.java`：路由配置文件读写、校验和冲突检测。
-- `src/main/java/com/geek/webrouter/web/controller/RouteConfigController.java`：管理页面和路由配置 API。
-- `src/main/java/com/geek/webrouter/web/controller/ProxyRequestLogController.java`：请求日志快照和 SSE API。
-- `src/main/resources/templates/index.html`：管理后台页面。
-- `src/main/resources/static/js/app.js`、`src/main/resources/static/css/style.css`：管理后台交互和样式。
-
-## 使用说明
-
-详细的启动、配置、转发规则和 API 示例请查看：[USAGE.md](./USAGE.md)。
-
-## 开发与验证
+## 快速启动
 
 ```bash
 mvn test
 mvn spring-boot:run
 ```
 
-默认监听地址：`127.0.0.1:8090`。
+默认监听：`127.0.0.1:8090`。
 
 启动后访问：
 
 - 管理后台：<http://localhost:8090/admin>
 - 健康检查：<http://localhost:8090/actuator/health>
+- 应用信息：<http://localhost:8090/actuator/info>
+
+## 最小路由示例
+
+```json
+{
+  "name": "测试服务",
+  "pathPrefixes": ["/test", "/api/test"],
+  "targetUrl": "localhost:8081",
+  "localIp": "127.0.0.1",
+  "localPort": 18081,
+  "enabled": true
+}
+```
+
+保存后：
+
+- Gateway：`http://localhost:8090/test/hello` -> `http://localhost:8081/hello`
+- 本地端口代理：`http://127.0.0.1:18081/test/hello` -> `http://localhost:8081/test/hello`
+
+> 差异点：Gateway 会剥离匹配前缀；本地端口代理只做入口隔离，不剥离前缀。
+
+## 文档入口
+
+- [使用说明](./USAGE.md)：启动、配置、API、打包和排障。
+- [变更说明](./CHANGELOG.md)：当前版本能力清单。
+- [Wiki 首页](./wiki/Home.md)：适合发布到 GitHub Wiki 的分章节文档。
+
+## 开发与验证
+
+```bash
+mvn test
+mvn spring-boot:run
+scripts/build-dist.sh --with-tests
+```
+
+当前前端资源直接位于 `src/main/resources/templates` 和 `src/main/resources/static`，没有 npm 构建流程。
 
 ## 许可证
 
