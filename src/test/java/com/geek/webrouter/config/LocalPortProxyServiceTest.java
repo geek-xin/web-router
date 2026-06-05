@@ -31,7 +31,7 @@ class LocalPortProxyServiceTest {
         List<FakeServer> startedServers = new ArrayList<>();
         LocalPortProxyService service = new LocalPortProxyService(
                 new ProxyRequestLogService(),
-                config -> {
+                (config, handler) -> {
                     FakeServer server = new FakeServer(config.getLocalPort());
                     startedServers.add(server);
                     return server;
@@ -60,7 +60,7 @@ class LocalPortProxyServiceTest {
         List<FakeServer> startedServers = new ArrayList<>();
         LocalPortProxyService service = new LocalPortProxyService(
                 new ProxyRequestLogService(),
-                config -> {
+                (config, handler) -> {
                     FakeServer server = new FakeServer(config.getLocalPort());
                     startedServers.add(server);
                     return server;
@@ -81,6 +81,43 @@ class LocalPortProxyServiceTest {
 
         assertThat(startedServers).hasSize(1);
         assertThat(startedServers.getFirst().disposed).isTrue();
+    }
+
+    @Test
+    void refreshUpdatesExistingLocalBindingWithoutRestartingServer() {
+        List<FakeServer> startedServers = new ArrayList<>();
+        LocalPortProxyService service = new LocalPortProxyService(
+                new ProxyRequestLogService(),
+                (config, handler) -> {
+                    FakeServer server = new FakeServer(config.getLocalPort());
+                    startedServers.add(server);
+                    return server;
+                }
+        );
+        RouteConfig firstConfig = RouteConfig.builder()
+                .id("route-a")
+                .name("Route A")
+                .pathPrefixes(List.of("/a"))
+                .targetUrl("http://127.0.0.1:8080")
+                .localIp("127.0.0.1")
+                .localPort(18080)
+                .enabled(true)
+                .build();
+        RouteConfig updatedConfig = RouteConfig.builder()
+                .id("route-a")
+                .name("Route A")
+                .pathPrefixes(List.of("/a", "/reportManage"))
+                .targetUrl("http://127.0.0.1:8081")
+                .localIp("127.0.0.1")
+                .localPort(18080)
+                .enabled(true)
+                .build();
+
+        service.refreshAll(List.of(firstConfig)).block(Duration.ofSeconds(3));
+        service.refreshAll(List.of(updatedConfig)).block(Duration.ofSeconds(3));
+
+        assertThat(startedServers).hasSize(1);
+        assertThat(startedServers.getFirst().disposed).isFalse();
     }
 
     @Test
@@ -122,7 +159,7 @@ class LocalPortProxyServiceTest {
     void localProxyAppendsOriginalRequestUriToTarget() {
         LocalPortProxyService service = new LocalPortProxyService(
                 new ProxyRequestLogService(),
-                config -> new FakeServer(config.getLocalPort())
+                (config, handler) -> new FakeServer(config.getLocalPort())
         );
         RouteConfig config = RouteConfig.builder()
                 .id("route-a")
@@ -218,6 +255,67 @@ class LocalPortProxyServiceTest {
             assertThat(response.headers().firstValue("Pragma")).hasValue("no-cache");
             assertThat(response.headers().firstValue("Expires")).hasValue("0");
             assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration/");
+            assertThat(targetRequests).hasValue(1);
+        } finally {
+            service.stopAll();
+            targetServer.disposeNow();
+        }
+    }
+
+    @Test
+    void nextRequestUsesUpdatedLocalProxyPrefixesWithoutRestartingListener() throws IOException, InterruptedException {
+        AtomicInteger targetRequests = new AtomicInteger();
+        DisposableServer targetServer = HttpServer.create()
+                .host("127.0.0.1")
+                .port(0)
+                .handle((request, response) -> {
+                    targetRequests.incrementAndGet();
+                    return response.sendString(Mono.just("proxied " + request.uri()));
+                })
+                .bindNow();
+        LocalPortProxyService service = new LocalPortProxyService(new ProxyRequestLogService());
+        int localPort = freePort();
+        RouteConfig firstConfig = RouteConfig.builder()
+                .id("route-a")
+                .name("Route A")
+                .pathPrefixes(List.of("/iotmgr", "/portal"))
+                .targetUrl("http://127.0.0.1:" + targetServer.port())
+                .localIp("127.0.0.1")
+                .localPort(localPort)
+                .enabled(true)
+                .build();
+        RouteConfig addedPrefixConfig = RouteConfig.builder()
+                .id("route-a")
+                .name("Route A")
+                .pathPrefixes(List.of("/iotmgr", "/portal", "/reportManage"))
+                .targetUrl("http://127.0.0.1:" + targetServer.port())
+                .localIp("127.0.0.1")
+                .localPort(localPort)
+                .enabled(true)
+                .build();
+        RouteConfig removedPrefixConfig = RouteConfig.builder()
+                .id("route-a")
+                .name("Route A")
+                .pathPrefixes(List.of("/iotmgr", "/portal"))
+                .targetUrl("http://127.0.0.1:" + targetServer.port())
+                .localIp("127.0.0.1")
+                .localPort(localPort)
+                .enabled(true)
+                .build();
+
+        try {
+            service.refreshAll(List.of(firstConfig)).block(Duration.ofSeconds(3));
+            assertThat(getResponse(localPort, "/reportManage/api/configuration").statusCode()).isEqualTo(404);
+
+            service.refreshAll(List.of(addedPrefixConfig)).block(Duration.ofSeconds(3));
+            HttpResponse<String> allowedResponse = getResponse(localPort, "/reportManage/api/configuration");
+
+            service.refreshAll(List.of(removedPrefixConfig)).block(Duration.ofSeconds(3));
+            HttpResponse<String> rejectedAgainResponse = getResponse(localPort, "/reportManage/api/configuration");
+
+            assertThat(allowedResponse.statusCode()).isEqualTo(200);
+            assertThat(allowedResponse.body()).isEqualTo("proxied /reportManage/api/configuration");
+            assertThat(rejectedAgainResponse.statusCode()).isEqualTo(404);
             assertThat(targetRequests).hasValue(1);
         } finally {
             service.stopAll();

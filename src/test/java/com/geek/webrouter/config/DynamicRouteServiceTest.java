@@ -13,6 +13,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +39,33 @@ class DynamicRouteServiceTest {
         staleEnableRefresh.block(Duration.ofSeconds(3));
 
         assertThat(writer.savedRouteIds).doesNotContain("route-a");
+    }
+
+    @Test
+    void refreshOnlyUpdatesChangedGatewayRoutes() {
+        MutableRouteConfigService routeConfigService = new MutableRouteConfigService();
+        RecordingRouteDefinitionWriter writer = new RecordingRouteDefinitionWriter();
+        DynamicRouteService service = new DynamicRouteService(
+                writer,
+                routeConfigService,
+                new NoopPublisher(),
+                new NoopLocalPortProxyService()
+        );
+        routeConfigService.configs = List.of(
+                routeConfig("route-a", "/a"),
+                routeConfig("route-b", "/b")
+        );
+        service.refreshAll().block(Duration.ofSeconds(3));
+        writer.clear();
+
+        routeConfigService.configs = List.of(
+                routeConfig("route-a", "/a"),
+                routeConfig("route-b", "/changed")
+        );
+        service.refreshAll().block(Duration.ofSeconds(3));
+
+        assertThat(writer.savedRouteIds).containsExactly("route-b");
+        assertThat(writer.deletedRouteIds).containsExactly("route-b");
     }
 
     private RouteConfig routeConfig(String id, String pathPrefix) {
@@ -87,15 +115,28 @@ class DynamicRouteServiceTest {
 
     private static class RecordingRouteDefinitionWriter implements RouteDefinitionWriter {
         private final List<String> savedRouteIds = new CopyOnWriteArrayList<>();
+        private final List<String> deletedRouteIds = new CopyOnWriteArrayList<>();
+        private final Map<String, RouteDefinition> routeDefinitions = new java.util.concurrent.ConcurrentHashMap<>();
 
         @Override
         public Mono<Void> save(Mono<RouteDefinition> route) {
-            return route.doOnNext(definition -> savedRouteIds.add(definition.getId())).then();
+            return route.doOnNext(definition -> {
+                savedRouteIds.add(definition.getId());
+                routeDefinitions.put(definition.getId(), definition);
+            }).then();
         }
 
         @Override
         public Mono<Void> delete(Mono<String> routeId) {
-            return routeId.then();
+            return routeId.doOnNext(id -> {
+                deletedRouteIds.add(id);
+                routeDefinitions.remove(id);
+            }).then();
+        }
+
+        private void clear() {
+            savedRouteIds.clear();
+            deletedRouteIds.clear();
         }
     }
 
@@ -111,7 +152,7 @@ class DynamicRouteServiceTest {
 
     private static class NoopLocalPortProxyService extends LocalPortProxyService {
         NoopLocalPortProxyService() {
-            super(new ProxyRequestLogService(), config -> { throw new UnsupportedOperationException(); });
+            super(new ProxyRequestLogService(), (config, handler) -> { throw new UnsupportedOperationException(); });
         }
 
         @Override

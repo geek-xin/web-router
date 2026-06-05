@@ -21,12 +21,16 @@ import reactor.netty.http.server.HttpServerRequest;
 import reactor.netty.http.server.HttpServerResponse;
 
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 
 /**
  * 为单个路由启动独立的本地 IP/端口监听，并把请求转发到该路由目标地址。
@@ -50,17 +54,17 @@ public class LocalPortProxyService {
     private final LocalProxyServerFactory serverFactory;
 
     private final HttpClient httpClient = HttpClient.create();
-    private final Map<String, DisposableServer> servers = new ConcurrentHashMap<>();
+    private final Map<String, LocalProxyServer> servers = new ConcurrentHashMap<>();
     private final Object refreshMonitor = new Object();
     private long refreshVersion = 0;
 
     @Autowired
     public LocalPortProxyService(ProxyRequestLogService logService) {
         this.logService = logService;
-        this.serverFactory = config -> HttpServer.create()
+        this.serverFactory = (config, handler) -> HttpServer.create()
                 .host(config.effectiveLocalIp())
                 .port(config.getLocalPort())
-                .handle((request, response) -> proxy(config, request, response))
+                .handle(handler::apply)
                 .bindNow();
     }
 
@@ -80,40 +84,73 @@ public class LocalPortProxyService {
                 if (version != refreshVersion) {
                     return;
                 }
-                stopAll();
-                if (version != refreshVersion) {
-                    return;
-                }
-                enabledConfigs.stream()
-                        .filter(RouteConfig::hasLocalBinding)
-                        .forEach(this::start);
+                Map<String, RouteConfig> nextConfigsByBinding = localBindingConfigs(enabledConfigs);
+                Set<String> bindingsToStop = new HashSet<>(servers.keySet());
+                nextConfigsByBinding.forEach((binding, config) -> {
+                    LocalProxyServer existingServer = servers.get(binding);
+                    if (existingServer == null) {
+                        start(binding, config);
+                    } else {
+                        existingServer.update(config);
+                    }
+                    bindingsToStop.remove(binding);
+                });
+                bindingsToStop.forEach(this::stop);
             }
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     @PreDestroy
     public void stopAll() {
-        servers.forEach((routeId, server) -> {
+        servers.forEach((binding, server) -> {
             try {
                 server.disposeNow();
-                log.info("已停止本地端口代理: {} {}", routeId, server.address());
+                log.info("已停止本地端口代理: {} {}", server.routeId(), server.address());
             } catch (Exception e) {
-                log.warn("停止本地端口代理失败: {} — {}", routeId, e.getMessage());
+                log.warn("停止本地端口代理失败: {} — {}", server.routeId(), e.getMessage());
             }
         });
         servers.clear();
     }
 
-    private void start(RouteConfig config) {
+    private Map<String, RouteConfig> localBindingConfigs(List<RouteConfig> enabledConfigs) {
+        Map<String, RouteConfig> configsByBinding = new HashMap<>();
+        enabledConfigs.stream()
+                .filter(RouteConfig::hasLocalBinding)
+                .forEach(config -> {
+                    String binding = localBinding(config);
+                    RouteConfig previous = configsByBinding.putIfAbsent(binding, config);
+                    if (previous != null) {
+                        throw new BusinessException(ErrorCodeEnum.DUPLICATE_LOCAL_BINDING,
+                                "本地监听地址已被 [" + previous.getName() + "] 使用: " + binding);
+                    }
+                });
+        return configsByBinding;
+    }
+
+    private void start(String binding, RouteConfig config) {
         try {
-            DisposableServer server = serverFactory.start(config);
-            servers.put(config.getId(), server);
+            LocalProxyServer server = LocalProxyServer.start(config, serverFactory, this::proxy);
+            servers.put(binding, server);
             log.info("已启动本地端口代理: {} {}:{} -> {}",
                     config.getId(), config.effectiveLocalIp(), config.getLocalPort(), config.getTargetUrl());
         } catch (Exception e) {
             throw new BusinessException(ErrorCodeEnum.BAD_REQUEST,
                     "启动本地端口代理失败: " + config.effectiveLocalIp() + ":" + config.getLocalPort()
                             + " — " + e.getMessage());
+        }
+    }
+
+    private void stop(String binding) {
+        LocalProxyServer server = servers.remove(binding);
+        if (server == null) {
+            return;
+        }
+        try {
+            server.disposeNow();
+            log.info("已停止本地端口代理: {} {}", server.routeId(), server.address());
+        } catch (Exception e) {
+            log.warn("停止本地端口代理失败: {} — {}", server.routeId(), e.getMessage());
         }
     }
 
@@ -259,9 +296,54 @@ public class LocalPortProxyService {
         return names;
     }
 
+    private String localBinding(RouteConfig config) {
+        return config.effectiveLocalIp() + ":" + config.getLocalPort();
+    }
+
     @FunctionalInterface
     interface LocalProxyServerFactory {
-        DisposableServer start(RouteConfig config);
+        DisposableServer start(RouteConfig config,
+                               BiFunction<HttpServerRequest, HttpServerResponse, Publisher<Void>> handler);
+    }
+
+    @FunctionalInterface
+    private interface LocalProxyRequestHandler {
+        Publisher<Void> handle(RouteConfig config, HttpServerRequest request, HttpServerResponse response);
+    }
+
+    private static class LocalProxyServer {
+        private final AtomicReference<RouteConfig> configRef;
+        private final DisposableServer server;
+
+        private LocalProxyServer(AtomicReference<RouteConfig> configRef, DisposableServer server) {
+            this.configRef = configRef;
+            this.server = server;
+        }
+
+        private static LocalProxyServer start(RouteConfig config,
+                                             LocalProxyServerFactory serverFactory,
+                                             LocalProxyRequestHandler proxyHandler) {
+            AtomicReference<RouteConfig> configRef = new AtomicReference<>(config);
+            DisposableServer server = serverFactory.start(config,
+                    (request, response) -> proxyHandler.handle(configRef.get(), request, response));
+            return new LocalProxyServer(configRef, server);
+        }
+
+        private void update(RouteConfig config) {
+            configRef.set(config);
+        }
+
+        private String routeId() {
+            return configRef.get().getId();
+        }
+
+        private SocketAddress address() {
+            return server.address();
+        }
+
+        private void disposeNow() {
+            server.disposeNow();
+        }
     }
 
     private String hostHeader(URI uri) {

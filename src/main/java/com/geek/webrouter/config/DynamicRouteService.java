@@ -18,7 +18,9 @@ import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.stream.IntStream;
 
@@ -38,7 +40,7 @@ public class DynamicRouteService {
     private final ApplicationEventPublisher publisher;
     private final LocalPortProxyService localPortProxyService;
 
-    private final List<String> currentRouteIds = new ArrayList<>();
+    private final Map<String, GatewayRouteSpec> currentRoutes = new LinkedHashMap<>();
     private final Object refreshMonitor = new Object();
     private final Semaphore refreshSemaphore = new Semaphore(1);
 
@@ -55,7 +57,7 @@ public class DynamicRouteService {
     }
 
     /**
-     * 刷新全部路由：先清除已注册路由，再从文件重新加载。
+     * 刷新全部路由：按配置快照差量删除/保存路由，避免万级路由下每次全量重建。
      */
     public Mono<Void> refreshAll() {
         return Mono.fromRunnable(refreshSemaphore::acquireUninterruptibly)
@@ -65,12 +67,18 @@ public class DynamicRouteService {
     }
 
     private Mono<Void> refreshAllLocked() {
-        List<String> idsToRemove = currentRouteIdsSnapshot();
+        Map<String, GatewayRouteSpec> currentSnapshot = currentRoutesSnapshot();
         List<RouteConfig> enabledConfigs = routeConfigService.listAll().stream()
                 .filter(RouteConfig::isEnabled)
                 .toList();
-        List<String> enabledRouteIds = enabledConfigs.stream()
-                .flatMap(config -> routeIds(config).stream())
+        Map<String, GatewayRouteSpec> desiredRoutes = desiredRoutes(enabledConfigs);
+        List<String> idsToRemove = currentSnapshot.entrySet().stream()
+                .filter(entry -> !entry.getValue().equals(desiredRoutes.get(entry.getKey())))
+                .map(Map.Entry::getKey)
+                .toList();
+        List<GatewayRouteSpec> specsToSave = desiredRoutes.entrySet().stream()
+                .filter(entry -> !entry.getValue().equals(currentSnapshot.get(entry.getKey())))
+                .map(Map.Entry::getValue)
                 .toList();
 
         return Flux.fromIterable(idsToRemove)
@@ -80,12 +88,12 @@ public class DynamicRouteService {
                             log.warn("移除路由失败: {} — {}", routeId, err.getMessage());
                             return Mono.empty();
                         }))
-                .thenMany(Flux.fromIterable(enabledConfigs)
-                        .concatMap(this::saveRoutes))
+                .thenMany(Flux.fromIterable(specsToSave)
+                        .concatMap(this::saveRoute))
                 .then()
                 .then(localPortProxyService.refreshAll(enabledConfigs))
                 .doOnSuccess(unused -> {
-                    replaceCurrentRouteIds(enabledRouteIds);
+                    replaceCurrentRoutes(desiredRoutes);
                     publisher.publishEvent(new RefreshRoutesEvent(this));
                     log.info("路由刷新完成，当前注册路由: {}", currentRouteIdsSnapshot());
                 });
@@ -94,40 +102,45 @@ public class DynamicRouteService {
     /**
      * 按配置中的每个路径前缀注册 Gateway 路由。
      */
-    private Flux<Void> saveRoutes(RouteConfig config) {
+    private List<GatewayRouteSpec> routeSpecs(RouteConfig config) {
         List<String> prefixes = config.effectivePathPrefixes();
-        return Flux.range(0, prefixes.size())
-                .concatMap(index -> saveRoute(config, prefixes.get(index), index));
+        return IntStream.range(0, prefixes.size())
+                .mapToObj(index -> new GatewayRouteSpec(
+                        routeId(config.getId(), index),
+                        config.getTargetUrl(),
+                        prefixes.get(index),
+                        stripPrefixSegments(prefixes.get(index))
+                ))
+                .toList();
     }
 
-    private Mono<Void> saveRoute(RouteConfig config, String pathPrefix, int index) {
-        String routeId = routeId(config.getId(), index);
-        String targetUrl = config.getTargetUrl();
-
+    private Mono<Void> saveRoute(GatewayRouteSpec spec) {
         RouteDefinition definition = new RouteDefinition();
-        definition.setId(routeId);
-        definition.setUri(URI.create(targetUrl));
+        definition.setId(spec.routeId());
+        definition.setUri(URI.create(spec.targetUrl()));
         definition.setOrder(0);
 
         definition.setPredicates(List.of(
-                new PredicateDefinition("Path=" + pathPattern(pathPrefix))
+                new PredicateDefinition("Path=" + pathPattern(spec.pathPrefix()))
         ));
 
-        int segments = stripPrefixSegments(pathPrefix);
-        if (segments > 0) {
+        if (spec.stripPrefixSegments() > 0) {
             definition.setFilters(List.of(
-                    new FilterDefinition("StripPrefix=" + segments)
+                    new FilterDefinition("StripPrefix=" + spec.stripPrefixSegments())
             ));
         }
 
         return routeDefinitionWriter.save(Mono.just(definition))
-                .doOnSuccess(unused -> log.info("已注册路由: {} {} -> {}", routeId, pathPrefix, targetUrl));
+                .doOnSuccess(unused -> log.info("已注册路由: {} {} -> {}",
+                        spec.routeId(), spec.pathPrefix(), spec.targetUrl()));
     }
 
-    private List<String> routeIds(RouteConfig config) {
-        return IntStream.range(0, config.effectivePathPrefixes().size())
-                .mapToObj(index -> routeId(config.getId(), index))
-                .toList();
+    private Map<String, GatewayRouteSpec> desiredRoutes(List<RouteConfig> enabledConfigs) {
+        Map<String, GatewayRouteSpec> routes = new LinkedHashMap<>();
+        enabledConfigs.stream()
+                .flatMap(config -> routeSpecs(config).stream())
+                .forEach(spec -> routes.put(spec.routeId(), spec));
+        return routes;
     }
 
     private String routeId(String baseRouteId, int index) {
@@ -147,14 +160,26 @@ public class DynamicRouteService {
 
     private List<String> currentRouteIdsSnapshot() {
         synchronized (refreshMonitor) {
-            return new ArrayList<>(currentRouteIds);
+            return new ArrayList<>(currentRoutes.keySet());
         }
     }
 
-    private void replaceCurrentRouteIds(List<String> routeIds) {
+    private Map<String, GatewayRouteSpec> currentRoutesSnapshot() {
         synchronized (refreshMonitor) {
-            currentRouteIds.clear();
-            currentRouteIds.addAll(routeIds);
+            return new LinkedHashMap<>(currentRoutes);
         }
+    }
+
+    private void replaceCurrentRoutes(Map<String, GatewayRouteSpec> routes) {
+        synchronized (refreshMonitor) {
+            currentRoutes.clear();
+            currentRoutes.putAll(routes);
+        }
+    }
+
+    private record GatewayRouteSpec(String routeId,
+                                    String targetUrl,
+                                    String pathPrefix,
+                                    int stripPrefixSegments) {
     }
 }
