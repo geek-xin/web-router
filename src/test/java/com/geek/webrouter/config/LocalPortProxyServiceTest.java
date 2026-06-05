@@ -171,6 +171,10 @@ class LocalPortProxyServiceTest {
 
             assertThat(response.statusCode()).isEqualTo(404);
             assertThat(response.headers().firstValue("Connection")).hasValue("close");
+            assertThat(response.headers().firstValue("Cache-Control"))
+                    .hasValue("no-store, no-cache, must-revalidate, max-age=0");
+            assertThat(response.headers().firstValue("Pragma")).hasValue("no-cache");
+            assertThat(response.headers().firstValue("Expires")).hasValue("0");
             assertThat(targetRequests).hasValue(0);
             assertThat(logService.snapshot().totalRequests()).isZero();
         } finally {
@@ -209,6 +213,10 @@ class LocalPortProxyServiceTest {
 
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.headers().firstValue("Connection")).hasValue("close");
+            assertThat(response.headers().firstValue("Cache-Control"))
+                    .hasValue("no-store, no-cache, must-revalidate, max-age=0");
+            assertThat(response.headers().firstValue("Pragma")).hasValue("no-cache");
+            assertThat(response.headers().firstValue("Expires")).hasValue("0");
             assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration/");
             assertThat(targetRequests).hasValue(1);
         } finally {

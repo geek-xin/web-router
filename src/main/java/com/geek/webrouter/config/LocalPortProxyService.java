@@ -119,12 +119,14 @@ public class LocalPortProxyService {
 
     private Publisher<Void> proxy(RouteConfig config, HttpServerRequest request, HttpServerResponse response) {
         long start = System.nanoTime();
-        closeClientConnection(response);
+        prepareLocalProxyResponse(response);
         if (!matchesConfiguredPrefix(config, request.path())) {
+            log.info("本地端口代理拒绝未配置前缀请求: {} {}", config.getId(), request.uri());
             response.status(404);
             return response.sendString(Mono.just("No matching local route prefix")).then();
         }
         String targetUri = targetUri(config, request.uri());
+        log.info("本地端口代理转发请求: {} {} -> {}", config.getId(), request.uri(), targetUri);
         return httpClient
                 .headers(headers -> copyRequestHeaders(request.requestHeaders(), headers, URI.create(targetUri)))
                 .request(request.method())
@@ -160,8 +162,11 @@ public class LocalPortProxyService {
         ));
     }
 
-    private void closeClientConnection(HttpServerResponse response) {
+    private void prepareLocalProxyResponse(HttpServerResponse response) {
         response.responseHeaders().set(HttpHeaderNames.CONNECTION, "close");
+        response.responseHeaders().set(HttpHeaderNames.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0");
+        response.responseHeaders().set(HttpHeaderNames.PRAGMA, "no-cache");
+        response.responseHeaders().set(HttpHeaderNames.EXPIRES, "0");
     }
 
     private boolean matchesConfiguredPrefix(RouteConfig config, String requestPath) {
