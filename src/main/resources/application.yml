@@ -1,0 +1,29 @@
+# =====================================================
+# Web Router — 主配置
+# =====================================================
+
+spring:
+  application:
+    name: web-router
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    gateway:
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 30s
+
+server:
+  address: 127.0.0.1
+  port: 8090
+
+# 管理端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

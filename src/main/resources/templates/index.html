@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Router — 路由管理</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/style.css?v=20260603" th:href="@{/css/style.css} + '?v=' + ${assetVersion}">
+</head>
+<body>
+<div class="page-shell">
+    <div class="container">
+        <header class="hero-panel">
+            <div class="hero-copy">
+                <p class="eyebrow">WEB ROUTER CONTROL BOARD</p>
+                <h1>路由管理</h1>
+                <p class="subtitle">路径转发与实时日志，一处管理。</p>
+            </div>
+            <div class="hero-board" aria-hidden="true">
+                <div class="guide-step guide-request">
+                    <strong>/api/**</strong>
+                    <small>请求</small>
+                </div>
+                <div class="guide-line"></div>
+                <div class="guide-step guide-router">
+                    <strong>匹配</strong>
+                    <small>前缀</small>
+                </div>
+                <div class="guide-line"></div>
+                <div class="guide-step guide-target">
+                    <strong>host:port</strong>
+                    <small>转发</small>
+                </div>
+            </div>
+        </header>
+
+        <section class="status-grid" aria-label="路由概览">
+            <div class="status-card status-card-total">
+                <span class="summary-label">配置总数</span>
+                <strong th:text="${#lists.size(configs)}">0</strong>
+            </div>
+            <div class="status-card status-card-live">
+                <span class="summary-label">启用路由</span>
+                <strong th:text="${#lists.size(configs.?[enabled])}">0</strong>
+            </div>
+            <div class="status-card status-card-file">
+                <span class="summary-label">配置目录</span>
+                <strong class="status-path" th:text="${routesConfigDirLabel}" th:title="${routesConfigDir}">config/routes</strong>
+                <code class="status-path-full" th:text="${routesConfigDir}" th:title="${routesConfigDir}">/path/to/config/routes</code>
+            </div>
+        </section>
+
+        <section class="route-board">
+            <div class="board-header">
+                <div class="board-heading">
+                    <p class="eyebrow">ROUTE PATCH PANEL</p>
+                    <h2>路由配置</h2>
+                </div>
+                <div class="board-tools">
+                    <label class="search-box" for="routeSearch">
+                        <span class="sr-only">搜索</span>
+                        <input id="routeSearch" type="search" placeholder="按名称或目标地址搜索">
+                    </label>
+                    <button id="btnBatchDelete" class="btn btn-danger btn-batch-delete" type="button" disabled>删除选中</button>
+                    <button id="btnAdd" class="btn btn-primary btn-add" type="button">新增路由</button>
+                </div>
+            </div>
+
+            <div id="routeCards" class="route-card-grid" aria-live="polite">
+                <article class="route-card"
+                         th:each="cfg : ${configs}"
+                         th:classappend="${cfg.enabled} ? '' : ' route-card-disabled'"
+                         th:data-id="${cfg.id}"
+                         th:data-name="${cfg.name}"
+                         th:data-target="${#strings.replace(#strings.replace(cfg.targetUrl, 'http://', ''), 'https://', '')}"
+                         th:data-local-binding="${cfg.enabled && cfg.localPort != null ? cfg.effectiveLocalIp() + ':' + cfg.localPort : ''}">
+                    <div class="route-card-top">
+                        <label class="route-card-select" th:attr="aria-label='选择路由 ' + ${cfg.name}">
+                            <input class="route-select-checkbox" type="checkbox" th:attr="data-id=${cfg.id}">
+                            <span></span>
+                        </label>
+                        <div class="route-card-title">
+                            <h3 th:attr="title=${cfg.name}" th:text="${cfg.name}"></h3>
+                        </div>
+                        <div class="route-card-state">
+                            <button class="btn btn-sm btn-toggle-status"
+                                    th:classappend="${cfg.enabled} ? ' btn-danger' : ' btn-primary'"
+                                    type="button"
+                                    th:attr="data-id=${cfg.id},data-enabled=${cfg.enabled}"
+                                    th:text="${cfg.enabled} ? '停用' : '启用'"></button>
+                        </div>
+                    </div>
+                    <div class="route-card-body">
+                        <div class="route-card-field">
+                            <span>目标地址</span>
+                            <strong th:attr="title=${cfg.targetUrl}"
+                                    th:text="${#strings.replace(#strings.replace(cfg.targetUrl, 'http://', ''), 'https://', '')}"></strong>
+                        </div>
+                        <div class="route-card-field">
+                            <span>本地访问</span>
+                            <strong th:attr="title=${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '已配置 ' + cfg.effectiveLocalIp() + ':' + cfg.localPort + '，启用后监听')}"
+                                    th:text="${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '停用中，不监听本地端口')}"></strong>
+                        </div>
+                        <div class="route-card-field route-card-path-field">
+                            <span>路径</span>
+                            <div class="route-card-prefixes">
+                                <code th:each="prefix : ${cfg.effectivePathPrefixes()}"
+                                      th:attr="title=${prefix}"
+                                      th:text="${prefix}"></code>
+                            </div>
+                        </div>
+                        <div class="route-card-field">
+                            <span>配置文件</span>
+                            <code class="file-path" th:attr="title='config/routes/' + ${cfg.id} + '.json'"
+                                  th:text="${cfg.id} + '.json'"></code>
+                        </div>
+                    </div>
+                    <div class="route-card-actions actions">
+                        <button class="btn btn-sm btn-view" type="button" th:attr="data-id=${cfg.id}">查看</button>
+                        <button class="btn btn-sm btn-logs"
+                                type="button"
+                                th:attr="data-id=${cfg.id},data-enabled=${cfg.enabled}">日志</button>
+                        <button class="btn btn-sm btn-copy" type="button" th:attr="data-id=${cfg.id}">拷贝</button>
+                        <button class="btn btn-sm btn-edit" type="button" th:attr="data-id=${cfg.id}">编辑</button>
+                    </div>
+                </article>
+                <div class="empty" th:if="${#lists.isEmpty(configs)}">
+                    <div class="empty-panel">
+                        <strong>还没有接上线的路由</strong>
+                        <span>点击「新增路由」把第一个路径前缀接到目标服务。</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</div>
+
+<!-- 编辑/新增弹窗 -->
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <h2 id="modalTitle">新增路由</h2>
+        <form id="routeForm">
+            <input type="hidden" id="isEdit" value="false">
+            <input type="hidden" id="oldRouteId" value="">
+            <input type="hidden" id="enabled" value="false">
+            <div class="form-group">
+                <label for="name">路由名称 <span class="required">*</span></label>
+                <input type="text" id="name" required placeholder="如 我的服务 / API-测试">
+                <small>可输入中文、英文、数字和符号；配置文件名会自动生成</small>
+            </div>
+            <div class="form-group">
+                <label for="targetUrl">目标地址 <span class="required">*</span></label>
+                <input type="text" id="targetUrl" required placeholder="如 192.168.1.100:8080 或 api.example.com:8080">
+                <small>填写 IP/域名和端口即可，协议由后台自动补全为 http://</small>
+            </div>
+            <div class="form-row form-row-local">
+                <div class="form-group">
+                    <label for="localIp">本地 IP</label>
+                    <input type="text" id="localIp" placeholder="127.0.0.1">
+                    <small>本地端口代理监听地址，默认 127.0.0.1</small>
+                </div>
+                <div class="form-group">
+                    <label for="localPort">本地端口</label>
+                    <input type="number" id="localPort" min="1" max="65535" placeholder="如 18080">
+                    <small>留空则不启用本地端口访问</small>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="pathPrefixInput">路径前缀 <span class="required">*</span></label>
+                <textarea id="pathPrefix" class="sr-only" tabindex="-1" aria-hidden="true"></textarea>
+                <div class="path-prefix-editor">
+                    <div id="pathPrefixList" class="path-prefix-list"></div>
+                    <div class="path-prefix-add-row">
+                        <input type="text" id="pathPrefixInput" placeholder="如 /api/users">
+                        <button type="button" class="btn btn-sm btn-primary" id="btnAddPathPrefix">添加路径</button>
+                    </div>
+                </div>
+                <small>点击「添加路径」新增路径前缀；这些前缀会共用同一个目标地址并保存在同一个配置文件</small>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn" id="btnCancel">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 查看 JSON 弹窗 -->
+<div id="viewModal" class="modal">
+    <div class="modal-content modal-lg">
+        <h2 id="viewTitle">查看配置</h2>
+        <textarea id="jsonEditor" readonly rows="12"></textarea>
+        <div class="form-actions">
+            <button type="button" class="btn" id="btnCloseView">关闭</button>
+            <button type="button" class="btn btn-primary" id="btnToggleEdit">编辑此文件</button>
+        </div>
+    </div>
+</div>
+
+<!-- 路由日志弹窗 -->
+<div id="routeLogModal" class="modal">
+    <div class="modal-content modal-xl route-log-modal">
+        <div class="modal-title-row">
+            <div class="route-log-title">
+                <p class="eyebrow">ROUTE TRAFFIC</p>
+                <div class="route-log-heading">
+                    <h2 id="routeLogTitle">路由日志</h2>
+                    <span id="routeLogName" class="route-log-name"></span>
+                </div>
+            </div>
+            <div class="route-log-meta-row">
+                <button type="button"
+                    id="routeLogRefreshRate"
+                    class="btn btn-sm btn-refresh-rate"
+                    data-mode="live">实时刷新</button>
+            </div>
+            <button type="button"
+                    class="modal-close-btn"
+                    id="btnCloseRouteLog"
+                    aria-label="关闭路由日志"
+                    title="关闭">×</button>
+        </div>
+        <div class="route-log-overview">
+            <div class="log-summary">
+                <div class="summary-item">
+                    <span class="summary-label">请求数</span>
+                    <strong id="routeLogTotalRequests">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">统计负载</span>
+                    <strong id="routeLogTotalDuration">0ms</strong>
+                </div>
+            </div>
+            <div class="log-card route-directory-card">
+                <h3>统计路径 Top 50</h3>
+                <table class="compact-table">
+                    <thead>
+                    <tr>
+                        <th>路径</th>
+                        <th>请求数</th>
+                        <th>总耗时</th>
+                    </tr>
+                    </thead>
+                    <tbody id="routeLogDirectoryStats">
+                    <tr data-empty="true">
+                        <td colspan="3" class="empty-small">暂无请求</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="log-layout route-log-layout">
+            <div class="log-card log-card-main">
+                <div class="log-card-title-row">
+                    <h3>实时日志</h3>
+                    <div class="log-title-tools">
+                        <label class="log-search-control" for="routeLogPathSearch">
+                            路径
+                            <input id="routeLogPathSearch" type="search" placeholder="搜索路径">
+                        </label>
+                        <label class="log-limit-control" for="routeLogLimit">
+                            显示
+                            <input id="routeLogLimit" type="number" min="1" max="100" value="10" inputmode="numeric">
+                            条
+                        </label>
+                    </div>
+                </div>
+                <div class="log-table-wrap route-log-scroll">
+                <table class="compact-table">
+                    <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>方法</th>
+                        <th>路径</th>
+                        <th>状态</th>
+                        <th>耗时</th>
+                    </tr>
+                    </thead>
+                    <tbody id="routeLogRows">
+                    <tr data-empty="true">
+                        <td colspan="5" class="empty-small">暂无代理请求</td>
+                    </tr>
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div id="confirmModal" class="modal">
+    <div class="modal-content modal-sm">
+        <h2>确认删除</h2>
+        <div id="deleteMessage" class="delete-message">
+            <span class="delete-confirm-title">确定要删除这个路由吗？</span>
+            <span class="delete-route-name" id="deleteName"></span>
+            <span class="delete-warning">删除后配置文件将被移除，此操作不可撤销。</span>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn" id="btnCancelDelete">取消</button>
+            <button type="button" class="btn btn-danger" id="btnConfirmDelete">确认删除</button>
+        </div>
+    </div>
+</div>
+
+<script th:src="@{/js/app.js(v=${assetVersion})}"></script>
+</body>
+</html>
