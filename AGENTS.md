@@ -71,7 +71,8 @@
 - 刷新动态路由时会停止旧本地代理并按当前启用配置重启。
 - 本地端口代理使用 Reactor Netty `HttpServer` + `HttpClient`，会透传请求方法、请求体和大部分 Header，并把 `Host` 改为目标地址 Host。
 - 本地端口代理转发时会先按当前路由的 `pathPrefixes` 做入口隔离；命中后不会按 `pathPrefixes` 剥离前缀，而是把原始请求 URI 追加到 `targetUrl` 后。
-- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）不会自动重新请求其前端配置/菜单，需要浏览器刷新或目标页面主动重新请求才能体现新入口。
+- 本地端口代理响应会设置 `Connection: close`，避免浏览器在增删 `pathPrefixes` 后复用刷新前的旧 keep-alive 连接。
+- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）不会自动重新请求其前端配置/菜单，需要目标页面主动重新发起请求才能体现新入口。
 - 代理失败时返回 HTTP 502 和文本 `Proxy request failed`。
 
 ### 请求日志

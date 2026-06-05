@@ -119,6 +119,7 @@ public class LocalPortProxyService {
 
     private Publisher<Void> proxy(RouteConfig config, HttpServerRequest request, HttpServerResponse response) {
         long start = System.nanoTime();
+        closeClientConnection(response);
         if (!matchesConfiguredPrefix(config, request.path())) {
             response.status(404);
             return response.sendString(Mono.just("No matching local route prefix")).then();
@@ -157,6 +158,10 @@ public class LocalPortProxyService {
                 status,
                 (System.nanoTime() - start) / 1_000_000
         ));
+    }
+
+    private void closeClientConnection(HttpServerResponse response) {
+        response.responseHeaders().set(HttpHeaderNames.CONNECTION, "close");
     }
 
     private boolean matchesConfiguredPrefix(RouteConfig config, String requestPath) {

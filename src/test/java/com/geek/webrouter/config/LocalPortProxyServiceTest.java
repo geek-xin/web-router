@@ -170,6 +170,7 @@ class LocalPortProxyServiceTest {
             HttpResponse<String> response = getResponse(localPort, "/reportManage/api/configuration");
 
             assertThat(response.statusCode()).isEqualTo(404);
+            assertThat(response.headers().firstValue("Connection")).hasValue("close");
             assertThat(targetRequests).hasValue(0);
             assertThat(logService.snapshot().totalRequests()).isZero();
         } finally {
@@ -207,6 +208,7 @@ class LocalPortProxyServiceTest {
             HttpResponse<String> response = getResponse(localPort, "/reportManage/api/configuration/");
 
             assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.headers().firstValue("Connection")).hasValue("close");
             assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration/");
             assertThat(targetRequests).hasValue(1);
         } finally {
