@@ -23,7 +23,6 @@ output/playwright/
 .codex/
 .codegraph/
 .superpowers/
-docs/superpowers/
 .trellis/
 
 # Python cache
