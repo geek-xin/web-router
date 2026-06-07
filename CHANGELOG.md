@@ -67,7 +67,7 @@
 
 ### 发布与文档
 
-- 新增 `scripts/build-dist.sh`，用于编译、打包 Spring Boot JAR，并生成 `target/dist/*.tar.gz` 发布包。
+- 新增 `scripts/build-dist.sh`，用于编译、打包 Spring Boot JAR，并生成包含一键启动脚本、后台配置文件和路由配置目录的 `target/dist/*.tar.gz` 发布包。
 - 新增 GitHub Wiki 文档结构：首页、快速开始、用户指南、架构、API、排障、开发指南和侧边栏。
 - 重新整理 `README.md`、`USAGE.md` 和 `CHANGELOG.md`，使功能说明与当前实现保持一致。
 

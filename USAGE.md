@@ -267,8 +267,9 @@ target/dist/web-router-1.0.0-SNAPSHOT.tar.gz
 发布包包含：
 
 - Spring Boot 可执行 JAR。
-- `run.sh`。
-- 空的 `config/routes` 目录。
+- `run.sh` 一键启动脚本。
+- `config/application.yml` 后台配置文件。
+- `config/routes` 路由配置目录；如果本地已有 `config/routes/*.json`，会一并打入发布包。
 - `README.md`、`USAGE.md`、`CHANGELOG.md`。
 
 ## 常见注意事项

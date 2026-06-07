@@ -166,6 +166,6 @@ Proxy request failed
 确认：
 
 - 本机安装 JDK 21。
+- 发布包内存在 `config/application.yml` 和 `config/routes/`。
 - 当前目录有写入 `config/routes` 的权限。
 - 端口 `8090` 和各路由 `localPort` 未被占用。
-
