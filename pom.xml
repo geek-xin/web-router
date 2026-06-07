@@ -13,7 +13,7 @@
 
     <groupId>com.geek</groupId>
     <artifactId>web-router</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
     <name>web-router</name>
     <description>Web 路由代理 — 支持路径前缀匹配转发到多个后端服务</description>

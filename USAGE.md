@@ -261,8 +261,8 @@ scripts/build-dist.sh --with-tests
 输出位置：
 
 ```text
-target/web-router-1.0.0-SNAPSHOT.tar.gz
-target/dist/web-router-1.0.0-SNAPSHOT.tar.gz
+target/web-router-1.0.0.tar.gz
+target/dist/web-router-1.0.0.tar.gz
 ```
 
 发布包包含：
