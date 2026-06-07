@@ -1,5 +1,26 @@
 # web-router
 
+<p align="center">
+  <img src="docs/assets/web-router-admin-current.png" alt="web-router 管理后台截图" width="860">
+</p>
+
+<p align="center">
+  <a href="https://spring.io/projects/spring-boot"><img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-3.5.2-6DB33F?style=flat-square&logo=springboot&logoColor=white"></a>
+  <a href="https://spring.io/projects/spring-cloud-gateway"><img alt="Spring Cloud Gateway" src="https://img.shields.io/badge/Spring%20Cloud%20Gateway-2024.0.1-6DB33F?style=flat-square&logo=spring&logoColor=white"></a>
+  <img alt="Java 21" src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white">
+  <img alt="Maven" src="https://img.shields.io/badge/Maven-build-C71A36?style=flat-square&logo=apachemaven&logoColor=white">
+  <img alt="Thymeleaf" src="https://img.shields.io/badge/UI-Thymeleaf-005F0F?style=flat-square&logo=thymeleaf&logoColor=white">
+  <img alt="Config JSON" src="https://img.shields.io/badge/Config-local%20JSON-7C3AED?style=flat-square">
+  <img alt="No npm" src="https://img.shields.io/badge/Frontend-no%20npm-64748B?style=flat-square">
+</p>
+
+<p align="center">
+  <a href="#快速启动">快速启动</a> ·
+  <a href="#功能总览">功能总览</a> ·
+  <a href="./USAGE.md">使用说明</a> ·
+  <a href="./wiki/Home.md">Wiki 文档</a>
+</p>
+
 `web-router` 是一个面向本地开发、联调和测试环境的轻量 Web 路由代理。它把多组路径转发规则保存为本地 JSON 文件，并通过 Spring Cloud Gateway、Reactor Netty 和 Thymeleaf 管理后台实现“配置即改即生效”。
 
 ## 功能总览
