@@ -19,7 +19,7 @@
 | 配置校验 | 校验名称、前缀、目标地址、本地 IP/端口和绑定冲突。 |
 | 请求日志 | 记录 Gateway 与本地端口代理请求，提供快照、Top 路径、最近日志和 SSE。 |
 | 管理后台 | 支持路由 CRUD、原始 JSON 查看、访问地址复制、单路由日志弹窗。 |
-| 发布脚本 | `scripts/build-dist.sh` 生成可分发 tar.gz 包。 |
+| 发布脚本 | `scripts/build-dist.sh` 生成可分发 tar.gz 包到 `target/`，并同步复制到 `target/dist/`。 |
 
 ## 架构概览
 
@@ -55,4 +55,3 @@ flowchart LR
 4. [API 参考](API-Reference)
 5. [常见问题](Troubleshooting)
 6. [开发指南](Development-Guide)
-

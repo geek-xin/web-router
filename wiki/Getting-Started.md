@@ -111,6 +111,7 @@ scripts/build-dist.sh --with-tests
 输出：
 
 ```text
+target/web-router-1.0.0-SNAPSHOT.tar.gz
 target/dist/web-router-1.0.0-SNAPSHOT.tar.gz
 ```
 
