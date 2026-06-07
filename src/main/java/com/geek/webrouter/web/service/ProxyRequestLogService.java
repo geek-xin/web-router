@@ -26,11 +26,13 @@ public class ProxyRequestLogService {
     private final Map<String, AtomicLong> requestsByIp = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> requestsByPath = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> durationByPath = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> maxDurationByPath = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> totalRequestsByRoute = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> totalDurationMsByRoute = new ConcurrentHashMap<>();
     private final Map<String, Map<String, AtomicLong>> requestsByRouteAndIp = new ConcurrentHashMap<>();
     private final Map<String, Map<String, AtomicLong>> requestsByRouteAndPath = new ConcurrentHashMap<>();
     private final Map<String, Map<String, AtomicLong>> durationByRouteAndPath = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, AtomicLong>> maxDurationByRouteAndPath = new ConcurrentHashMap<>();
     private final ArrayDeque<ProxyRequestLogEntry> recentLogs = new ArrayDeque<>();
     private final Sinks.Many<ProxyRequestLogEntry> sink = Sinks.many().multicast().directBestEffort();
 
@@ -52,6 +54,7 @@ public class ProxyRequestLogService {
         requestsByIp.computeIfAbsent(clientIp, ignored -> new AtomicLong()).incrementAndGet();
         requestsByPath.computeIfAbsent(path, ignored -> new AtomicLong()).incrementAndGet();
         durationByPath.computeIfAbsent(path, ignored -> new AtomicLong()).addAndGet(durationMs);
+        maxDurationByPath.computeIfAbsent(path, ignored -> new AtomicLong()).accumulateAndGet(durationMs, Math::max);
         totalRequestsByRoute.computeIfAbsent(routeId, ignored -> new AtomicLong()).incrementAndGet();
         totalDurationMsByRoute.computeIfAbsent(routeId, ignored -> new AtomicLong())
                 .addAndGet(durationMs);
@@ -67,6 +70,10 @@ public class ProxyRequestLogService {
                 .computeIfAbsent(routeId, ignored -> new ConcurrentHashMap<>())
                 .computeIfAbsent(path, ignored -> new AtomicLong())
                 .addAndGet(durationMs);
+        maxDurationByRouteAndPath
+                .computeIfAbsent(routeId, ignored -> new ConcurrentHashMap<>())
+                .computeIfAbsent(path, ignored -> new AtomicLong())
+                .accumulateAndGet(durationMs, Math::max);
 
         synchronized (recentLogs) {
             recentLogs.addFirst(timestamped);
@@ -82,6 +89,7 @@ public class ProxyRequestLogService {
         Map<String, Long> ipStats = toSortedStats(requestsByIp);
         Map<String, Long> pathStats = toSortedStats(requestsByPath);
         Map<String, Long> pathDurationStats = toStats(durationByPath);
+        Map<String, Long> pathMaxDurationStats = toStats(maxDurationByPath);
         ArrayList<ProxyRequestLogEntry> logs;
         synchronized (recentLogs) {
             logs = new ArrayList<>(recentLogs);
@@ -93,6 +101,7 @@ public class ProxyRequestLogService {
                 ipStats,
                 pathStats,
                 pathDurationStats,
+                pathMaxDurationStats,
                 logs
         );
     }
@@ -101,6 +110,7 @@ public class ProxyRequestLogService {
         Map<String, Long> ipStats = toSortedStats(requestsByRouteAndIp.getOrDefault(routeId, Map.of()));
         Map<String, Long> pathStats = toSortedStats(requestsByRouteAndPath.getOrDefault(routeId, Map.of()));
         Map<String, Long> pathDurationStats = toStats(durationByRouteAndPath.getOrDefault(routeId, Map.of()));
+        Map<String, Long> pathMaxDurationStats = toStats(maxDurationByRouteAndPath.getOrDefault(routeId, Map.of()));
         ArrayList<ProxyRequestLogEntry> logs;
         synchronized (recentLogs) {
             logs = recentLogs.stream()
@@ -116,6 +126,7 @@ public class ProxyRequestLogService {
                 ipStats,
                 pathStats,
                 pathDurationStats,
+                pathMaxDurationStats,
                 logs
         );
     }

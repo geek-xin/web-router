@@ -117,6 +117,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             validateDisplayName(config.getName());
             normalizeAndValidatePathPrefixes(config);
             normalizeAndValidateLocalBinding(config);
+            normalizeAccessPage(config);
             String id = nextRouteId();
             config.setId(id);
             Path filePath = resolveFilePath(id);
@@ -159,6 +160,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             validateDisplayName(config.getName());
             normalizeAndValidatePathPrefixes(config);
             normalizeAndValidateLocalBinding(config);
+            normalizeAccessPage(config);
             config.setId(name);
             checkNameConflict(name, config.getName());
             checkTargetUrlConflict(name, config.getTargetUrl());
@@ -250,6 +252,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     private boolean hasSameEditableContent(RouteConfig currentConfig, RouteConfig nextConfig) {
         return Objects.equals(currentConfig.getName(), nextConfig.getName())
                 && Objects.equals(currentConfig.getTargetUrl(), nextConfig.getTargetUrl())
+                && Objects.equals(currentConfig.getAccessPage(), nextConfig.getAccessPage())
                 && Objects.equals(currentConfig.effectiveLocalIp(), nextConfig.effectiveLocalIp())
                 && Objects.equals(currentConfig.getLocalPort(), nextConfig.getLocalPort())
                 && Objects.equals(currentConfig.effectivePathPrefixes(), nextConfig.effectivePathPrefixes());
@@ -302,6 +305,15 @@ public class RouteConfigServiceImpl implements RouteConfigService {
         config.setLocalIp(localIp);
     }
 
+    private void normalizeAccessPage(RouteConfig config) {
+        String accessPage = config.getAccessPage();
+        if (accessPage == null || accessPage.trim().isEmpty()) {
+            config.setAccessPage(null);
+            return;
+        }
+        config.setAccessPage(accessPage.trim());
+    }
+
     private String normalizePathPrefix(String prefix) {
         String normalized = prefix.trim();
         while (normalized.length() > 1 && normalized.endsWith("/")) {
@@ -338,6 +350,9 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     private void validateDisplayName(String name) {
         if (name == null || name.trim().isEmpty()) {
             throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, "路由名称不能为空");
+        }
+        if (name.trim().length() > 50) {
+            throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, "路由名称不能超过 50 个字");
         }
     }
 

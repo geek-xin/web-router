@@ -70,6 +70,35 @@ class RouteConfigControllerTest {
                 .jsonPath("$.message").isEqualTo("本地端口不能为空");
     }
 
+    @Test
+    void createReturnsValidationMessageWhenRouteNameTooLong() {
+        WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
+                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                .controllerAdvice(new GlobalExceptionHandler())
+                .validator(validator())
+                .build();
+
+        client.post()
+                .uri("/admin/api/routes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "name": "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一",
+                          "pathPrefix": "/iotmgr",
+                          "targetUrl": "127.0.0.1:8080",
+                          "localIp": "127.0.0.1",
+                          "localPort": 9191,
+                          "enabled": false
+                        }
+                        """)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(400)
+                .jsonPath("$.message").isEqualTo("路由名称不能超过 50 个字");
+    }
+
     private LocalValidatorFactoryBean validator() {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();

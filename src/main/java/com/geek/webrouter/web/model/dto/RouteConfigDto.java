@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
@@ -21,6 +22,7 @@ import java.util.Objects;
 public class RouteConfigDto {
 
     @NotBlank(message = "路由名称不能为空")
+    @Size(max = 50, message = "路由名称不能超过 50 个字")
     private String name;
 
     @Pattern(regexp = "^/[-a-zA-Z0-9_/]*$", message = "路径前缀格式不正确，如 /api/users")
@@ -32,6 +34,8 @@ public class RouteConfigDto {
     @Pattern(regexp = "^(https?://)?[-a-zA-Z0-9.]+:\\d{1,5}$",
             message = "目标地址格式不正确，如 192.168.1.100:8080 或 api.example.com:8080")
     private String targetUrl;
+
+    private String accessPage;
 
     @Pattern(regexp = "^$|^(localhost|([0-9]{1,3}\\.){3}[0-9]{1,3})$",
             message = "本地 IP 格式不正确，如 127.0.0.1")

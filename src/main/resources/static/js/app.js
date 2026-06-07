@@ -19,6 +19,7 @@
         pathPrefixList: document.getElementById('pathPrefixList'),
         btnAddPathPrefix: document.getElementById('btnAddPathPrefix'),
         targetUrl: document.getElementById('targetUrl'),
+        accessPage: document.getElementById('accessPage'),
         localIp: document.getElementById('localIp'),
         localPort: document.getElementById('localPort'),
         enabled: document.getElementById('enabled'),
@@ -34,24 +35,45 @@
         routeLogTitle: document.getElementById('routeLogTitle'),
         routeLogName: document.getElementById('routeLogName'),
         routeLogTotalRequests: document.getElementById('routeLogTotalRequests'),
-        routeLogTotalDuration: document.getElementById('routeLogTotalDuration'),
+        routeLogErrorCount: document.getElementById('routeLogErrorCount'),
+        routeLogSlowCount: document.getElementById('routeLogSlowCount'),
+        routeLogSuccessRate: document.getElementById('routeLogSuccessRate'),
+        routeLogTabs: Array.from(document.querySelectorAll('[data-route-log-tab]')),
+        routeLogPanels: Array.from(document.querySelectorAll('[data-route-log-panel]')),
+        routeLogTabTools: Array.from(document.querySelectorAll('[data-route-log-tools]')),
         routeLogDirectoryStats: document.getElementById('routeLogDirectoryStats'),
         routeLogRefreshRate: document.getElementById('routeLogRefreshRate'),
         routeLogLimit: document.getElementById('routeLogLimit'),
         routeLogPathSearch: document.getElementById('routeLogPathSearch'),
-        routeLogRows: document.getElementById('routeLogRows')
+        routeLogRows: document.getElementById('routeLogRows'),
+        routeLogSlowRows: document.getElementById('routeLogSlowRows'),
+        routeLogDetailPanel: document.getElementById('routeLogDetailPanel'),
+        btnCloseRouteLogDetail: document.getElementById('btnCloseRouteLogDetail'),
+        routeLogDetailTime: document.getElementById('routeLogDetailTime'),
+        routeLogDetailMethod: document.getElementById('routeLogDetailMethod'),
+        routeLogDetailStatus: document.getElementById('routeLogDetailStatus'),
+        routeLogDetailDuration: document.getElementById('routeLogDetailDuration'),
+        routeLogDetailPath: document.getElementById('routeLogDetailPath'),
+        routeLogDetailParams: document.getElementById('routeLogDetailParams'),
+        routeLogDetailRequestBody: document.getElementById('routeLogDetailRequestBody'),
+        routeLogDetailResponseBody: document.getElementById('routeLogDetailResponseBody'),
+        routeLogDiagnosticEmpty: document.getElementById('routeLogDiagnosticEmpty'),
+        routeLogDiagnosticContent: document.getElementById('routeLogDiagnosticContent'),
+        routeLogDiagnosticRows: document.getElementById('routeLogDiagnosticRows')
     };
 
     let pendingDeleteIds = [];
     let viewFileName = '';
     let activeRouteLogName = '';
     let activeRouteLogEnabled = false;
+    let activeRouteLogTab = 'realtime';
     let routeLogSource = null;
     let routeLogPollTimer = null;
     let routeLogRefreshModeIndex = 0;
+    let routeLogDiagnosticEntries = [];
     const ROUTE_LOG_MAX_RECENT = 100;
-    const ROUTE_LOG_DEFAULT_DISPLAY = 10;
-    const ROUTE_PATH_STATS_LIMIT = 50;
+    const ROUTE_LOG_DEFAULT_DISPLAY = 50;
+    const ROUTE_LOG_SLOW_THRESHOLD_MS = 1000;
     const routeLogRefreshModes = [
         { label: '实时刷新', intervalMs: 0 },
         { label: '1秒刷新', intervalMs: 1000 },
@@ -65,6 +87,7 @@
         requestsByIp: {},
         pathStats: {},
         pathDurationStats: {},
+        pathMaxDurationStats: {},
         recentLogs: []
     };
     let routeFilterTimer = null;
@@ -79,7 +102,12 @@
 
     function requireElements() {
         const missing = Object.entries(elements)
-            .filter(([, element]) => !element)
+            .filter(([, element]) => {
+                if (Array.isArray(element)) {
+                    return element.length === 0;
+                }
+                return !element;
+            })
             .map(([id]) => id);
         if (missing.length > 0) {
             const message = '页面脚本初始化失败，缺少元素: ' + missing.join(', ');
@@ -114,6 +142,11 @@
 
     function displayTargetUrl(targetUrl) {
         return comparableTargetUrl(targetUrl);
+    }
+
+    function normalizedOptionalText(value) {
+        const trimmed = (value || '').trim();
+        return trimmed || null;
     }
 
     function comparableRouteName(name) {
@@ -231,6 +264,41 @@
 
     function routePathPrefix(routeId) {
         return routePathPrefixes(routeId)[0] || '';
+    }
+
+    function routeAccessUrl(routeId) {
+        const card = routeCard(routeId);
+        if (!card) {
+            return '';
+        }
+        const accessPage = (card.dataset.accessPage || '').trim();
+        if (!accessPage) {
+            return '';
+        }
+        if (/^https?:\/\//i.test(accessPage)) {
+            return accessPage;
+        }
+        const binding = (card.dataset.localAccess || card.dataset.localBinding || '').trim();
+        if (!binding) {
+            return accessPage;
+        }
+        const path = accessPage.startsWith('/') ? accessPage : '/' + accessPage;
+        return 'http://' + binding + path;
+    }
+
+    function openRouteAccessPage(routeId) {
+        const url = routeAccessUrl(routeId);
+        if (!url) {
+            showToast('请先编辑路由并填写访问页', 'error');
+            return;
+        }
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
     }
 
     function routeEnabled(routeId) {
@@ -414,7 +482,14 @@
                 .join(' ');
             const fileElement = card.querySelector('.file-path');
             const filePath = fileElement ? ((fileElement.title || '') + ' ' + fileElement.textContent) : '';
-            const searchable = [card.dataset.name || '', card.dataset.target || '', card.dataset.localBinding || '', prefixes, filePath]
+            const searchable = [
+                card.dataset.name || '',
+                card.dataset.target || '',
+                card.dataset.accessPage || '',
+                (card.dataset.localAccess || card.dataset.localBinding) || '',
+                prefixes,
+                filePath
+            ]
                 .join(' ')
                 .toLowerCase();
             const visible = !keyword || searchable.includes(keyword);
@@ -534,6 +609,140 @@
         // 状态不再在日志弹窗展示，保留函数避免刷新流程分支重复判断。
     }
 
+    function displayLogDetailValue(value) {
+        const text = value == null ? '' : String(value);
+        return text.trim() ? text : '-';
+    }
+
+    function displayStructuredDetailValue(value) {
+        const text = displayLogDetailValue(value);
+        if (text === '-') {
+            return text;
+        }
+        return prettyPrintJsonLikeText(text);
+    }
+
+    function logDetailText(value) {
+        const text = value == null ? '' : String(value);
+        return text.trim();
+    }
+
+    function parseRequestParams(value) {
+        const text = logDetailText(value).replace(/^\?/, '');
+        if (!text) {
+            return [];
+        }
+        const params = new URLSearchParams(text);
+        const entries = [];
+        params.forEach((paramValue, key) => {
+            entries.push([key, paramValue]);
+        });
+        if (entries.length > 0) {
+            return entries;
+        }
+        return text.split('&')
+            .map((pair) => pair.split('='))
+            .filter(([key]) => key)
+            .map(([key, paramValue = '']) => [key, paramValue]);
+    }
+
+    function diagnosticContextText(entries) {
+        if (!entries || entries.length === 0) {
+            return '';
+        }
+        return ['路由请求诊断上下文', '路由: ' + routeDisplayName(activeRouteLogName), '']
+            .concat(entries.map((entry, index) => [
+                '#' + (index + 1),
+                '时间: ' + formatLogTime(entry.timestamp),
+                '方法: ' + (entry.method || '-'),
+                '路径: ' + displayLogDetailValue(entry.path),
+                '请求参数: ' + displayLogDetailValue(entry.requestParams),
+                '客户端 IP: ' + (entry.clientIp || '-'),
+                '状态: ' + ((entry.status || 0).toString()),
+                '耗时: ' + formatDuration(entry.durationMs || 0),
+                '请求体: ' + displayStructuredDetailValue(entry.requestBody),
+                '返回预览: ' + displayStructuredDetailValue(entry.responseBody)
+            ].join('\n')))
+            .join('\n\n');
+    }
+
+    async function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+    }
+
+    function prettyPrintJsonLikeText(text) {
+        const trimmed = text.trim();
+        const truncatedSuffix = '\n[已截断]';
+        const hasTruncatedSuffix = trimmed.endsWith(truncatedSuffix);
+        const jsonText = hasTruncatedSuffix
+            ? trimmed.slice(0, -truncatedSuffix.length).trimEnd()
+            : trimmed;
+        try {
+            return JSON.stringify(JSON.parse(jsonText), null, 2)
+                + (hasTruncatedSuffix ? truncatedSuffix : '');
+        } catch (error) {
+            if (!/^[\[{]/.test(jsonText)) {
+                return text;
+            }
+            return prettyPrintPartialJson(jsonText) + (hasTruncatedSuffix ? truncatedSuffix : '');
+        }
+    }
+
+    function prettyPrintPartialJson(text) {
+        let indent = 0;
+        let inString = false;
+        let escaping = false;
+        let output = '';
+        const appendNewline = () => {
+            output = output.trimEnd() + '\n' + '  '.repeat(Math.max(0, indent));
+        };
+        for (const char of text) {
+            if (inString) {
+                output += char;
+                if (escaping) {
+                    escaping = false;
+                } else if (char === '\\') {
+                    escaping = true;
+                } else if (char === '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (char === '"') {
+                inString = true;
+                output += char;
+            } else if (char === '{' || char === '[') {
+                output += char;
+                indent += 1;
+                appendNewline();
+            } else if (char === '}' || char === ']') {
+                indent -= 1;
+                appendNewline();
+                output += char;
+            } else if (char === ',') {
+                output += char;
+                appendNewline();
+            } else if (char === ':') {
+                output += ': ';
+            } else if (!/\s/.test(char)) {
+                output += char;
+            }
+        }
+        return output.trim();
+    }
+
     function formatLogTime(value) {
         if (!value) {
             return '-';
@@ -561,9 +770,19 @@
     }
 
     function renderRouteLogStats() {
+        const recentLogs = routeLogState.recentLogs || [];
+        const errorCount = recentLogs.filter((entry) => Number(entry.status) >= 400).length;
+        const slowCount = recentLogs.filter((entry) => (Number(entry.durationMs) || 0) >= ROUTE_LOG_SLOW_THRESHOLD_MS).length;
+        const successCount = recentLogs.filter((entry) => {
+            const status = Number(entry.status) || 0;
+            return status > 0 && status < 400;
+        }).length;
+        const successRate = recentLogs.length === 0 ? '0%' : Math.round((successCount / recentLogs.length) * 100) + '%';
         elements.routeLogTotalRequests.textContent = routeLogState.totalRequests.toString();
-        elements.routeLogTotalDuration.textContent = formatDuration(routeLogState.totalDurationMs);
-        renderPathStats();
+        elements.routeLogErrorCount.textContent = errorCount.toString();
+        elements.routeLogSlowCount.textContent = slowCount.toString();
+        elements.routeLogSuccessRate.textContent = successRate;
+        renderRouteLogTables();
     }
 
     function formatDuration(ms) {
@@ -579,23 +798,30 @@
 
     function renderPathStats() {
         const entries = Object.entries(routeLogState.pathStats || {})
-            .sort((a, b) => b[1] - a[1]);
+            .filter(([path]) => routeLogPathMatchesSearch(path))
+            .sort((a, b) => {
+                const durationDiff = ((routeLogState.pathDurationStats || {})[b[0]] || 0)
+                    - ((routeLogState.pathDurationStats || {})[a[0]] || 0);
+                return durationDiff || b[1] - a[1];
+            });
         elements.routeLogDirectoryStats.innerHTML = '';
 
         if (entries.length === 0) {
             const tr = document.createElement('tr');
             tr.dataset.empty = 'true';
             tr.appendChild(cell('暂无请求', 'empty-small'));
-            tr.firstChild.colSpan = 3;
+            tr.firstChild.colSpan = 5;
             elements.routeLogDirectoryStats.appendChild(tr);
             return;
         }
 
-        entries.slice(0, ROUTE_PATH_STATS_LIMIT).forEach(([prefix, count]) => {
+        entries.slice(0, routeLogDisplayLimit()).forEach(([prefix, count], index) => {
             const tr = document.createElement('tr');
+            tr.appendChild(cell(String(index + 1), 'col-index'));
             tr.appendChild(cell(prefix, 'path-cell'));
             tr.appendChild(cell(count.toString()));
             tr.appendChild(cell(formatDuration((routeLogState.pathDurationStats || {})[prefix] || 0)));
+            tr.appendChild(cell(formatDuration((routeLogState.pathMaxDurationStats || {})[prefix] || 0)));
             elements.routeLogDirectoryStats.appendChild(tr);
         });
     }
@@ -623,6 +849,15 @@
         return stats;
     }
 
+    function buildPathMaxDurationStats(logs) {
+        const stats = {};
+        (logs || []).forEach((entry) => {
+            const path = normalizedLogPath(entry.path);
+            stats[path] = Math.max(stats[path] || 0, Math.max(0, Number(entry.durationMs) || 0));
+        });
+        return stats;
+    }
+
     function routeLogDisplayLimit() {
         const parsed = Number.parseInt(elements.routeLogLimit.value, 10);
         if (!Number.isFinite(parsed)) {
@@ -638,53 +873,168 @@
     }
 
     function routeLogMatchesSearch(entry) {
-        const pathKeyword = (elements.routeLogPathSearch.value || '').trim().toLowerCase();
-        return !pathKeyword || (entry.path || '').toLowerCase().includes(pathKeyword);
+        return routeLogPathMatchesSearch(entry.path || '');
     }
 
-    function appendRouteLog(entry, prepend) {
-        if (!routeLogMatchesSearch(entry)) {
-            return;
-        }
-        const empty = elements.routeLogRows.querySelector('[data-empty="true"]');
-        if (empty) {
-            empty.remove();
-        }
+    function routeLogPathMatchesSearch(path) {
+        const pathKeyword = (elements.routeLogPathSearch.value || '').trim().toLowerCase();
+        return !pathKeyword || (path || '').toLowerCase().includes(pathKeyword);
+    }
 
+    function routeLogRow(entry, durationLabel, index) {
         const tr = document.createElement('tr');
+        tr.appendChild(cell(String((index || 0) + 1), 'col-index'));
         tr.appendChild(cell(formatLogTime(entry.timestamp)));
         tr.appendChild(cell(entry.method || '-'));
         tr.appendChild(cell(entry.path || '-', 'path-cell'));
         tr.appendChild(cell((entry.status || 0).toString()));
-        tr.appendChild(cell((entry.durationMs || 0) + 'ms'));
+        tr.appendChild(cell(durationLabel || ((entry.durationMs || 0) + 'ms')));
+        const detailCell = document.createElement('td');
+        detailCell.className = 'route-log-actions-cell';
+        const actionGroup = document.createElement('div');
+        actionGroup.className = 'route-log-actions';
+        const detailButton = document.createElement('button');
+        detailButton.type = 'button';
+        detailButton.className = 'btn btn-sm btn-log-detail';
+        detailButton.textContent = '详情';
+        detailButton.addEventListener('click', () => openRouteLogDetail(entry));
+        actionGroup.appendChild(detailButton);
+        const analyzeButton = document.createElement('button');
+        analyzeButton.type = 'button';
+        analyzeButton.className = 'btn btn-sm btn-log-analyze';
+        analyzeButton.textContent = '拷贝分析';
+        analyzeButton.addEventListener('click', () => copyRouteLogToDiagnostics(entry));
+        actionGroup.appendChild(analyzeButton);
+        detailCell.appendChild(actionGroup);
+        tr.appendChild(detailCell);
+        return tr;
+    }
 
-        if (prepend && elements.routeLogRows.firstChild) {
-            elements.routeLogRows.insertBefore(tr, elements.routeLogRows.firstChild);
-        } else {
-            elements.routeLogRows.appendChild(tr);
+    function renderLogRows(target, logs, emptyText) {
+        target.innerHTML = '';
+        if (logs.length === 0) {
+            const tr = document.createElement('tr');
+            tr.dataset.empty = 'true';
+            tr.appendChild(cell(emptyText, 'empty-small'));
+            tr.firstChild.colSpan = 7;
+            target.appendChild(tr);
+            return;
         }
-
-        while (elements.routeLogRows.children.length > routeLogDisplayLimit()) {
-            elements.routeLogRows.removeChild(elements.routeLogRows.lastChild);
-        }
+        logs.forEach((entry, index) => target.appendChild(routeLogRow(entry, null, index)));
     }
 
     function renderRouteLogs(logs) {
-        elements.routeLogRows.innerHTML = '';
         const pathKeyword = (elements.routeLogPathSearch.value || '').trim().toLowerCase();
         const filteredLogs = pathKeyword
             ? (logs || []).filter((entry) => (entry.path || '').toLowerCase().includes(pathKeyword))
             : (logs || []);
         const visibleLogs = filteredLogs.slice(0, routeLogDisplayLimit());
-        if (visibleLogs.length === 0) {
-            const tr = document.createElement('tr');
-            tr.dataset.empty = 'true';
-            tr.appendChild(cell(pathKeyword ? '没有匹配的路径' : '暂无代理请求', 'empty-small'));
-            tr.firstChild.colSpan = 5;
-            elements.routeLogRows.appendChild(tr);
+        renderLogRows(elements.routeLogRows, visibleLogs, pathKeyword ? '没有匹配的路径' : '暂无代理请求');
+    }
+
+    function renderSlowLogs(logs) {
+        const pathKeyword = (elements.routeLogPathSearch.value || '').trim().toLowerCase();
+        const visibleLogs = (logs || [])
+            .filter(routeLogMatchesSearch)
+            .sort((a, b) => {
+                const durationDiff = (Number(b.durationMs) || 0) - (Number(a.durationMs) || 0);
+                if (durationDiff) {
+                    return durationDiff;
+                }
+                return normalizedLogPath(a.path).localeCompare(normalizedLogPath(b.path));
+            })
+            .slice(0, routeLogDisplayLimit());
+        renderLogRows(elements.routeLogSlowRows, visibleLogs, pathKeyword ? '没有匹配的路径' : '暂无代理请求');
+    }
+
+    function openRouteLogDetail(entry) {
+        elements.routeLogDetailTime.textContent = formatLogTime(entry.timestamp);
+        elements.routeLogDetailMethod.textContent = entry.method || '-';
+        elements.routeLogDetailStatus.textContent = (entry.status || 0).toString();
+        elements.routeLogDetailDuration.textContent = formatDuration(entry.durationMs || 0);
+        elements.routeLogDetailPath.textContent = displayLogDetailValue(entry.path);
+        elements.routeLogDetailParams.textContent = displayLogDetailValue(entry.requestParams);
+        elements.routeLogDetailRequestBody.textContent = displayStructuredDetailValue(entry.requestBody);
+        elements.routeLogDetailResponseBody.textContent = displayStructuredDetailValue(entry.responseBody);
+        elements.routeLogDetailPanel.hidden = false;
+    }
+
+    function diagnosticEntryKey(entry) {
+        return [
+            entry.timestamp || '',
+            entry.method || '',
+            entry.path || '',
+            entry.requestParams || '',
+            entry.status || '',
+            entry.durationMs || ''
+        ].join('|');
+    }
+
+    function renderRouteLogDiagnostics() {
+        const hasEntries = routeLogDiagnosticEntries.length > 0;
+        elements.routeLogDiagnosticEmpty.hidden = hasEntries;
+        elements.routeLogDiagnosticContent.hidden = !hasEntries;
+        elements.routeLogDiagnosticRows.innerHTML = '';
+        if (!hasEntries) {
             return;
         }
-        visibleLogs.forEach((entry) => appendRouteLog(entry, false));
+        routeLogDiagnosticEntries.forEach((entry, index) => {
+            const tr = document.createElement('tr');
+            tr.appendChild(cell(String(index + 1), 'col-index'));
+            tr.appendChild(cell(formatLogTime(entry.timestamp)));
+            tr.appendChild(cell(entry.method || '-'));
+            tr.appendChild(cell(normalizedLogPath(entry.path), 'path-cell'));
+            tr.appendChild(cell(logDetailText(entry.requestParams), 'path-cell'));
+            tr.appendChild(cell((entry.status || 0).toString()));
+            tr.appendChild(cell(formatDuration(entry.durationMs || 0)));
+            const actionCell = document.createElement('td');
+            actionCell.className = 'route-log-actions-cell';
+            const actionGroup = document.createElement('div');
+            actionGroup.className = 'route-log-actions';
+            const detailButton = document.createElement('button');
+            detailButton.type = 'button';
+            detailButton.className = 'btn btn-sm btn-log-detail';
+            detailButton.textContent = '详情';
+            detailButton.addEventListener('click', () => openRouteLogDetail(entry));
+            actionGroup.appendChild(detailButton);
+            actionCell.appendChild(actionGroup);
+            tr.appendChild(actionCell);
+            elements.routeLogDiagnosticRows.appendChild(tr);
+        });
+    }
+
+    function copyRouteLogToDiagnostics(entry) {
+        const key = diagnosticEntryKey(entry);
+        routeLogDiagnosticEntries = [
+            entry,
+            ...routeLogDiagnosticEntries.filter((item) => diagnosticEntryKey(item) !== key)
+        ].slice(0, ROUTE_LOG_MAX_RECENT);
+        renderRouteLogDiagnostics();
+        setRouteLogTab('diagnostics');
+        showToast('已复制到诊断列表');
+    }
+
+    async function copyRouteLogDiagnosticContext() {
+        if (routeLogDiagnosticEntries.length === 0) {
+            showToast('请先选择一条请求进行分析', 'error');
+            return;
+        }
+        try {
+            await copyText(diagnosticContextText(routeLogDiagnosticEntries));
+            showToast('诊断上下文已复制');
+        } catch (error) {
+            showToast('复制失败: ' + error.message, 'error');
+        }
+    }
+
+    function closeRouteLogDetail() {
+        elements.routeLogDetailPanel.hidden = true;
+    }
+
+    function renderRouteLogTables() {
+        renderPathStats();
+        renderRouteLogs(routeLogState.recentLogs || []);
+        renderSlowLogs(routeLogState.recentLogs || []);
     }
 
     function addRouteLog(entry) {
@@ -699,14 +1049,36 @@
         routeLogState.requestsByIp[ip] = (routeLogState.requestsByIp[ip] || 0) + 1;
         routeLogState.pathStats[path] = (routeLogState.pathStats[path] || 0) + 1;
         routeLogState.pathDurationStats[path] = (routeLogState.pathDurationStats[path] || 0) + durationMs;
+        routeLogState.pathMaxDurationStats[path] = Math.max(routeLogState.pathMaxDurationStats[path] || 0, durationMs);
         routeLogState.recentLogs = [entry, ...(routeLogState.recentLogs || [])].slice(0, ROUTE_LOG_MAX_RECENT);
         renderRouteLogStats();
-        appendRouteLog(entry, true);
+    }
+
+    function setRouteLogTab(tabName) {
+        activeRouteLogTab = tabName;
+        elements.routeLogTabs.forEach((tab) => {
+            const isActive = tab.dataset.routeLogTab === tabName;
+            tab.classList.toggle('active', isActive);
+            tab.setAttribute('aria-selected', String(isActive));
+            tab.tabIndex = isActive ? 0 : -1;
+        });
+        elements.routeLogPanels.forEach((panel) => {
+            const isActive = panel.dataset.routeLogPanel === tabName;
+            panel.classList.toggle('active', isActive);
+            panel.hidden = !isActive;
+        });
+        elements.routeLogTabTools.forEach((tools) => {
+            const isActive = (tools.dataset.routeLogTools === 'all' && tabName !== 'diagnostics')
+                || tools.dataset.routeLogTools === tabName;
+            tools.classList.toggle('is-hidden', !isActive);
+            tools.setAttribute('aria-hidden', String(!isActive));
+        });
     }
 
     function closeRouteLog() {
         stopRouteLogStream();
         stopRouteLogPolling();
+        closeRouteLogDetail();
         activeRouteLogName = '';
         activeRouteLogEnabled = false;
         elements.routeLogModal.classList.remove('active');
@@ -771,10 +1143,10 @@
                 requestsByIp: snapshot.requestsByIp || {},
                 pathStats: snapshot.pathStats || buildPathStats(logs),
                 pathDurationStats: snapshot.pathDurationStats || buildPathDurationStats(logs),
+                pathMaxDurationStats: snapshot.pathMaxDurationStats || buildPathMaxDurationStats(logs),
                 recentLogs: logs.slice(0, ROUTE_LOG_MAX_RECENT)
             };
             renderRouteLogStats();
-            renderRouteLogs(routeLogState.recentLogs);
             updateRouteLogStatus();
         } catch (error) {
             if (showError) {
@@ -811,15 +1183,19 @@
             requestsByIp: {},
             pathStats: {},
             pathDurationStats: {},
+            pathMaxDurationStats: {},
             recentLogs: []
         };
         elements.routeLogTitle.textContent = '路由日志';
         elements.routeLogName.textContent = routeDisplayName(name);
         elements.routeLogName.title = routeDisplayName(name);
         elements.routeLogPathSearch.value = '';
+        routeLogDiagnosticEntries = [];
+        renderRouteLogDiagnostics();
+        closeRouteLogDetail();
+        setRouteLogTab('realtime');
         updateRouteLogStatus();
         renderRouteLogStats();
-        renderRouteLogs([]);
         elements.routeLogModal.classList.add('active');
 
         await refreshRouteLogSnapshot(name, true);
@@ -857,16 +1233,32 @@
         routeLogRefreshModeIndex = (routeLogRefreshModeIndex + 1) % routeLogRefreshModes.length;
         applyRouteLogRefreshMode();
     });
+    elements.routeLogTabs.forEach((tab) => {
+        tab.addEventListener('click', () => setRouteLogTab(tab.dataset.routeLogTab));
+        tab.addEventListener('keydown', (event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                return;
+            }
+            event.preventDefault();
+            const currentIndex = elements.routeLogTabs.indexOf(tab);
+            const step = event.key === 'ArrowRight' ? 1 : -1;
+            const nextIndex = (currentIndex + step + elements.routeLogTabs.length) % elements.routeLogTabs.length;
+            const nextTab = elements.routeLogTabs[nextIndex];
+            setRouteLogTab(nextTab.dataset.routeLogTab);
+            nextTab.focus();
+        });
+    });
     elements.routeLogLimit.addEventListener('input', () => {
-        renderRouteLogs(routeLogState.recentLogs || []);
+        renderRouteLogTables();
     });
     elements.routeLogLimit.addEventListener('change', () => {
         normalizeRouteLogLimitInput();
-        renderRouteLogs(routeLogState.recentLogs || []);
+        renderRouteLogTables();
     });
     elements.routeLogPathSearch.addEventListener('input', () => {
-        renderRouteLogs(routeLogState.recentLogs || []);
+        renderRouteLogTables();
     });
+    elements.btnCloseRouteLogDetail.addEventListener('click', closeRouteLogDetail);
     elements.btnAddPathPrefix.addEventListener('click', addPathPrefixFromInput);
     elements.pathPrefixInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -907,7 +1299,9 @@
             return;
         }
 
-        if (btn.classList.contains('btn-view')) {
+        if (btn.classList.contains('btn-access')) {
+            openRouteAccessPage(routeId);
+        } else if (btn.classList.contains('btn-view')) {
             viewFile(routeId);
         } else if (btn.classList.contains('btn-logs')) {
             openRouteLog(routeId);
@@ -945,6 +1339,7 @@
             elements.pathPrefixInput.value = '';
             setPathPrefixes(cfg.pathPrefixes || [cfg.pathPrefix].filter(Boolean));
             elements.targetUrl.value = displayTargetUrl(cfg.targetUrl);
+            elements.accessPage.value = cfg.accessPage || '';
             elements.localIp.value = cfg.localIp || '127.0.0.1';
             elements.localPort.value = '';
             elements.enabled.value = String(cfg.enabled === true);
@@ -966,6 +1361,7 @@
             elements.pathPrefixInput.value = '';
             setPathPrefixes(cfg.pathPrefixes || [cfg.pathPrefix].filter(Boolean));
             elements.targetUrl.value = displayTargetUrl(cfg.targetUrl);
+            elements.accessPage.value = cfg.accessPage || '';
             elements.localIp.value = cfg.localIp || '127.0.0.1';
             elements.localPort.value = cfg.localPort || '';
             elements.enabled.value = cfg.enabled.toString();
@@ -988,6 +1384,7 @@
                 name: cfg.name,
                 pathPrefixes: pathPrefixes,
                 targetUrl: cfg.targetUrl,
+                accessPage: cfg.accessPage || null,
                 localIp: cfg.localIp,
                 localPort: cfg.localPort,
                 enabled: nextEnabled
@@ -1026,6 +1423,7 @@
                 name: (updated.name || '').trim(),
                 pathPrefixes: pathPrefixes,
                 targetUrl: updated.targetUrl,
+                accessPage: normalizedOptionalText(updated.accessPage),
                 localIp: updated.localIp,
                 localPort: updated.localPort,
                 enabled: updated.enabled !== false
@@ -1079,6 +1477,7 @@
             name: elements.name.value.trim(),
             pathPrefixes: pathPrefixes,
             targetUrl: elements.targetUrl.value.trim(),
+            accessPage: normalizedOptionalText(elements.accessPage.value),
             localIp: normalizedLocalIp(elements.localIp.value),
             localPort: elements.localPort.value ? Number(elements.localPort.value) : null,
             enabled: elements.enabled.value === 'true'
@@ -1086,6 +1485,10 @@
 
         if (!payload.name) {
             showToast('请输入路由名称', 'error');
+            return;
+        }
+        if (payload.name.length > 50) {
+            showToast('路由名称不能超过 50 个字', 'error');
             return;
         }
         if (hasRouteNameConflict(payload.name, isEdit ? oldRouteId : '')) {

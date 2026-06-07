@@ -73,6 +73,8 @@
                          th:data-id="${cfg.id}"
                          th:data-name="${cfg.name}"
                          th:data-target="${#strings.replace(#strings.replace(cfg.targetUrl, 'http://', ''), 'https://', '')}"
+                         th:data-access-page="${cfg.accessPage ?: ''}"
+                         th:data-local-access="${cfg.localPort != null ? cfg.effectiveLocalIp() + ':' + cfg.localPort : ''}"
                          th:data-has-local-port="${cfg.localPort != null}"
                          th:data-local-binding="${cfg.enabled && cfg.localPort != null ? cfg.effectiveLocalIp() + ':' + cfg.localPort : ''}">
                     <div class="route-card-top">
@@ -123,6 +125,9 @@
                                 th:attr="data-id=${cfg.id},data-enabled=${cfg.enabled}">日志</button>
                         <button class="btn btn-sm btn-copy" type="button" th:attr="data-id=${cfg.id}">拷贝</button>
                         <button class="btn btn-sm btn-edit" type="button" th:attr="data-id=${cfg.id}">编辑</button>
+                        <button class="btn btn-sm btn-access"
+                                type="button"
+                                th:attr="data-id=${cfg.id},disabled=${#strings.isEmpty(cfg.accessPage)},title=${#strings.isEmpty(cfg.accessPage) ? '请先编辑路由并填写访问页' : '新标签页打开访问页'}">访问</button>
                     </div>
                 </article>
                 <div class="empty" th:if="${#lists.isEmpty(configs)}">
@@ -147,13 +152,18 @@
             <input type="hidden" id="enabled" value="false">
             <div class="form-group">
                 <label for="name">路由名称 <span class="required">*</span></label>
-                <input type="text" id="name" required placeholder="如 我的服务 / API-测试">
-                <small>可输入中文、英文、数字和符号；配置文件名会自动生成</small>
+                <input type="text" id="name" required maxlength="50" placeholder="如 我的服务 / API-测试">
+                <small>最多 50 个字；可输入中文、英文、数字和符号；配置文件名会自动生成</small>
             </div>
             <div class="form-group">
                 <label for="targetUrl">目标地址 <span class="required">*</span></label>
                 <input type="text" id="targetUrl" required placeholder="如 192.168.1.100:8080 或 api.example.com:8080">
                 <small>填写 IP/域名和端口即可，协议由后台自动补全为 http://</small>
+            </div>
+            <div class="form-group">
+                <label for="accessPage">访问页</label>
+                <input type="text" id="accessPage" placeholder="如 /portal/login.html 或 http://127.0.0.1:9191/portal/login.html">
+                <small>默认不必填；用于记录这个路由常用的入口页面</small>
             </div>
             <div class="form-row form-row-local">
                 <div class="form-group">
@@ -224,71 +234,222 @@
                     <strong id="routeLogTotalRequests">0</strong>
                 </div>
                 <div class="summary-item">
-                    <span class="summary-label">统计负载</span>
-                    <strong id="routeLogTotalDuration">0ms</strong>
+                    <span class="summary-label">失败请求</span>
+                    <strong id="routeLogErrorCount">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">慢请求</span>
+                    <strong id="routeLogSlowCount">0</strong>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">成功率</span>
+                    <strong id="routeLogSuccessRate">0%</strong>
                 </div>
             </div>
-            <div class="log-card route-directory-card">
-                <h3>统计路径 Top 50</h3>
-                <div class="route-directory-scroll">
-                    <table class="compact-table">
-                        <thead>
-                        <tr>
-                            <th>路径</th>
-                            <th>请求数</th>
-                            <th>总耗时</th>
-                        </tr>
-                        </thead>
-                        <tbody id="routeLogDirectoryStats">
-                        <tr data-empty="true">
-                            <td colspan="3" class="empty-small">暂无请求</td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="log-layout route-log-layout">
-            <div class="log-card log-card-main">
-                <div class="log-card-title-row">
-                    <h3>实时日志</h3>
-                    <div class="log-title-tools">
-                        <label class="log-search-control" for="routeLogPathSearch">
-                            路径
+            <div class="log-card route-log-tabs-card">
+                <div class="route-log-tabs-header">
+                    <div class="route-log-tabs" role="tablist" aria-label="路由日志视图">
+                        <button type="button"
+                                id="routeLogRealtimeTab"
+                                class="route-log-tab active"
+                                role="tab"
+                                aria-selected="true"
+                                aria-controls="routeLogRealtimePanel"
+                                data-route-log-tab="realtime">实时日志</button>
+                        <button type="button"
+                                id="routeLogTopTab"
+                                class="route-log-tab"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="routeLogTopPanel"
+                                data-route-log-tab="top">总耗时 Top</button>
+                        <button type="button"
+                                id="routeLogSlowTab"
+                                class="route-log-tab"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="routeLogSlowPanel"
+                                data-route-log-tab="slow">单耗时 Top</button>
+                        <button type="button"
+                                id="routeLogDiagnosticsTab"
+                                class="route-log-tab"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="routeLogDiagnosticsPanel"
+                                data-route-log-tab="diagnostics">诊断分析</button>
+                    </div>
+                    <div class="log-title-tools route-log-tab-tools"
+                         data-route-log-tools="all">
+                        <label class="log-search-control log-search-control-compact" for="routeLogPathSearch">
+                            <span class="sr-only">路径</span>
                             <input id="routeLogPathSearch" type="search" placeholder="搜索路径">
                         </label>
                         <label class="log-limit-control" for="routeLogLimit">
                             显示
-                            <input id="routeLogLimit" type="number" min="1" max="100" value="10" inputmode="numeric">
+                            <input id="routeLogLimit" type="number" min="1" max="100" value="50" inputmode="numeric">
                             条
                         </label>
                     </div>
                 </div>
-                <div class="log-table-wrap route-log-scroll">
-                <table class="compact-table">
-                    <thead>
-                    <tr>
-                        <th>时间</th>
-                        <th>方法</th>
-                        <th>路径</th>
-                        <th>状态</th>
-                        <th>耗时</th>
-                    </tr>
-                    </thead>
-                    <tbody id="routeLogRows">
-                    <tr data-empty="true">
-                        <td colspan="5" class="empty-small">暂无代理请求</td>
-                    </tr>
-                    </tbody>
-                </table>
+                <div id="routeLogTopPanel"
+                     class="route-log-tab-panel"
+                     role="tabpanel"
+                     aria-labelledby="routeLogTopTab"
+                     data-route-log-panel="top"
+                     hidden>
+                    <div class="route-directory-scroll">
+                        <table class="compact-table">
+                            <thead>
+                            <tr>
+                                <th class="col-index">序号</th>
+                                <th>路径</th>
+                                <th>请求数</th>
+                                <th>总耗时</th>
+                                <th>最长单次</th>
+                            </tr>
+                            </thead>
+                            <tbody id="routeLogDirectoryStats">
+                            <tr data-empty="true">
+                                <td colspan="5" class="empty-small">暂无请求</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="routeLogRealtimePanel"
+                     class="route-log-tab-panel active"
+                     role="tabpanel"
+                     aria-labelledby="routeLogRealtimeTab"
+                     data-route-log-panel="realtime">
+                    <div class="log-table-wrap route-log-scroll">
+                        <table class="compact-table">
+                            <thead>
+                            <tr>
+                                <th class="col-index">序号</th>
+                                <th>时间</th>
+                                <th>方法</th>
+                                <th>路径</th>
+                                <th>状态</th>
+                                <th>耗时</th>
+                                <th>详情</th>
+                            </tr>
+                            </thead>
+                            <tbody id="routeLogRows">
+                            <tr data-empty="true">
+                                <td colspan="7" class="empty-small">暂无代理请求</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="routeLogSlowPanel"
+                     class="route-log-tab-panel"
+                     role="tabpanel"
+                     aria-labelledby="routeLogSlowTab"
+                     data-route-log-panel="slow"
+                     hidden>
+                    <div class="log-table-wrap route-log-scroll">
+                        <table class="compact-table">
+                            <thead>
+                            <tr>
+                                <th class="col-index">序号</th>
+                                <th>时间</th>
+                                <th>方法</th>
+                                <th>路径</th>
+                                <th>状态</th>
+                                <th>单次耗时</th>
+                                <th>详情</th>
+                            </tr>
+                            </thead>
+                            <tbody id="routeLogSlowRows">
+                            <tr data-empty="true">
+                                <td colspan="7" class="empty-small">暂无代理请求</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="routeLogDiagnosticsPanel"
+                     class="route-log-tab-panel route-log-diagnostics-panel"
+                     role="tabpanel"
+                     aria-labelledby="routeLogDiagnosticsTab"
+                     data-route-log-panel="diagnostics"
+                     hidden>
+                    <div id="routeLogDiagnosticEmpty" class="route-log-diagnostic-empty">
+                        <strong>尚未选择请求</strong>
+                        <span>在「实时日志」或「单耗时 Top」中点击「拷贝分析」，把请求逐条复制到这里形成诊断列表。</span>
+                    </div>
+                    <div id="routeLogDiagnosticContent" class="route-log-diagnostic-content" hidden>
+                        <div class="route-log-diagnostic-list-wrap">
+                            <table class="compact-table route-log-diagnostic-table">
+                                <thead>
+                                <tr>
+                                    <th class="col-index">序号</th>
+                                    <th>时间</th>
+                                    <th>方法</th>
+                                    <th>路径</th>
+                                    <th>参数</th>
+                                    <th>状态</th>
+                                    <th>耗时</th>
+                                    <th>详情</th>
+                                </tr>
+                                </thead>
+                                <tbody id="routeLogDiagnosticRows"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="route-log-footer">
             <button type="button"
-                    class="btn modal-close-btn"
+                    class="btn btn-sm modal-close-btn"
                     id="btnCloseRouteLog"
                     aria-label="关闭路由日志">关闭</button>
+        </div>
+        <div id="routeLogDetailPanel" class="route-log-detail-panel" hidden>
+            <div class="route-log-detail-card">
+                <div class="route-log-detail-header">
+                    <h3>请求详情</h3>
+                </div>
+                <dl class="route-log-detail-meta">
+                    <div>
+                        <dt>时间</dt>
+                        <dd id="routeLogDetailTime">-</dd>
+                    </div>
+                    <div>
+                        <dt>方法</dt>
+                        <dd id="routeLogDetailMethod">-</dd>
+                    </div>
+                    <div>
+                        <dt>状态</dt>
+                        <dd id="routeLogDetailStatus">-</dd>
+                    </div>
+                    <div>
+                        <dt>耗时</dt>
+                        <dd id="routeLogDetailDuration">-</dd>
+                    </div>
+                </dl>
+                <div class="route-log-detail-block">
+                    <h4>路径</h4>
+                    <pre id="routeLogDetailPath">-</pre>
+                </div>
+                <div class="route-log-detail-block">
+                    <h4>请求参数</h4>
+                    <pre id="routeLogDetailParams">-</pre>
+                </div>
+                <div class="route-log-detail-block">
+                    <h4>请求体</h4>
+                    <pre id="routeLogDetailRequestBody">-</pre>
+                </div>
+                <div class="route-log-detail-block">
+                    <h4>返回预览</h4>
+                    <pre id="routeLogDetailResponseBody">-</pre>
+                </div>
+                <div class="route-log-detail-actions">
+                    <button type="button" class="btn btn-sm" id="btnCloseRouteLogDetail">关闭</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>

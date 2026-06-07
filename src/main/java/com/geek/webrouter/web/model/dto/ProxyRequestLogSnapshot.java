@@ -10,6 +10,7 @@ public record ProxyRequestLogSnapshot(
         Map<String, Long> requestsByIp,
         Map<String, Long> pathStats,
         Map<String, Long> pathDurationStats,
+        Map<String, Long> pathMaxDurationStats,
         List<ProxyRequestLogEntry> recentLogs
 ) {
 }

@@ -53,6 +53,38 @@ class RouteConfigServiceImplTest {
     }
 
     @Test
+    void createTrimsOptionalAccessPageBeforePersisting() {
+        RouteConfig config = RouteConfig.builder()
+                .name("Portal")
+                .pathPrefixes(List.of("/portal"))
+                .targetUrl("http://127.0.0.1:8081")
+                .accessPage("  /portal/login.html  ")
+                .enabled(false)
+                .build();
+
+        RouteConfig saved = service().create(config);
+        RouteConfig loaded = service().getByName(saved.getId());
+
+        assertThat(saved.getAccessPage()).isEqualTo("/portal/login.html");
+        assertThat(loaded.getAccessPage()).isEqualTo("/portal/login.html");
+    }
+
+    @Test
+    void createStoresBlankAccessPageAsNull() {
+        RouteConfig config = RouteConfig.builder()
+                .name("Blank Portal")
+                .pathPrefixes(List.of("/blank-portal"))
+                .targetUrl("http://127.0.0.1:8082")
+                .accessPage("   ")
+                .enabled(false)
+                .build();
+
+        RouteConfig saved = service().create(config);
+
+        assertThat(saved.getAccessPage()).isNull();
+    }
+
+    @Test
     void listAllUsesFileNameAsAuthoritativeRouteIdWhenJsonIdDiffers() throws Exception {
         Files.writeString(tempDir.resolve("route-file.json"), """
                 {

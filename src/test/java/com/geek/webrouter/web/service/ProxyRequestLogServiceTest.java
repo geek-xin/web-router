@@ -34,8 +34,30 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/test/a", 12L)
                 .containsEntry("/test/b", 20L)
                 .containsEntry("/test/c", 8L);
+        assertThat(snapshot.pathMaxDurationStats())
+                .containsEntry("/test/a", 12L)
+                .containsEntry("/test/b", 20L)
+                .containsEntry("/test/c", 8L);
         assertThat(snapshot.recentLogs()).hasSize(3);
         assertThat(snapshot.recentLogs().getFirst().path()).isEqualTo("/test/c");
+    }
+
+    @Test
+    void recordsMaximumDurationByPath() {
+        ProxyRequestLogService service = new ProxyRequestLogService();
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/same", "127.0.0.1", 200, 12));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/same", "127.0.0.1", 200, 42));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/same", "127.0.0.1", 200, 8));
+
+        var snapshot = service.snapshot("route-a");
+
+        assertThat(snapshot.pathStats()).containsEntry("/same", 3L);
+        assertThat(snapshot.pathDurationStats()).containsEntry("/same", 62L);
+        assertThat(snapshot.pathMaxDurationStats()).containsEntry("/same", 42L);
     }
 
     @Test
@@ -60,6 +82,10 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/route-a/three", 1L)
                 .doesNotContainKey("/route-b/two");
         assertThat(snapshot.pathDurationStats())
+                .containsEntry("/route-a/one", 12L)
+                .containsEntry("/route-a/three", 8L)
+                .doesNotContainKey("/route-b/two");
+        assertThat(snapshot.pathMaxDurationStats())
                 .containsEntry("/route-a/one", 12L)
                 .containsEntry("/route-a/three", 8L)
                 .doesNotContainKey("/route-b/two");
@@ -90,6 +116,10 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/admin/two", 1L)
                 .doesNotContainKey("/other");
         assertThat(snapshot.pathDurationStats())
+                .containsEntry("/api/one", 12L)
+                .containsEntry("/admin/two", 9L)
+                .doesNotContainKey("/other");
+        assertThat(snapshot.pathMaxDurationStats())
                 .containsEntry("/api/one", 12L)
                 .containsEntry("/admin/two", 9L)
                 .doesNotContainKey("/other");

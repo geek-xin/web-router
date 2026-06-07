@@ -108,6 +108,7 @@ public class RouteConfigController {
         RouteConfig config = RouteConfig.builder()
                 .name(dto.getName().trim())
                 .targetUrl(RouteTargetUrlNormalizer.normalize(dto.getTargetUrl()))
+                .accessPage(dto.getAccessPage())
                 .localIp(dto.getLocalIp())
                 .localPort(dto.getLocalPort())
                 .enabled(dto.isEnabled())

@@ -20,6 +20,8 @@ import reactor.netty.http.server.HttpServer;
 import reactor.netty.http.server.HttpServerRequest;
 import reactor.netty.http.server.HttpServerResponse;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -38,6 +40,8 @@ import java.util.function.BiFunction;
 @Slf4j
 @Service
 public class LocalPortProxyService {
+
+    private static final int MAX_DETAIL_CHARS = 4096;
 
     private static final Set<String> HOP_BY_HOP_HEADERS = Set.of(
             "connection",
@@ -163,19 +167,29 @@ public class LocalPortProxyService {
             return response.sendString(Mono.just("No matching local route prefix")).then();
         }
         String targetUri = targetUri(config, request.uri());
+        String requestParams = requestParams(request.uri());
+        StringBuilder requestBody = new StringBuilder();
+        StringBuilder responseBody = new StringBuilder();
+        String requestContentType = request.requestHeaders().get(HttpHeaderNames.CONTENT_TYPE);
         log.info("本地端口代理转发请求: {} {} -> {}", config.getId(), request.uri(), targetUri);
         return httpClient
                 .headers(headers -> copyRequestHeaders(request.requestHeaders(), headers, URI.create(targetUri)))
                 .request(request.method())
                 .uri(targetUri)
-                .send(request.receive().retain())
+                .send(request.receive()
+                        .retain()
+                        .doOnNext(buffer -> appendPreview(requestBody, buffer, requestContentType)))
                 .response((clientResponse, content) -> {
                     int status = clientResponse.status().code();
+                    String responseContentType = clientResponse.responseHeaders().get(HttpHeaderNames.CONTENT_TYPE);
                     response.status(clientResponse.status());
                     copyResponseHeaders(clientResponse.responseHeaders(), response.responseHeaders());
-                    return response.send(content.retain())
+                    return response.send(content
+                                    .retain()
+                                    .doOnNext(buffer -> appendPreview(responseBody, buffer, responseContentType)))
                             .then()
-                            .doFinally(signalType -> recordLog(config, request, status, start));
+                            .doFinally(signalType -> recordLog(config, request, status, start,
+                                    requestParams, requestBody.toString(), responseBody.toString()));
                 })
                 .onErrorResume(error -> {
                     log.warn("本地端口代理请求失败: {} {} -> {} — {}",
@@ -183,11 +197,22 @@ public class LocalPortProxyService {
                     response.status(502);
                     return response.sendString(Mono.just("Proxy request failed"))
                             .then()
-                            .doFinally(signalType -> recordLog(config, request, 502, start));
+                            .doFinally(signalType -> recordLog(config, request, 502, start,
+                                    requestParams, requestBody.toString(), "Proxy request failed"));
                 });
     }
 
     private void recordLog(RouteConfig config, HttpServerRequest request, int status, long start) {
+        recordLog(config, request, status, start, requestParams(request.uri()), "", "");
+    }
+
+    private void recordLog(RouteConfig config,
+                           HttpServerRequest request,
+                           int status,
+                           long start,
+                           String requestParams,
+                           String requestBody,
+                           String responseBody) {
         logService.record(new ProxyRequestLogEntry(
                 null,
                 config.getId(),
@@ -195,7 +220,10 @@ public class LocalPortProxyService {
                 request.path(),
                 clientIp(request),
                 status,
-                (System.nanoTime() - start) / 1_000_000
+                (System.nanoTime() - start) / 1_000_000,
+                requestParams,
+                requestBody,
+                responseBody
         ));
     }
 
@@ -262,6 +290,48 @@ public class LocalPortProxyService {
         String base = targetUrl.endsWith("/") ? targetUrl.substring(0, targetUrl.length() - 1) : targetUrl;
         String suffix = requestUri == null || requestUri.isBlank() ? "/" : requestUri;
         return base + (suffix.startsWith("/") ? suffix : "/" + suffix);
+    }
+
+    private String requestParams(String requestUri) {
+        if (requestUri == null) {
+            return "";
+        }
+        int queryStart = requestUri.indexOf('?');
+        if (queryStart < 0 || queryStart == requestUri.length() - 1) {
+            return "";
+        }
+        return requestUri.substring(queryStart + 1);
+    }
+
+    private void appendPreview(StringBuilder target, io.netty.buffer.ByteBuf buffer, String contentType) {
+        if (target.length() >= MAX_DETAIL_CHARS) {
+            return;
+        }
+        if (!isTextualContent(contentType)) {
+            if (target.isEmpty()) {
+                target.append("[非文本内容]");
+            }
+            return;
+        }
+        ByteBuffer byteBuffer = buffer.nioBuffer().asReadOnlyBuffer();
+        String chunk = StandardCharsets.UTF_8.decode(byteBuffer).toString();
+        int remaining = MAX_DETAIL_CHARS - target.length();
+        target.append(chunk, 0, Math.min(remaining, chunk.length()));
+        if (chunk.length() > remaining) {
+            target.append("\n[已截断]");
+        }
+    }
+
+    private boolean isTextualContent(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return true;
+        }
+        String normalized = contentType.toLowerCase();
+        return normalized.contains("text")
+                || normalized.contains("json")
+                || normalized.contains("xml")
+                || normalized.contains("javascript")
+                || normalized.contains("form");
     }
 
     private void copyRequestHeaders(HttpHeaders source, HttpHeaders target, URI targetUri) {

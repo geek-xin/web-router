@@ -40,6 +40,9 @@ public class RouteConfig {
     @NotBlank(message = "目标地址不能为空")
     private String targetUrl;
 
+    /** 可选访问页，如 /portal/login.html 或 http://127.0.0.1:9191/portal/login.html。 */
+    private String accessPage;
+
     /** 本地监听 IP，如 127.0.0.1。 */
     private String localIp;
 

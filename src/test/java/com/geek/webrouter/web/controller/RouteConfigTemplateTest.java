@@ -27,6 +27,83 @@ class RouteConfigTemplateTest {
     }
 
     @Test
+    void routeFormIncludesOptionalAccessPageInput() {
+        String html = routeFormTemplate();
+
+        assertThat(html).contains("<input type=\"text\" id=\"name\" required maxlength=\"50\"");
+        assertThat(html).contains("<label for=\"accessPage\">访问页</label>");
+        assertThat(html).contains("<input type=\"text\" id=\"accessPage\"");
+        assertThat(html).doesNotContain("<label for=\"accessPage\">访问页 <span class=\"required\">*</span></label>");
+    }
+
+    @Test
+    void routeCardIncludesAccessButtonForOpeningAccessPage() {
+        RouteConfig config = RouteConfig.builder()
+                .id("route-access")
+                .name("访问页路由")
+                .pathPrefixes(List.of("/portal"))
+                .targetUrl("http://127.0.0.1:8081")
+                .accessPage("/portal/login.html")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+        config.setEffectivePathPrefixes(List.of("/portal"));
+
+        String html = renderIndex(List.of(config));
+
+        assertThat(html).contains("data-access-page=\"/portal/login.html\"");
+        assertThat(html).contains("data-local-access=\"127.0.0.1:9191\"");
+        assertThat(html).contains("class=\"btn btn-sm btn-access\"");
+        assertThat(html).contains(">访问</button>");
+    }
+
+    @Test
+    void routeLogTablesReserveFirstColumnForRowNumber() {
+        String html = routeLogTablesTemplate();
+
+        assertThat(html).contains("<th class=\"col-index\">序号</th>\n                                <th>路径</th>");
+        assertThat(html).contains("<th>最长单次</th>");
+        assertThat(html).contains("<td colspan=\"5\" class=\"empty-small\">暂无请求</td>");
+        assertThat(html).contains("<th class=\"col-index\">序号</th>\n                                <th>时间</th>");
+        assertThat(html).contains("<td colspan=\"7\" class=\"empty-small\">暂无代理请求</td>");
+    }
+
+    @Test
+    void routeLogSearchControlUsesPlaceholderOnlyAndCompactCloseButton() {
+        String html = routeLogTablesTemplate();
+
+        assertThat(html).contains("<label class=\"log-search-control log-search-control-compact\" for=\"routeLogPathSearch\">");
+        assertThat(html).doesNotContain(">\n                            路径\n                            <input id=\"routeLogPathSearch\"");
+        assertThat(html).contains("class=\"btn btn-sm modal-close-btn\"");
+    }
+
+    @Test
+    void routeLogModalIncludesDiagnosticTabForSelectedRequestAnalysis() {
+        String html = routeLogTablesTemplate();
+
+        assertThat(html).contains("data-route-log-tab=\"diagnostics\">诊断分析</button>");
+        assertThat(html).contains("id=\"routeLogDiagnosticsPanel\"");
+        assertThat(html).contains("id=\"routeLogDiagnosticEmpty\"");
+        assertThat(html).contains("id=\"routeLogDiagnosticRows\"");
+        assertThat(html).contains("<th>详情</th>");
+        assertThat(html).doesNotContain("REQUEST DIAGNOSTICS");
+        assertThat(html).doesNotContain("已复制请求列表");
+    }
+
+    @Test
+    void routeLogSummaryDoesNotRenderUniqueIpMetric() {
+        String html = routeLogSummaryTemplate();
+
+        assertThat(html).doesNotContain("独立 IP");
+        assertThat(html).doesNotContain("routeLogUniqueIps");
+        assertThat(html).contains("请求数");
+        assertThat(html).contains("失败请求");
+        assertThat(html).contains("慢请求");
+        assertThat(html).contains("成功率");
+    }
+
+    @Test
     void disabledRouteWithLocalPortShowsThatLocalProxyIsNotListening() {
         RouteConfig config = RouteConfig.builder()
                 .id("route-disabled")
@@ -98,6 +175,28 @@ class RouteConfigTemplateTest {
             return html.substring(start, end);
         } catch (Exception e) {
             throw new IllegalStateException("无法读取路由表单模板片段", e);
+        }
+    }
+
+    private String routeLogSummaryTemplate() {
+        try {
+            String html = Files.readString(Path.of("src/main/resources/templates/index.html"));
+            int start = html.indexOf("<div class=\"log-summary\">");
+            int end = html.indexOf("            <div class=\"log-card route-log-tabs-card\">", start);
+            return html.substring(start, end);
+        } catch (Exception e) {
+            throw new IllegalStateException("无法读取路由日志统计模板片段", e);
+        }
+    }
+
+    private String routeLogTablesTemplate() {
+        try {
+            String html = Files.readString(Path.of("src/main/resources/templates/index.html"));
+            int start = html.indexOf("<div class=\"log-card route-log-tabs-card\">");
+            int end = html.indexOf("        <div id=\"routeLogDetailPanel\"", start);
+            return html.substring(start, end);
+        } catch (Exception e) {
+            throw new IllegalStateException("无法读取路由日志表格模板片段", e);
         }
     }
 }
