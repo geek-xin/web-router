@@ -27,6 +27,7 @@ pass --with-tests to run the full Maven test phase.
 The release archive contains:
   - the executable Spring Boot jar
   - run.sh, a one-click startup script
+  - stop.sh, a one-click stop script
   - config/application.yml, the external backend configuration file
   - config/routes/, including existing route JSON files when present
   - README/USAGE/CHANGELOG docs when present
@@ -109,9 +110,132 @@ cat > "${STAGING_DIR}/run.sh" <<RUNEOF
 set -eu
 APP_DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
 cd "\${APP_DIR}"
-exec java -jar "${APP_NAME}.jar" "\$@"
+
+JAR_FILE="\${APP_DIR}/${APP_NAME}.jar"
+PID_FILE="\${APP_DIR}/web-router.pid"
+LOG_DIR="\${APP_DIR}/logs"
+LOG_FILE="\${LOG_DIR}/web-router.out"
+START_WAIT_SECONDS="\${WEB_ROUTER_START_WAIT_SECONDS:-5}"
+
+pid_matches_app() {
+  pid=\$1
+  command=\$(ps -p "\${pid}" -o command= 2>/dev/null || true)
+  case "\${command}" in
+    "") return 0 ;;
+    *"\${JAR_FILE}"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ ! -f "\${JAR_FILE}" ]; then
+  echo "Jar file not found: \${JAR_FILE}" >&2
+  exit 1
+fi
+
+if [ -f "\${PID_FILE}" ]; then
+  OLD_PID=\$(cat "\${PID_FILE}" 2>/dev/null || true)
+  if [ -n "\${OLD_PID}" ] && kill -0 "\${OLD_PID}" 2>/dev/null && pid_matches_app "\${OLD_PID}"; then
+    echo "web-router is already running, pid=\${OLD_PID}"
+    exit 0
+  fi
+  rm -f "\${PID_FILE}"
+fi
+
+mkdir -p "\${LOG_DIR}" "\${APP_DIR}/config/routes"
+nohup java -jar "\${JAR_FILE}" "\$@" > "\${LOG_FILE}" 2>&1 &
+APP_PID=\$!
+echo "\${APP_PID}" > "\${PID_FILE}"
+
+sleep "\${START_WAIT_SECONDS}"
+if ! kill -0 "\${APP_PID}" 2>/dev/null; then
+  rm -f "\${PID_FILE}"
+  echo "web-router failed to start. Recent log output:" >&2
+  tail -n 80 "\${LOG_FILE}" >&2 || true
+  exit 1
+fi
+
+echo "web-router started, pid=\${APP_PID}"
+echo "Log file: \${LOG_FILE}"
 RUNEOF
 chmod +x "${STAGING_DIR}/run.sh"
+
+cat > "${STAGING_DIR}/stop.sh" <<STOPEOF
+#!/bin/sh
+set -eu
+APP_DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
+cd "\${APP_DIR}"
+
+APP_NAME="${APP_NAME}"
+JAR_FILE="\${APP_DIR}/\${APP_NAME}.jar"
+PID_FILE="\${APP_DIR}/web-router.pid"
+
+is_running() {
+  pid=\$1
+  [ -n "\${pid}" ] && kill -0 "\${pid}" 2>/dev/null
+}
+
+pid_matches_app() {
+  pid=\$1
+  command=\$(ps -p "\${pid}" -o command= 2>/dev/null || true)
+  case "\${command}" in
+    "") return 0 ;;
+    *"\${JAR_FILE}"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+stop_pid() {
+  pid=\$1
+
+  if ! is_running "\${pid}"; then
+    return 0
+  fi
+
+  echo "Stopping web-router, pid=\${pid}"
+  kill "\${pid}" 2>/dev/null || true
+
+  count=0
+  while is_running "\${pid}"; do
+    count=\$((count + 1))
+    if [ "\${count}" -ge 30 ]; then
+      echo "Process did not stop within 30 seconds, force killing pid=\${pid}"
+      kill -9 "\${pid}" 2>/dev/null || true
+      break
+    fi
+    sleep 1
+  done
+}
+
+STOPPED=false
+
+if [ -f "\${PID_FILE}" ]; then
+  PID=\$(cat "\${PID_FILE}" 2>/dev/null || true)
+  if is_running "\${PID}" && pid_matches_app "\${PID}"; then
+    stop_pid "\${PID}"
+    STOPPED=true
+  elif is_running "\${PID}"; then
+    echo "PID file points to a different process, not killing pid=\${PID}" >&2
+  fi
+  rm -f "\${PID_FILE}"
+fi
+
+PIDS=\$(ps -eo pid=,command= 2>/dev/null | awk -v jar="\${JAR_FILE}" 'index(\$0, jar) { print \$1 }')
+for PID in \${PIDS}; do
+  if is_running "\${PID}"; then
+    stop_pid "\${PID}"
+    STOPPED=true
+  fi
+done
+
+rm -f "\${PID_FILE}"
+
+if [ "\${STOPPED}" = "true" ]; then
+  echo "web-router stopped"
+else
+  echo "web-router is not running"
+fi
+STOPEOF
+chmod +x "${STAGING_DIR}/stop.sh"
 
 rm -f "${DIST_ARCHIVE_PATH}" "${TARGET_ARCHIVE_PATH}"
 tar -C "${DIST_ROOT}" -czf "${DIST_ARCHIVE_PATH}" "${APP_NAME}"

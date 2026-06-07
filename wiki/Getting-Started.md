@@ -115,4 +115,4 @@ target/web-router-1.0.0-SNAPSHOT.tar.gz
 target/dist/web-router-1.0.0-SNAPSHOT.tar.gz
 ```
 
-发布包内包含 `run.sh`、`config/application.yml` 和 `config/routes/`，解压后可直接执行包内 `./run.sh` 启动。
+发布包内包含 `run.sh`、`stop.sh`、`config/application.yml` 和 `config/routes/`，解压后可直接执行包内 `./run.sh` 后台启动，并通过 `./stop.sh` 停止。
