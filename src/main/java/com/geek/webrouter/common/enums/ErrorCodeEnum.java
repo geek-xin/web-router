@@ -23,8 +23,8 @@ public enum ErrorCodeEnum {
     /** 路由配置名称重复。 */
     DUPLICATE_NAME(409, "路由名称已存在"),
 
-    /** 路由配置路径前缀冲突。 */
-    DUPLICATE_PREFIX(409, "路径前缀已被其他路由使用"),
+    /** 单条路由配置内路径前缀重复。 */
+    DUPLICATE_PREFIX(409, "路径前缀重复"),
 
     /** 路由配置目标地址重复。 */
     DUPLICATE_TARGET(409, "目标地址已存在"),

@@ -126,8 +126,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             checkNameConflict(id, config.getName());
             checkTargetUrlConflict(id, config.getTargetUrl());
             checkLocalBindingConflict(id, config);
-            // 检查路径前缀冲突
-            checkPrefixConflict(id, config.effectivePathPrefixes());
 
             try {
                 Files.createDirectories(configDir);
@@ -165,7 +163,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             checkNameConflict(name, config.getName());
             checkTargetUrlConflict(name, config.getTargetUrl());
             checkLocalBindingConflict(name, config);
-            checkPrefixConflict(name, config.effectivePathPrefixes());
 
             try {
                 objectMapper.writerWithDefaultPrettyPrinter().writeValue(filePath.toFile(), config);
@@ -194,26 +191,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             }
         }
     }
-
-    /**
-     * 检查路径前缀是否与其他路由冲突（排除自身）。
-     */
-    private void checkPrefixConflict(String excludeName, List<String> pathPrefixes) {
-        Set<String> candidates = new LinkedHashSet<>(pathPrefixes);
-        Optional<RouteConfig> conflict = listAll().stream()
-                .filter(c -> !routeId(c).equals(excludeName))
-                .filter(c -> c.effectivePathPrefixes().stream().anyMatch(candidates::contains))
-                .findFirst();
-        if (conflict.isPresent()) {
-            String conflictPrefix = conflict.get().effectivePathPrefixes().stream()
-                    .filter(candidates::contains)
-                    .findFirst()
-                    .orElse(pathPrefixes.getFirst());
-            throw new BusinessException(ErrorCodeEnum.DUPLICATE_PREFIX,
-                    "路径前缀已被 [" + conflict.get().getName() + "] 使用: " + conflictPrefix);
-        }
-    }
-
 
     /**
      * 检查目标地址是否与其他路由重复（排除自身）。

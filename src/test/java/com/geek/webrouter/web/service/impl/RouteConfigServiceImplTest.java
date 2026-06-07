@@ -85,4 +85,30 @@ class RouteConfigServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("本地 IP 格式不正确");
     }
+
+    @Test
+    void createAllowsSamePathPrefixesAcrossDifferentRoutes() {
+        RouteConfigServiceImpl service = service();
+        RouteConfig source = RouteConfig.builder()
+                .name("演示环境")
+                .pathPrefixes(List.of("/iotmgr", "/sysmgr", "/portal"))
+                .targetUrl("http://127.0.0.1:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+        RouteConfig copy = RouteConfig.builder()
+                .name("演示环境-copy")
+                .pathPrefixes(List.of("/iotmgr", "/sysmgr", "/portal"))
+                .targetUrl("http://127.0.0.1:9081")
+                .localIp("127.0.0.1")
+                .localPort(8081)
+                .enabled(true)
+                .build();
+
+        service.create(source);
+        RouteConfig savedCopy = service.create(copy);
+
+        assertThat(savedCopy.effectivePathPrefixes()).containsExactly("/iotmgr", "/sysmgr", "/portal");
+    }
 }

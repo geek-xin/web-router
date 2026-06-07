@@ -19,7 +19,7 @@
 
 - `id`：内部路由 ID，用作 Gateway 路由 ID 基础值和配置文件名；创建时自动生成，格式类似 `route-20260603234846-4d2deb`。
 - `name`：展示名称，可包含中文和符号；不同路由之间不能重复。
-- `pathPrefixes`：路径前缀列表，如 `/api/users`、`/admin`；同一路由和不同路由之间都不能重复。
+- `pathPrefixes`：路径前缀列表，如 `/api/users`、`/admin`；同一路由内不能重复，不同路由之间允许使用相同前缀（常用于复制一套路由到不同目标/本地端口）。
 - `pathPrefix`：兼容旧配置的单路径字段；读写时与 `pathPrefixes` 第一项同步。
 - `targetUrl`：目标服务地址；API 入参可省略协议，保存前由 `RouteTargetUrlNormalizer` 补为 `http://`。
 - `localIp` / `localPort`：可选本地监听地址；`localPort` 为空表示不启动独立本地端口代理，`localIp` 默认 `127.0.0.1`。
