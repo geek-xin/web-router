@@ -268,17 +268,26 @@ target/dist/web-router-1.0.0.tar.gz
 发布包包含：
 
 - Spring Boot 可执行 JAR。
-- `run.sh` 一键后台启动脚本，启动后写入 `web-router.pid`，日志输出到 `logs/web-router.out`。
-- `stop.sh` 一键停止脚本，优先按 `web-router.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
+- Linux/macOS：`run.sh` 一键后台启动脚本，启动后写入 `web-router.pid`，日志输出到 `logs/web-router.out`。
+- Linux/macOS：`stop.sh` 一键停止脚本，优先按 `web-router.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
+- Windows：`run.bat` 一键后台启动脚本，启动后写入 `web-router.pid`，日志输出到 `logs\web-router.out` 和 `logs\web-router.err`。
+- Windows：`stop.bat` 一键停止脚本，优先按 `web-router.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
 - `config/application.yml` 后台配置文件。
 - `config/routes` 路由配置目录；如果本地已有 `config/routes/*.json`，会一并打入发布包。
 - `README.md`、`USAGE.md`、`CHANGELOG.md`。
 
-解压后启动和停止：
+Linux/macOS 解压后启动和停止：
 
 ```bash
 ./run.sh
 ./stop.sh
+```
+
+Windows 解压后启动和停止：
+
+```bat
+run.bat
+stop.bat
 ```
 
 ## 常见注意事项

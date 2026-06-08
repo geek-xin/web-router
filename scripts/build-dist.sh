@@ -26,8 +26,8 @@ pass --with-tests to run the full Maven test phase.
 
 The release archive contains:
   - the executable Spring Boot jar
-  - run.sh, a one-click startup script
-  - stop.sh, a one-click stop script
+  - run.sh / run.bat, one-click startup scripts
+  - stop.sh / stop.bat, one-click stop scripts
   - config/application.yml, the external backend configuration file
   - config/routes/, including existing route JSON files when present
   - README/USAGE/CHANGELOG docs when present
@@ -61,6 +61,14 @@ copy_route_configs() {
   fi
 
   find "${source_dir}" -maxdepth 1 -type f -name '*.json' -exec cp {} "${target_dir}/" \;
+}
+
+convert_to_crlf() {
+  file_path=$1
+  tmp_path="${file_path}.tmp"
+
+  awk '{ printf "%s\r\n", $0 }' "${file_path}" > "${tmp_path}"
+  mv "${tmp_path}" "${file_path}"
 }
 
 if [ "${RUN_TESTS}" = "true" ]; then
@@ -236,6 +244,103 @@ else
 fi
 STOPEOF
 chmod +x "${STAGING_DIR}/stop.sh"
+
+cat > "${STAGING_DIR}/run.bat" <<RUNBATEOF
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
+
+set "APP_NAME=${APP_NAME}"
+set "APP_DIR=%CD%"
+set "JAR_FILE=%CD%\\%APP_NAME%.jar"
+set "PID_FILE=%CD%\\web-router.pid"
+set "LOG_DIR=%CD%\\logs"
+set "LOG_FILE=%LOG_DIR%\\web-router.out"
+set "ERR_FILE=%LOG_DIR%\\web-router.err"
+set "APP_ARGS=%*"
+if "%WEB_ROUTER_START_WAIT_SECONDS%"=="" set "WEB_ROUTER_START_WAIT_SECONDS=5"
+
+if not exist "%JAR_FILE%" (
+  echo Jar file not found: "%JAR_FILE%"
+  exit /b 1
+)
+
+if exist "%PID_FILE%" (
+  set /p OLD_PID=<"%PID_FILE%"
+  if not "!OLD_PID!"=="" (
+    set "APP_PID=!OLD_PID!"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "\$pidValue = [int]\$env:APP_PID; \$jar = \$env:JAR_FILE; \$process = Get-CimInstance Win32_Process | Where-Object { \$_.ProcessId -eq \$pidValue }; if (\$process -and ((-not \$process.CommandLine) -or (\$process.CommandLine -like ('*' + \$jar + '*')))) { exit 0 } else { exit 1 }" >nul 2>nul
+    if !ERRORLEVEL! EQU 0 (
+      echo web-router is already running, pid=!OLD_PID!
+      exit /b 0
+    )
+  )
+  del /f /q "%PID_FILE%" >nul 2>nul
+)
+
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+if not exist "%CD%\\config\\routes" mkdir "%CD%\\config\\routes"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "\$jar = \$env:JAR_FILE; \$appArgs = \$env:APP_ARGS; \$quote = [char]34; \$argLine = '-jar ' + \$quote + \$jar + \$quote; if (\$appArgs) { \$argLine = \$argLine + ' ' + \$appArgs }; \$process = Start-Process -FilePath 'java' -ArgumentList \$argLine -WorkingDirectory \$env:APP_DIR -RedirectStandardOutput \$env:LOG_FILE -RedirectStandardError \$env:ERR_FILE -WindowStyle Hidden -PassThru; \$process.Id" > "%PID_FILE%"
+
+if errorlevel 1 (
+  del /f /q "%PID_FILE%" >nul 2>nul
+  echo web-router failed to start.
+  exit /b 1
+)
+
+set /p APP_PID=<"%PID_FILE%"
+timeout /t %WEB_ROUTER_START_WAIT_SECONDS% /nobreak >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Get-Process -Id %APP_PID% -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if errorlevel 1 (
+  del /f /q "%PID_FILE%" >nul 2>nul
+  echo web-router failed to start. Recent log output:
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \$env:LOG_FILE) { Get-Content \$env:LOG_FILE -Tail 80 }; if (Test-Path \$env:ERR_FILE) { Get-Content \$env:ERR_FILE -Tail 80 }"
+  exit /b 1
+)
+
+echo web-router started, pid=%APP_PID%
+echo Log file: %LOG_FILE%
+echo Error log file: %ERR_FILE%
+RUNBATEOF
+
+cat > "${STAGING_DIR}/stop.bat" <<STOPBATEOF
+@echo off
+setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
+
+set "APP_NAME=${APP_NAME}"
+set "JAR_FILE=%CD%\\%APP_NAME%.jar"
+set "PID_FILE=%CD%\\web-router.pid"
+set "STOPPED=false"
+
+if exist "%PID_FILE%" (
+  set /p APP_PID=<"%PID_FILE%"
+  if not "!APP_PID!"=="" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "\$pidValue = [int]\$env:APP_PID; \$jar = \$env:JAR_FILE; \$process = Get-CimInstance Win32_Process | Where-Object { \$_.ProcessId -eq \$pidValue }; if (\$process -and ((-not \$process.CommandLine) -or (\$process.CommandLine -like ('*' + \$jar + '*')))) { Stop-Process -Id \$pidValue -Force; exit 0 } else { exit 1 }" >nul 2>nul
+    if !ERRORLEVEL! EQU 0 (
+      echo web-router stopped, pid=!APP_PID!
+      set "STOPPED=true"
+    )
+  )
+  del /f /q "%PID_FILE%" >nul 2>nul
+)
+
+if "%STOPPED%"=="false" (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "\$jar = '%JAR_FILE%'; \$processes = Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like ('*' + \$jar + '*') }; if (\$processes) { \$processes | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }; exit 0 } else { exit 1 }" >nul 2>nul
+  if !ERRORLEVEL! EQU 0 (
+    echo web-router stopped
+    set "STOPPED=true"
+  )
+)
+
+if "%STOPPED%"=="false" (
+  echo web-router is not running
+)
+STOPBATEOF
+
+convert_to_crlf "${STAGING_DIR}/run.bat"
+convert_to_crlf "${STAGING_DIR}/stop.bat"
 
 rm -f "${DIST_ARCHIVE_PATH}" "${TARGET_ARCHIVE_PATH}"
 tar -C "${DIST_ROOT}" -czf "${DIST_ARCHIVE_PATH}" "${APP_NAME}"

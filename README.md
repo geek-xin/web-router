@@ -36,7 +36,7 @@
 | 动态刷新 | 新增、更新、删除路由后即时刷新 Gateway 路由和本地端口代理，无需重启。 |
 | 请求观测 | Gateway 与本地端口代理都会记录请求统计、最近日志，并支持 SSE 实时推送。 |
 | 统一响应 | 管理 API 统一返回 `Result<T>`；业务/校验错误通常为 HTTP 200 + `success=false`。 |
-| 打包发布 | `scripts/build-dist.sh` 可生成包含 JAR、启动/停止脚本、后台配置文件、路由配置目录和文档的 `target/*.tar.gz`，并同步复制到 `target/dist/`。 |
+| 打包发布 | `scripts/build-dist.sh` 可生成包含 JAR、Linux/macOS 与 Windows 启停脚本、后台配置文件、路由配置目录和文档的 `target/*.tar.gz`，并同步复制到 `target/dist/`。 |
 
 ## 技术栈
 

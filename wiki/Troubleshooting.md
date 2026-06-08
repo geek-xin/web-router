@@ -157,11 +157,18 @@ Proxy request failed
 
 ## 发布包运行失败
 
-如果使用 `scripts/build-dist.sh` 生成发布包，解压后应通过包内 `run.sh` 启动，通过 `stop.sh` 停止：
+如果使用 `scripts/build-dist.sh` 生成发布包，Linux/macOS 解压后应通过包内 `run.sh` 启动，通过 `stop.sh` 停止：
 
 ```bash
 ./run.sh
 ./stop.sh
+```
+
+Windows 解压后通过：
+
+```bat
+run.bat
+stop.bat
 ```
 
 确认：
