@@ -16,6 +16,7 @@
     --color-primary: #087ea4;
     --color-primary-hover: #065f7b;
     --color-primary-soft: #dff5fb;
+    --color-guide-arrow: #5b9aa8;
     --color-danger: #c93659;
     --color-danger-hover: #a82342;
     --color-danger-soft: #ffe9ee;
@@ -198,23 +199,37 @@ header h1 {
 }
 
 .guide-line {
+    position: relative;
     height: 6px;
     min-width: 0;
     border: 2px solid var(--color-border);
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--color-primary), #12a36f);
-    box-shadow: 2px 3px 0 rgba(24, 38, 61, 0.1);
+    background: var(--color-guide-arrow);
+    filter: drop-shadow(2px 2px 0 rgba(24, 38, 61, 0.12));
+}
+
+.guide-line::before,
+.guide-line::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 0;
+    height: 0;
+    transform: translateY(-50%);
+}
+
+.guide-line::before {
+    right: -10px;
+    border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent;
+    border-left: 12px solid var(--color-border);
 }
 
 .guide-line::after {
-    content: "";
-    width: 0;
-    height: 0;
-    display: block;
-    margin: -6px -2px 0 auto;
-    border-top: 7px solid transparent;
-    border-bottom: 7px solid transparent;
-    border-left: 11px solid var(--color-border);
+    right: -6px;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 9px solid var(--color-guide-arrow);
 }
 
 .status-grid {
@@ -245,6 +260,15 @@ header h1 {
     background: var(--color-panel-purple);
 }
 
+.status-path-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-start;
+    min-width: 0;
+    margin-top: 8px;
+}
+
 .summary-label {
     display: block;
     margin-bottom: 6px;
@@ -266,7 +290,8 @@ header h1 {
 
 .status-card-file .status-path {
     display: block;
-    margin-top: 8px;
+    min-width: 0;
+    flex: 0 1 auto;
     overflow: hidden;
     color: var(--color-text);
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -275,6 +300,70 @@ header h1 {
     line-height: 1.15;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.status-path-toggle {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid rgba(24, 38, 61, 0.16);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 1px 2px 0 rgba(24, 38, 61, 0.12);
+    color: #36546d;
+    cursor: pointer;
+    transition:
+            background var(--duration-fast) ease,
+            border-color var(--duration-fast) ease,
+            box-shadow var(--duration-fast) ease,
+            color var(--duration-fast) ease,
+            transform var(--duration-fast) ease;
+}
+
+.status-path-toggle-icon {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.status-path-toggle-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
+}
+
+.status-path-toggle-icon-eye-off {
+    display: none;
+}
+
+.status-path-toggle[aria-expanded="true"] .status-path-toggle-icon-eye {
+    display: none;
+}
+
+.status-path-toggle[aria-expanded="true"] .status-path-toggle-icon-eye-off {
+    display: inline-flex;
+}
+
+.status-path-toggle:hover,
+.status-path-toggle:focus-visible {
+    border-color: rgba(8, 126, 164, 0.44);
+    background: #fff;
+    color: var(--color-primary);
+    box-shadow: 1px 3px 0 rgba(8, 126, 164, 0.18);
+    outline: none;
+    transform: translateY(-1px);
 }
 
 .status-card-file .status-path-full {
@@ -293,6 +382,13 @@ header h1 {
     overflow-wrap: anywhere;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.status-card-file .status-path-full[hidden] {
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .route-board,
@@ -2864,4 +2960,98 @@ td code {
     min-width: 104px;
     padding-right: 0;
     padding-left: 0;
+}
+
+/* Route log actual access address column */
+.route-log-tabs-card .compact-table td.access-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table,
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table,
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table {
+    min-width: 960px;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(4),
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(4),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(4),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(4) {
+    width: 240px;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(5) {
+    width: auto;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(6),
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(6),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(6),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(6) {
+    width: 58px;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(7),
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(7),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(7),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(7) {
+    width: 82px;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(8) {
+    width: 136px;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(5) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(4),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(4) {
+    width: 240px;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(6),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(6) {
+    width: auto;
+}
+
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(7),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(7) {
+    width: 58px;
+}
+
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(8) {
+    width: 82px;
+}
+
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(9),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(9) {
+    width: 72px;
+}
+
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(5),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(6) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

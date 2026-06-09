@@ -101,15 +101,19 @@ public class DynamicRouteService {
 
     /**
      * 按配置中的每个路径前缀注册 Gateway 路由。
+     * 如果配置了本地端口，路径前缀入口先转到本地监听地址，由本地端口代理保留原始 URI 再转发到目标地址。
      */
     private List<GatewayRouteSpec> routeSpecs(RouteConfig config) {
         List<String> prefixes = config.effectivePathPrefixes();
+        if (prefixes.isEmpty()) {
+            return List.of();
+        }
         return IntStream.range(0, prefixes.size())
                 .mapToObj(index -> new GatewayRouteSpec(
                         routeId(config.getId(), index),
-                        config.getTargetUrl(),
+                        gatewayTargetUrl(config),
                         prefixes.get(index),
-                        stripPrefixSegments(prefixes.get(index))
+                        gatewayStripPrefixSegments(config, prefixes.get(index))
                 ))
                 .toList();
     }
@@ -148,7 +152,21 @@ public class DynamicRouteService {
     }
 
     private String pathPattern(String pathPrefix) {
-        return "/".equals(pathPrefix) ? "/**" : pathPrefix + "/**";
+        return "/".equals(pathPrefix) ? "/**" : pathPrefix + "," + pathPrefix + "/**";
+    }
+
+    private String gatewayTargetUrl(RouteConfig config) {
+        if (config.hasLocalBinding()) {
+            return "http://" + config.effectiveLocalIp() + ":" + config.getLocalPort();
+        }
+        return config.getTargetUrl();
+    }
+
+    private int gatewayStripPrefixSegments(RouteConfig config, String pathPrefix) {
+        if (config.hasLocalBinding()) {
+            return 0;
+        }
+        return stripPrefixSegments(pathPrefix);
     }
 
     private int stripPrefixSegments(String pathPrefix) {

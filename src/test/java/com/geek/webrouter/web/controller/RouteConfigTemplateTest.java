@@ -36,6 +36,42 @@ class RouteConfigTemplateTest {
         assertThat(html).doesNotContain("<label for=\"accessPage\">访问页 <span class=\"required\">*</span></label>");
     }
 
+
+    @Test
+    void routeFormShowsPathPrefixesAsOptional() throws Exception {
+        String html = routeFormTemplate();
+        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+
+        assertThat(html).contains("<label for=\"pathPrefixInput\">路径前缀</label>");
+        assertThat(html).doesNotContain("<label for=\"pathPrefixInput\">路径前缀 <span class=\"required\">*</span></label>");
+        assertThat(html).contains("本地端口始终代理目标地址的全部路径");
+        assertThat(html).contains("配置后对应路径会通过本地 IP 和端口访问");
+        assertThat(html).doesNotContain("不填写时，本地端口会代理全部路径");
+        assertThat(script).contains("未配置路径前缀，本地端口默认代理全部路径");
+        assertThat(script).contains("配置后对应路径会通过本地 IP 和端口访问；本地端口仍可访问任意路径");
+        assertThat(script).doesNotContain("请输入路径前缀");
+    }
+
+    @Test
+    void routeCardLabelsPathPrefixesAsPathPrefixes() {
+        RouteConfig config = RouteConfig.builder()
+                .id("route-gateway-entry")
+                .name("演示环境")
+                .pathPrefixes(List.of("/realTimeMonitor"))
+                .targetUrl("http://210.21.52.71:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+        config.setEffectivePathPrefixes(List.of("/realTimeMonitor"));
+
+        String html = renderIndex(List.of(config));
+
+        assertThat(html).contains("<span>路径前缀</span>");
+        assertThat(html).contains("<code title=\"/realTimeMonitor\">/realTimeMonitor</code>");
+        assertThat(html).doesNotContain("<span>Gateway 入口</span>");
+    }
+
     @Test
     void routeCardIncludesAccessButtonForOpeningAccessPage() {
         RouteConfig config = RouteConfig.builder()
@@ -53,9 +89,50 @@ class RouteConfigTemplateTest {
         String html = renderIndex(List.of(config));
 
         assertThat(html).contains("data-access-page=\"/portal/login.html\"");
+        assertThat(html).contains("data-target-url=\"http://127.0.0.1:8081\"");
         assertThat(html).contains("data-local-access=\"127.0.0.1:9191\"");
         assertThat(html).contains("class=\"btn btn-sm btn-access\"");
         assertThat(html).contains(">访问</button>");
+    }
+
+    @Test
+    void routeAccessScriptUsesLocalBindingOnlyForConfiguredPrefixes() throws Exception {
+        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+
+        assertThat(script).contains("function routeAccessPath(routeId)");
+        assertThat(script).contains("function isConfiguredAccessPath(path, routeId)");
+        assertThat(script).contains("if (binding && isConfiguredAccessPath(path, routeId))");
+        assertThat(script).contains("const targetUrl = normalizedAbsoluteUrl(card.dataset.targetUrl || card.dataset.target)");
+        assertThat(script).contains("return appendPathToBaseUrl(targetUrl, path)");
+    }
+
+    @Test
+    void routeCardAccessButtonCanUseFirstConfiguredPrefixWhenAccessPageIsBlank() {
+        RouteConfig config = RouteConfig.builder()
+                .id("route-prefix-entry")
+                .name("前缀入口")
+                .pathPrefixes(List.of("/realTimeMonitor"))
+                .targetUrl("http://210.21.52.71:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+        config.setEffectivePathPrefixes(List.of("/realTimeMonitor"));
+
+        String html = renderIndex(List.of(config));
+
+        assertThat(html).contains("data-local-access=\"127.0.0.1:9191\"");
+        assertThat(html).contains("title=\"新标签页打开访问页\"");
+        assertThat(html).doesNotContain("data-id=\"route-prefix-entry\" disabled=\"disabled\"");
+    }
+
+
+    @Test
+    void copiedRouteDefaultsToDisabledInEditor() throws Exception {
+        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+
+        assertThat(script).contains("elements.enabled.value = 'false';");
+        assertThat(script).doesNotContain("elements.enabled.value = String(cfg.enabled === true);");
     }
 
     @Test
@@ -66,7 +143,22 @@ class RouteConfigTemplateTest {
         assertThat(html).contains("<th>最长单次</th>");
         assertThat(html).contains("<td colspan=\"5\" class=\"empty-small\">暂无请求</td>");
         assertThat(html).contains("<th class=\"col-index\">序号</th>\n                                <th>时间</th>");
-        assertThat(html).contains("<td colspan=\"7\" class=\"empty-small\">暂无代理请求</td>");
+        assertThat(html).contains("<th>方法</th>\n                                <th>实际访问</th>\n                                <th>路径</th>");
+        assertThat(html).contains("<td colspan=\"8\" class=\"empty-small\">暂无代理请求</td>");
+    }
+
+
+    @Test
+    void routeLogTablesShowActualAccessAddressBeforePath() throws Exception {
+        String html = routeLogTablesTemplate();
+        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+
+        assertThat(html).contains("<th>方法</th>\n                                <th>实际访问</th>\n                                <th>路径</th>");
+        assertThat(html).contains("<th>方法</th>\n                                    <th>实际访问</th>\n                                    <th>路径</th>");
+        assertThat(script).contains("displayLogDetailValue(entry.accessAddress)");
+        assertThat(script).contains("cell(accessAddress, 'access-cell', accessAddress === '-' ? '' : accessAddress)");
+        assertThat(script).contains("'实际访问: ' + displayLogDetailValue(entry.accessAddress)");
+        assertThat(script).contains("routeLogDetailAccessAddress");
     }
 
     @Test

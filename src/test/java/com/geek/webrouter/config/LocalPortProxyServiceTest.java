@@ -178,7 +178,7 @@ class LocalPortProxyServiceTest {
     }
 
     @Test
-    void localProxyRejectsRequestsOutsideConfiguredPrefixes() throws IOException, InterruptedException {
+    void localProxyForwardsRequestsOutsideConfiguredPrefixesToTarget() throws IOException, InterruptedException {
         AtomicInteger targetRequests = new AtomicInteger();
         DisposableServer targetServer = HttpServer.create()
                 .host("127.0.0.1")
@@ -204,16 +204,19 @@ class LocalPortProxyServiceTest {
         try {
             service.refreshAll(List.of(config)).block(Duration.ofSeconds(3));
 
-            HttpResponse<String> response = getResponse(localPort, "/reportManage/api/configuration");
+            HttpResponse<String> response = getResponse(localPort, "/reportManage/api/configuration?show=1");
 
-            assertThat(response.statusCode()).isEqualTo(404);
+            assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.headers().firstValue("Connection")).hasValue("close");
             assertThat(response.headers().firstValue("Cache-Control"))
                     .hasValue("no-store, no-cache, must-revalidate, max-age=0");
             assertThat(response.headers().firstValue("Pragma")).hasValue("no-cache");
             assertThat(response.headers().firstValue("Expires")).hasValue("0");
-            assertThat(targetRequests).hasValue(0);
-            assertThat(logService.snapshot().totalRequests()).isZero();
+            assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration?show=1");
+            assertThat(targetRequests).hasValue(1);
+            assertThat(logService.snapshot().totalRequests()).isEqualTo(1);
+            assertThat(logService.snapshot().recentLogs().getFirst().accessAddress())
+                    .isEqualTo("127.0.0.1:" + localPort + "/reportManage/api/configuration?show=1");
         } finally {
             service.stopAll();
             targetServer.disposeNow();
@@ -263,7 +266,7 @@ class LocalPortProxyServiceTest {
     }
 
     @Test
-    void nextRequestUsesUpdatedLocalProxyPrefixesWithoutRestartingListener() throws IOException, InterruptedException {
+    void nextRequestKeepsForwardingAllLocalPathsWhenPrefixesChangeWithoutRestartingListener() throws IOException, InterruptedException {
         AtomicInteger targetRequests = new AtomicInteger();
         DisposableServer targetServer = HttpServer.create()
                 .host("127.0.0.1")
@@ -305,18 +308,21 @@ class LocalPortProxyServiceTest {
 
         try {
             service.refreshAll(List.of(firstConfig)).block(Duration.ofSeconds(3));
-            assertThat(getResponse(localPort, "/reportManage/api/configuration").statusCode()).isEqualTo(404);
+            HttpResponse<String> beforePrefixAddedResponse = getResponse(localPort, "/reportManage/api/configuration");
 
             service.refreshAll(List.of(addedPrefixConfig)).block(Duration.ofSeconds(3));
-            HttpResponse<String> allowedResponse = getResponse(localPort, "/reportManage/api/configuration");
+            HttpResponse<String> afterPrefixAddedResponse = getResponse(localPort, "/reportManage/api/configuration");
 
             service.refreshAll(List.of(removedPrefixConfig)).block(Duration.ofSeconds(3));
-            HttpResponse<String> rejectedAgainResponse = getResponse(localPort, "/reportManage/api/configuration");
+            HttpResponse<String> afterPrefixRemovedResponse = getResponse(localPort, "/reportManage/api/configuration");
 
-            assertThat(allowedResponse.statusCode()).isEqualTo(200);
-            assertThat(allowedResponse.body()).isEqualTo("proxied /reportManage/api/configuration");
-            assertThat(rejectedAgainResponse.statusCode()).isEqualTo(404);
-            assertThat(targetRequests).hasValue(1);
+            assertThat(beforePrefixAddedResponse.statusCode()).isEqualTo(200);
+            assertThat(beforePrefixAddedResponse.body()).isEqualTo("proxied /reportManage/api/configuration");
+            assertThat(afterPrefixAddedResponse.statusCode()).isEqualTo(200);
+            assertThat(afterPrefixAddedResponse.body()).isEqualTo("proxied /reportManage/api/configuration");
+            assertThat(afterPrefixRemovedResponse.statusCode()).isEqualTo(200);
+            assertThat(afterPrefixRemovedResponse.body()).isEqualTo("proxied /reportManage/api/configuration");
+            assertThat(targetRequests).hasValue(3);
         } finally {
             service.stopAll();
             targetServer.disposeNow();

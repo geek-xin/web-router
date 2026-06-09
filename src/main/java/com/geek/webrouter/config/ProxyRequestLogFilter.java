@@ -43,6 +43,10 @@ public class ProxyRequestLogFilter implements GlobalFilter, Ordered {
         String path = exchange.getRequest().getURI().getRawPath();
         String requestParams = exchange.getRequest().getURI().getRawQuery();
         String clientIp = clientIp(exchange);
+        String accessAddress = ProxyAccessAddressFormatter.accessAddress(
+                route.getUri(),
+                ProxyAccessAddressFormatter.requestUri(exchange.getRequest().getURI())
+        );
         StringBuilder responseBody = new StringBuilder();
         ServerHttpResponseDecorator responseDecorator = new ServerHttpResponseDecorator(exchange.getResponse()) {
             @Override
@@ -64,7 +68,8 @@ public class ProxyRequestLogFilter implements GlobalFilter, Ordered {
                         (System.nanoTime() - start) / 1_000_000,
                         requestParams,
                         "",
-                        responseBody.toString()
+                        responseBody.toString(),
+                        accessAddress
                 )));
     }
 

@@ -8,6 +8,8 @@
         jsonEditor: document.getElementById('jsonEditor'),
         btnAdd: document.getElementById('btnAdd'),
         btnBatchDelete: document.getElementById('btnBatchDelete'),
+        btnToggleConfigPath: document.getElementById('btnToggleConfigPath'),
+        configPathFull: document.getElementById('configPathFull'),
         routeSearch: document.getElementById('routeSearch'),
         routeCards: document.getElementById('routeCards'),
         modalTitle: document.getElementById('modalTitle'),
@@ -53,6 +55,7 @@
         routeLogDetailMethod: document.getElementById('routeLogDetailMethod'),
         routeLogDetailStatus: document.getElementById('routeLogDetailStatus'),
         routeLogDetailDuration: document.getElementById('routeLogDetailDuration'),
+        routeLogDetailAccessAddress: document.getElementById('routeLogDetailAccessAddress'),
         routeLogDetailPath: document.getElementById('routeLogDetailPath'),
         routeLogDetailParams: document.getElementById('routeLogDetailParams'),
         routeLogDetailRequestBody: document.getElementById('routeLogDetailRequestBody'),
@@ -116,6 +119,13 @@
             return false;
         }
         return true;
+    }
+
+    function toggleConfigPath() {
+        const willShow = elements.configPathFull.hidden;
+        elements.configPathFull.hidden = !willShow;
+        elements.btnToggleConfigPath.setAttribute('aria-expanded', String(willShow));
+        elements.btnToggleConfigPath.setAttribute('aria-label', willShow ? '隐藏完整配置目录' : '显示完整配置目录');
     }
 
     async function fetchJson(url, options = {}) {
@@ -266,24 +276,72 @@
         return routePathPrefixes(routeId)[0] || '';
     }
 
-    function routeAccessUrl(routeId) {
+    function routeAccessPath(routeId) {
         const card = routeCard(routeId);
         if (!card) {
             return '';
         }
         const accessPage = (card.dataset.accessPage || '').trim();
+        return accessPage || routePathPrefix(routeId);
+    }
+
+    function normalizedAbsoluteUrl(url) {
+        const value = (url || '').trim();
+        if (!value) {
+            return '';
+        }
+        return /^https?:\/\//i.test(value) ? value : 'http://' + value;
+    }
+
+    function appendPathToBaseUrl(baseUrl, path) {
+        const base = (baseUrl || '').trim();
+        if (!base) {
+            return '';
+        }
+        const normalizedBase = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+        const suffix = (path || '').trim() || '/';
+        if (suffix.startsWith('?')) {
+            return normalizedBase + '/' + suffix;
+        }
+        return normalizedBase + (suffix.startsWith('/') ? suffix : '/' + suffix);
+    }
+
+    function isConfiguredAccessPath(path, routeId) {
+        if (!path || /^https?:\/\//i.test(path)) {
+            return false;
+        }
+        const normalizedPath = path.startsWith('/') ? path : '/' + path;
+        return routePathPrefixes(routeId).some((prefix) => {
+            const normalizedPrefix = normalizePathPrefixValue(prefix);
+            if (!normalizedPrefix) {
+                return false;
+            }
+            if (normalizedPrefix === '/') {
+                return true;
+            }
+            return normalizedPath === normalizedPrefix || normalizedPath.startsWith(normalizedPrefix + '/');
+        });
+    }
+
+    function routeAccessUrl(routeId) {
+        const card = routeCard(routeId);
+        if (!card) {
+            return '';
+        }
+        const accessPage = routeAccessPath(routeId);
         if (!accessPage) {
             return '';
         }
         if (/^https?:\/\//i.test(accessPage)) {
             return accessPage;
         }
-        const binding = (card.dataset.localAccess || card.dataset.localBinding || '').trim();
-        if (!binding) {
-            return accessPage;
-        }
         const path = accessPage.startsWith('/') ? accessPage : '/' + accessPage;
-        return 'http://' + binding + path;
+        const binding = (card.dataset.localAccess || card.dataset.localBinding || '').trim();
+        if (binding && isConfiguredAccessPath(path, routeId)) {
+            return 'http://' + binding + path;
+        }
+        const targetUrl = normalizedAbsoluteUrl(card.dataset.targetUrl || card.dataset.target);
+        return appendPathToBaseUrl(targetUrl, path) || path;
     }
 
     function openRouteAccessPage(routeId) {
@@ -390,7 +448,7 @@
         if (pathPrefixes.length === 0) {
             const empty = document.createElement('span');
             empty.className = 'path-prefix-empty';
-            empty.textContent = '还没有路径，输入后点击添加';
+            empty.textContent = '未配置路径前缀，本地端口默认代理全部路径';
             elements.pathPrefixList.appendChild(empty);
             return;
         }
@@ -400,6 +458,7 @@
             const label = document.createElement('span');
             label.className = 'path-prefix-chip-text';
             label.textContent = prefix;
+            label.title = '配置后对应路径会通过本地 IP 和端口访问；本地端口仍可访问任意路径';
             chip.appendChild(label);
             const button = document.createElement('button');
             button.type = 'button';
@@ -416,7 +475,6 @@
     function addPathPrefixFromInput() {
         const prefix = normalizePathPrefixValue(elements.pathPrefixInput.value);
         if (!prefix) {
-            showToast('请输入路径前缀', 'error');
             return;
         }
         if (!/^\/[-a-zA-Z0-9_/]*$/.test(prefix)) {
@@ -655,6 +713,7 @@
                 '#' + (index + 1),
                 '时间: ' + formatLogTime(entry.timestamp),
                 '方法: ' + (entry.method || '-'),
+                '实际访问: ' + displayLogDetailValue(entry.accessAddress),
                 '路径: ' + displayLogDetailValue(entry.path),
                 '请求参数: ' + displayLogDetailValue(entry.requestParams),
                 '客户端 IP: ' + (entry.clientIp || '-'),
@@ -760,11 +819,14 @@
             + ':' + pad(date.getSeconds());
     }
 
-    function cell(text, className) {
+    function cell(text, className, title) {
         const td = document.createElement('td');
         td.textContent = text;
         if (className) {
             td.className = className;
+        }
+        if (title) {
+            td.title = title;
         }
         return td;
     }
@@ -886,6 +948,8 @@
         tr.appendChild(cell(String((index || 0) + 1), 'col-index'));
         tr.appendChild(cell(formatLogTime(entry.timestamp)));
         tr.appendChild(cell(entry.method || '-'));
+        const accessAddress = displayLogDetailValue(entry.accessAddress);
+        tr.appendChild(cell(accessAddress, 'access-cell', accessAddress === '-' ? '' : accessAddress));
         tr.appendChild(cell(entry.path || '-', 'path-cell'));
         tr.appendChild(cell((entry.status || 0).toString()));
         tr.appendChild(cell(durationLabel || ((entry.durationMs || 0) + 'ms')));
@@ -916,7 +980,7 @@
             const tr = document.createElement('tr');
             tr.dataset.empty = 'true';
             tr.appendChild(cell(emptyText, 'empty-small'));
-            tr.firstChild.colSpan = 7;
+            tr.firstChild.colSpan = 8;
             target.appendChild(tr);
             return;
         }
@@ -952,6 +1016,7 @@
         elements.routeLogDetailMethod.textContent = entry.method || '-';
         elements.routeLogDetailStatus.textContent = (entry.status || 0).toString();
         elements.routeLogDetailDuration.textContent = formatDuration(entry.durationMs || 0);
+        elements.routeLogDetailAccessAddress.textContent = displayLogDetailValue(entry.accessAddress);
         elements.routeLogDetailPath.textContent = displayLogDetailValue(entry.path);
         elements.routeLogDetailParams.textContent = displayLogDetailValue(entry.requestParams);
         elements.routeLogDetailRequestBody.textContent = displayStructuredDetailValue(entry.requestBody);
@@ -963,6 +1028,7 @@
         return [
             entry.timestamp || '',
             entry.method || '',
+            entry.accessAddress || '',
             entry.path || '',
             entry.requestParams || '',
             entry.status || '',
@@ -983,6 +1049,8 @@
             tr.appendChild(cell(String(index + 1), 'col-index'));
             tr.appendChild(cell(formatLogTime(entry.timestamp)));
             tr.appendChild(cell(entry.method || '-'));
+            const accessAddress = displayLogDetailValue(entry.accessAddress);
+            tr.appendChild(cell(accessAddress, 'access-cell', accessAddress === '-' ? '' : accessAddress));
             tr.appendChild(cell(normalizedLogPath(entry.path), 'path-cell'));
             tr.appendChild(cell(logDetailText(entry.requestParams), 'path-cell'));
             tr.appendChild(cell((entry.status || 0).toString()));
@@ -1220,6 +1288,7 @@
     });
 
     elements.routeSearch.addEventListener('input', filterRoutes);
+    elements.btnToggleConfigPath.addEventListener('click', toggleConfigPath);
     elements.btnBatchDelete.addEventListener('click', () => {
         const routeIds = selectedRouteIds();
         if (routeIds.length === 0) {
@@ -1342,7 +1411,7 @@
             elements.accessPage.value = cfg.accessPage || '';
             elements.localIp.value = cfg.localIp || '127.0.0.1';
             elements.localPort.value = '';
-            elements.enabled.value = String(cfg.enabled === true);
+            elements.enabled.value = 'false';
             elements.modal.classList.add('active');
             elements.name.focus();
             elements.name.select();
@@ -1493,10 +1562,6 @@
         }
         if (hasRouteNameConflict(payload.name, isEdit ? oldRouteId : '')) {
             showToast('路由名称已存在，不能重复新增', 'error');
-            return;
-        }
-        if (payload.pathPrefixes.length === 0) {
-            showToast('请输入路径前缀并点击添加路径', 'error');
             return;
         }
         if (!payload.targetUrl) {

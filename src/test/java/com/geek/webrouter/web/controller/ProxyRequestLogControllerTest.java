@@ -15,7 +15,8 @@ class ProxyRequestLogControllerTest {
         service.record(new ProxyRequestLogEntry(
                 null, "route-b", "POST", "/route-b/two", "10.0.0.2", 201, 18));
         service.record(new ProxyRequestLogEntry(
-                null, "route-a", "GET", "/route-a/three", "127.0.0.1", 404, 7));
+                null, "route-a", "GET", "/route-a/three", "127.0.0.1", 404, 7,
+                "", "", "", "127.0.0.1:9191/route-a/three"));
 
         WebTestClient client = WebTestClient.bindToController(new ProxyRequestLogController(service)).build();
 
@@ -33,6 +34,7 @@ class ProxyRequestLogControllerTest {
                 .jsonPath("$.data.pathStats['/route-a/three']").isEqualTo(1)
                 .jsonPath("$.data.recentLogs.length()").isEqualTo(2)
                 .jsonPath("$.data.recentLogs[0].routeId").isEqualTo("route-a")
-                .jsonPath("$.data.recentLogs[0].path").isEqualTo("/route-a/three");
+                .jsonPath("$.data.recentLogs[0].path").isEqualTo("/route-a/three")
+                .jsonPath("$.data.recentLogs[0].accessAddress").isEqualTo("127.0.0.1:9191/route-a/three");
     }
 }

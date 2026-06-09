@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 /**
- * 为单个路由启动独立的本地 IP/端口监听，并把请求转发到该路由目标地址。
+ * 为单个路由启动独立的本地 IP/端口监听，并把本地端口收到的全部路径转发到该路由目标地址。
  */
 @Slf4j
 @Service
@@ -161,13 +161,9 @@ public class LocalPortProxyService {
     private Publisher<Void> proxy(RouteConfig config, HttpServerRequest request, HttpServerResponse response) {
         long start = System.nanoTime();
         prepareLocalProxyResponse(response);
-        if (!matchesConfiguredPrefix(config, request.path())) {
-            log.info("本地端口代理拒绝未配置前缀请求: {} {}", config.getId(), request.uri());
-            response.status(404);
-            return response.sendString(Mono.just("No matching local route prefix")).then();
-        }
         String targetUri = targetUri(config, request.uri());
         String requestParams = requestParams(request.uri());
+        String accessAddress = accessAddress(config, request.uri());
         StringBuilder requestBody = new StringBuilder();
         StringBuilder responseBody = new StringBuilder();
         String requestContentType = request.requestHeaders().get(HttpHeaderNames.CONTENT_TYPE);
@@ -189,7 +185,7 @@ public class LocalPortProxyService {
                                     .doOnNext(buffer -> appendPreview(responseBody, buffer, responseContentType)))
                             .then()
                             .doFinally(signalType -> recordLog(config, request, status, start,
-                                    requestParams, requestBody.toString(), responseBody.toString()));
+                                    requestParams, requestBody.toString(), responseBody.toString(), accessAddress));
                 })
                 .onErrorResume(error -> {
                     log.warn("本地端口代理请求失败: {} {} -> {} — {}",
@@ -198,12 +194,13 @@ public class LocalPortProxyService {
                     return response.sendString(Mono.just("Proxy request failed"))
                             .then()
                             .doFinally(signalType -> recordLog(config, request, 502, start,
-                                    requestParams, requestBody.toString(), "Proxy request failed"));
+                                    requestParams, requestBody.toString(), "Proxy request failed", accessAddress));
                 });
     }
 
     private void recordLog(RouteConfig config, HttpServerRequest request, int status, long start) {
-        recordLog(config, request, status, start, requestParams(request.uri()), "", "");
+        recordLog(config, request, status, start, requestParams(request.uri()), "", "",
+                accessAddress(config, request.uri()));
     }
 
     private void recordLog(RouteConfig config,
@@ -212,7 +209,8 @@ public class LocalPortProxyService {
                            long start,
                            String requestParams,
                            String requestBody,
-                           String responseBody) {
+                           String responseBody,
+                           String accessAddress) {
         logService.record(new ProxyRequestLogEntry(
                 null,
                 config.getId(),
@@ -223,48 +221,17 @@ public class LocalPortProxyService {
                 (System.nanoTime() - start) / 1_000_000,
                 requestParams,
                 requestBody,
-                responseBody
+                responseBody,
+                accessAddress
         ));
     }
+
 
     private void prepareLocalProxyResponse(HttpServerResponse response) {
         response.responseHeaders().set(HttpHeaderNames.CONNECTION, "close");
         response.responseHeaders().set(HttpHeaderNames.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0");
         response.responseHeaders().set(HttpHeaderNames.PRAGMA, "no-cache");
         response.responseHeaders().set(HttpHeaderNames.EXPIRES, "0");
-    }
-
-    private boolean matchesConfiguredPrefix(RouteConfig config, String requestPath) {
-        String path = normalizeRequestPath(requestPath);
-        return config.effectivePathPrefixes().stream()
-                .anyMatch(prefix -> matchesPrefix(path, prefix));
-    }
-
-    private boolean matchesPrefix(String path, String prefix) {
-        if (prefix == null || prefix.isBlank()) {
-            return false;
-        }
-        String normalizedPrefix = normalizePrefix(prefix);
-        if ("/".equals(normalizedPrefix)) {
-            return true;
-        }
-        return path.equals(normalizedPrefix) || path.startsWith(normalizedPrefix + "/");
-    }
-
-    private String normalizeRequestPath(String requestPath) {
-        if (requestPath == null || requestPath.isBlank()) {
-            return "/";
-        }
-        String normalized = requestPath.trim();
-        return normalized.startsWith("/") ? normalized : "/" + normalized;
-    }
-
-    private String normalizePrefix(String prefix) {
-        String normalized = prefix.trim();
-        while (normalized.length() > 1 && normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
     }
 
     private String clientIp(HttpServerRequest request) {
@@ -368,6 +335,10 @@ public class LocalPortProxyService {
 
     private String localBinding(RouteConfig config) {
         return config.effectiveLocalIp() + ":" + config.getLocalPort();
+    }
+
+    private String accessAddress(RouteConfig config, String requestUri) {
+        return ProxyAccessAddressFormatter.accessAddress(localBinding(config), requestUri);
     }
 
     @FunctionalInterface

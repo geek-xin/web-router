@@ -16,7 +16,8 @@ class ProxyRequestLogServiceTest {
         service.record(new ProxyRequestLogEntry(
                 null, "test", "POST", "/test/b", "192.168.1.10", 201, 20));
         service.record(new ProxyRequestLogEntry(
-                null, "test", "GET", "/test/c", "127.0.0.1", 404, 8));
+                null, "test", "GET", "/test/c", "127.0.0.1", 404, 8,
+                "", "", "", "127.0.0.1:9191/test/c"));
 
         var snapshot = service.snapshot();
 
@@ -40,6 +41,7 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/test/c", 8L);
         assertThat(snapshot.recentLogs()).hasSize(3);
         assertThat(snapshot.recentLogs().getFirst().path()).isEqualTo("/test/c");
+        assertThat(snapshot.recentLogs().getFirst().accessAddress()).isEqualTo("127.0.0.1:9191/test/c");
     }
 
     @Test

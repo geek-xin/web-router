@@ -45,8 +45,35 @@
             </div>
             <div class="status-card status-card-file">
                 <span class="summary-label">配置目录</span>
-                <strong class="status-path" th:text="${routesConfigDirLabel}" th:title="${routesConfigDir}">config/routes</strong>
-                <code class="status-path-full" th:text="${routesConfigDir}" th:title="${routesConfigDir}">/path/to/config/routes</code>
+                <div class="status-path-row">
+                    <strong class="status-path" th:text="${routesConfigDirLabel}" th:title="${routesConfigDir}">config/routes</strong>
+                    <button id="btnToggleConfigPath"
+                            class="status-path-toggle"
+                            type="button"
+                            aria-label="显示完整配置目录"
+                            aria-controls="configPathFull"
+                            aria-expanded="false">
+                        <span class="status-path-toggle-icon status-path-toggle-icon-eye" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </span>
+                        <span class="status-path-toggle-icon status-path-toggle-icon-eye-off" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" focusable="false">
+                                <path d="M3 3l18 18"></path>
+                                <path d="M10.7 5.2A10.4 10.4 0 0 1 12 5c6 0 9.5 7 9.5 7a17.2 17.2 0 0 1-2.8 3.7"></path>
+                                <path d="M6.1 6.7A17.4 17.4 0 0 0 2.5 12s3.5 7 9.5 7a9.9 9.9 0 0 0 4.1-.9"></path>
+                                <path d="M9.9 9.9A3 3 0 0 0 14.1 14.1"></path>
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+                <code id="configPathFull"
+                      class="status-path-full"
+                      th:text="${routesConfigDir}"
+                      th:title="${routesConfigDir}"
+                      hidden>/path/to/config/routes</code>
             </div>
         </section>
 
@@ -73,6 +100,7 @@
                          th:data-id="${cfg.id}"
                          th:data-name="${cfg.name}"
                          th:data-target="${#strings.replace(#strings.replace(cfg.targetUrl, 'http://', ''), 'https://', '')}"
+                         th:data-target-url="${cfg.targetUrl}"
                          th:data-access-page="${cfg.accessPage ?: ''}"
                          th:data-local-access="${cfg.localPort != null ? cfg.effectiveLocalIp() + ':' + cfg.localPort : ''}"
                          th:data-has-local-port="${cfg.localPort != null}"
@@ -105,7 +133,7 @@
                                     th:text="${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '停用中，不监听本地端口')}"></strong>
                         </div>
                         <div class="route-card-field route-card-path-field">
-                            <span>路径</span>
+                            <span>路径前缀</span>
                             <div class="route-card-prefixes">
                                 <code th:each="prefix : ${cfg.effectivePathPrefixes()}"
                                       th:attr="title=${prefix}"
@@ -127,13 +155,13 @@
                         <button class="btn btn-sm btn-edit" type="button" th:attr="data-id=${cfg.id}">编辑</button>
                         <button class="btn btn-sm btn-access"
                                 type="button"
-                                th:attr="data-id=${cfg.id},disabled=${#strings.isEmpty(cfg.accessPage)},title=${#strings.isEmpty(cfg.accessPage) ? '请先编辑路由并填写访问页' : '新标签页打开访问页'}">访问</button>
+                                th:attr="data-id=${cfg.id},disabled=${#strings.isEmpty(cfg.accessPage) && #lists.isEmpty(cfg.effectivePathPrefixes())},title=${#strings.isEmpty(cfg.accessPage) && #lists.isEmpty(cfg.effectivePathPrefixes()) ? '请先编辑路由并填写访问页或路径前缀' : '新标签页打开访问页'}">访问</button>
                     </div>
                 </article>
                 <div class="empty" th:if="${#lists.isEmpty(configs)}">
                     <div class="empty-panel">
                         <strong>还没有接上线的路由</strong>
-                        <span>点击「新增路由」把第一个路径前缀接到目标服务。</span>
+                        <span>点击「新增路由」配置目标地址和本地端口，按需添加路径前缀。</span>
                     </div>
                 </div>
             </div>
@@ -178,7 +206,7 @@
                 </div>
             </div>
             <div class="form-group">
-                <label for="pathPrefixInput">路径前缀 <span class="required">*</span></label>
+                <label for="pathPrefixInput">路径前缀</label>
                 <textarea id="pathPrefix" class="sr-only" tabindex="-1" aria-hidden="true"></textarea>
                 <div class="path-prefix-editor">
                     <div id="pathPrefixList" class="path-prefix-list"></div>
@@ -187,7 +215,7 @@
                         <button type="button" class="btn btn-sm btn-primary" id="btnAddPathPrefix">添加路径</button>
                     </div>
                 </div>
-                <small>点击「添加路径」新增路径前缀；这些前缀会共用同一个目标地址并保存在同一个配置文件</small>
+                <small>可选；本地端口始终代理目标地址的全部路径，配置后对应路径会通过本地 IP 和端口访问</small>
             </div>
             <div class="form-actions">
                 <button type="button" class="btn" id="btnCancel">取消</button>
@@ -328,6 +356,7 @@
                                 <th class="col-index">序号</th>
                                 <th>时间</th>
                                 <th>方法</th>
+                                <th>实际访问</th>
                                 <th>路径</th>
                                 <th>状态</th>
                                 <th>耗时</th>
@@ -336,7 +365,7 @@
                             </thead>
                             <tbody id="routeLogRows">
                             <tr data-empty="true">
-                                <td colspan="7" class="empty-small">暂无代理请求</td>
+                                <td colspan="8" class="empty-small">暂无代理请求</td>
                             </tr>
                             </tbody>
                         </table>
@@ -355,6 +384,7 @@
                                 <th class="col-index">序号</th>
                                 <th>时间</th>
                                 <th>方法</th>
+                                <th>实际访问</th>
                                 <th>路径</th>
                                 <th>状态</th>
                                 <th>单次耗时</th>
@@ -363,7 +393,7 @@
                             </thead>
                             <tbody id="routeLogSlowRows">
                             <tr data-empty="true">
-                                <td colspan="7" class="empty-small">暂无代理请求</td>
+                                <td colspan="8" class="empty-small">暂无代理请求</td>
                             </tr>
                             </tbody>
                         </table>
@@ -387,6 +417,7 @@
                                     <th class="col-index">序号</th>
                                     <th>时间</th>
                                     <th>方法</th>
+                                    <th>实际访问</th>
                                     <th>路径</th>
                                     <th>参数</th>
                                     <th>状态</th>
@@ -428,6 +459,10 @@
                     <div>
                         <dt>耗时</dt>
                         <dd id="routeLogDetailDuration">-</dd>
+                    </div>
+                    <div>
+                        <dt>实际访问</dt>
+                        <dd id="routeLogDetailAccessAddress">-</dd>
                     </div>
                 </dl>
                 <div class="route-log-detail-block">

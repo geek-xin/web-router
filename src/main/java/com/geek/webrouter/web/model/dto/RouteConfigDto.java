@@ -59,11 +59,6 @@ public class RouteConfigDto {
                 .toList();
     }
 
-    @AssertTrue(message = "路径前缀不能为空")
-    public boolean hasPathPrefixes() {
-        return !effectivePathPrefixes().isEmpty();
-    }
-
     @AssertTrue(message = "路径前缀格式不正确，如 /api/users")
     public boolean isPathPrefixesFormatValid() {
         return effectivePathPrefixes().stream()

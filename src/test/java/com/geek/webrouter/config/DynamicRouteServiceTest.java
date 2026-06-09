@@ -68,6 +68,33 @@ class DynamicRouteServiceTest {
         assertThat(writer.deletedRouteIds).containsExactly("route-b");
     }
 
+
+    @Test
+    void gatewayRouteUsesLocalBindingWithoutStrippingPrefixWhenLocalProxyIsConfigured() {
+        MutableRouteConfigService routeConfigService = new MutableRouteConfigService();
+        RecordingRouteDefinitionWriter writer = new RecordingRouteDefinitionWriter();
+        DynamicRouteService service = new DynamicRouteService(
+                writer,
+                routeConfigService,
+                new NoopPublisher(),
+                new NoopLocalPortProxyService()
+        );
+        RouteConfig config = routeConfig("route-local", "/portal");
+        config.setLocalIp("127.0.0.1");
+        config.setLocalPort(9191);
+        routeConfigService.configs = List.of(config);
+
+        service.refreshAll().block(Duration.ofSeconds(3));
+
+        RouteDefinition definition = writer.routeDefinitions.get("route-local");
+        assertThat(definition.getUri().toString()).isEqualTo("http://127.0.0.1:9191");
+        assertThat(definition.getFilters()).isEmpty();
+        assertThat(definition.getPredicates())
+                .anySatisfy(predicate -> assertThat(predicate.getArgs())
+                        .containsValue("/portal")
+                        .containsValue("/portal/**"));
+    }
+
     private RouteConfig routeConfig(String id, String pathPrefix) {
         RouteConfig config = RouteConfig.builder()
                 .id(id)

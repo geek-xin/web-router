@@ -52,6 +52,23 @@ class RouteConfigServiceImplTest {
         assertThat(saved.getPathPrefix()).isEqualTo("/api");
     }
 
+
+    @Test
+    void createAllowsRouteWithoutPathPrefixes() {
+        RouteConfig config = RouteConfig.builder()
+                .name("All Paths")
+                .targetUrl("http://127.0.0.1:8081")
+                .localIp("127.0.0.1")
+                .localPort(18080)
+                .enabled(true)
+                .build();
+
+        RouteConfig saved = service().create(config);
+
+        assertThat(saved.effectivePathPrefixes()).isEmpty();
+        assertThat(saved.getPathPrefix()).isNull();
+    }
+
     @Test
     void createTrimsOptionalAccessPageBeforePersisting() {
         RouteConfig config = RouteConfig.builder()

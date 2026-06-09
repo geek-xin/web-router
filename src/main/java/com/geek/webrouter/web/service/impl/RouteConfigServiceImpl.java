@@ -261,7 +261,8 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     private void normalizeAndValidatePathPrefixes(RouteConfig config) {
         List<String> prefixes = config.effectivePathPrefixes();
         if (prefixes.isEmpty()) {
-            throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, "路径前缀不能为空");
+            config.setEffectivePathPrefixes(List.of());
+            return;
         }
         Set<String> uniquePrefixes = new LinkedHashSet<>();
         for (String prefix : prefixes) {
