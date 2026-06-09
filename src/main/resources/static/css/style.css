@@ -2972,14 +2972,14 @@ td code {
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table,
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table,
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table {
-    min-width: 900px;
+    min-width: 870px;
 }
 
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(4),
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(4),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(4),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(4) {
-    width: 180px;
+    width: 150px;
     white-space: nowrap;
 }
 
@@ -3023,7 +3023,7 @@ td code {
 
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(4),
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(4) {
-    width: 180px;
+    width: 150px;
     white-space: nowrap;
 }
 
