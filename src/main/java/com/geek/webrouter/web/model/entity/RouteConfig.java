@@ -40,7 +40,7 @@ public class RouteConfig {
     @NotBlank(message = "默认地址（兜底）不能为空")
     private String targetUrl;
 
-    /** 可选访问页地址，如 http://127.0.0.1:8080，用于打开入口页。 */
+    /** 可选代理地址，如 http://127.0.0.1:8080，匹配路径前缀时作为上游地址。 */
     private String accessPageBaseUrl;
 
     /** 可选访问页，如 /portal/login.html 或 http://127.0.0.1:9191/portal/login.html。 */

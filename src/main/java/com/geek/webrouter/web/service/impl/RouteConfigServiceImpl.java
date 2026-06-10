@@ -118,6 +118,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             normalizeAndValidatePathPrefixes(config);
             normalizeAndValidateLocalBinding(config);
             normalizeAccessPage(config);
+            validateProxyAddressConfigured(config);
             String id = nextRouteId();
             config.setId(id);
             Path filePath = resolveFilePath(id);
@@ -161,6 +162,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             normalizeAndValidatePathPrefixes(config);
             normalizeAndValidateLocalBinding(config);
             normalizeAccessPage(config);
+            validateProxyAddressConfigured(config);
             config.setId(name);
             checkNameConflict(name, config.getName());
             checkTargetUrlConflict(name, config.getTargetUrl());
@@ -321,6 +323,12 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             return;
         }
         config.setAccessPage(accessPage.trim());
+    }
+
+    private void validateProxyAddressConfigured(RouteConfig config) {
+        if (!config.effectivePathPrefixes().isEmpty() && config.getAccessPageBaseUrl() == null) {
+            throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, "配置路径前缀时代理地址不能为空");
+        }
     }
 
     private String normalizePathPrefix(String prefix) {

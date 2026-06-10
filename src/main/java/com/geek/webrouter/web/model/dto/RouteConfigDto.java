@@ -36,7 +36,7 @@ public class RouteConfigDto {
     private String targetUrl;
 
     @Pattern(regexp = "^$|^(https?://)?[-a-zA-Z0-9.]+:\\d{1,5}$",
-            message = "访问页地址格式不正确，如 192.168.1.100:8080 或 web.example.com:8080")
+            message = "代理地址格式不正确，如 192.168.1.100:8080 或 proxy.example.com:8080")
     private String accessPageBaseUrl;
 
     private String accessPage;
@@ -67,5 +67,11 @@ public class RouteConfigDto {
     public boolean isPathPrefixesFormatValid() {
         return effectivePathPrefixes().stream()
                 .allMatch(prefix -> prefix.matches("^/[-a-zA-Z0-9_/]*$"));
+    }
+
+    @AssertTrue(message = "配置路径前缀时代理地址不能为空")
+    public boolean isProxyAddressPresentWhenPathPrefixesConfigured() {
+        return effectivePathPrefixes().isEmpty()
+                || (accessPageBaseUrl != null && !accessPageBaseUrl.trim().isEmpty());
     }
 }

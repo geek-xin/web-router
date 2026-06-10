@@ -30,6 +30,7 @@ class RouteConfigControllerTest {
                           "name": "iotmgr",
                           "pathPrefix": "/iotmgr",
                           "targetUrl": "127.0.0.1",
+                          "accessPageBaseUrl": "127.0.0.1:8081",
                           "localPort": 9191,
                           "enabled": false
                         }
@@ -58,6 +59,7 @@ class RouteConfigControllerTest {
                           "name": "iotmgr",
                           "pathPrefix": "/iotmgr",
                           "targetUrl": "127.0.0.1:8080",
+                          "accessPageBaseUrl": "127.0.0.1:8081",
                           "localIp": "127.0.0.1",
                           "enabled": false
                         }
@@ -71,7 +73,7 @@ class RouteConfigControllerTest {
     }
 
     @Test
-    void createReturnsValidationMessageWhenAccessPageBaseUrlHasNoPort() {
+    void createReturnsValidationMessageWhenProxyAddressHasNoPort() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
                         new NoopRouteConfigService(), new NoopDynamicRouteService()))
                 .controllerAdvice(new GlobalExceptionHandler())
@@ -97,7 +99,36 @@ class RouteConfigControllerTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(false)
                 .jsonPath("$.code").isEqualTo(400)
-                .jsonPath("$.message").isEqualTo("访问页地址格式不正确，如 192.168.1.100:8080 或 web.example.com:8080");
+                .jsonPath("$.message").isEqualTo("代理地址格式不正确，如 192.168.1.100:8080 或 proxy.example.com:8080");
+    }
+
+    @Test
+    void createReturnsValidationMessageWhenPathPrefixHasNoProxyAddress() {
+        WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
+                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                .controllerAdvice(new GlobalExceptionHandler())
+                .validator(validator())
+                .build();
+
+        client.post()
+                .uri("/admin/api/routes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "name": "iotmgr",
+                          "pathPrefix": "/iotmgr",
+                          "targetUrl": "127.0.0.1:8080",
+                          "localIp": "127.0.0.1",
+                          "localPort": 9191,
+                          "enabled": false
+                        }
+                        """)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(400)
+                .jsonPath("$.message").isEqualTo("配置路径前缀时代理地址不能为空");
     }
 
 
@@ -144,6 +175,7 @@ class RouteConfigControllerTest {
                           "name": "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一",
                           "pathPrefix": "/iotmgr",
                           "targetUrl": "127.0.0.1:8080",
+                          "accessPageBaseUrl": "127.0.0.1:8081",
                           "localIp": "127.0.0.1",
                           "localPort": 9191,
                           "enabled": false

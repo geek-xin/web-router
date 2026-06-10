@@ -124,14 +124,19 @@
                     </div>
                     <div class="route-card-body">
                         <div class="route-card-field">
+                            <span>监听地址</span>
+                            <strong th:attr="title=${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '已配置 ' + cfg.effectiveLocalIp() + ':' + cfg.localPort + '，启用后监听')}"
+                                    th:text="${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '停用中，不监听代理端口')}"></strong>
+                        </div>
+                        <div class="route-card-field">
                             <span>默认地址（兜底）</span>
                             <strong th:attr="title=${cfg.targetUrl}"
                                     th:text="${#strings.replace(#strings.replace(cfg.targetUrl, 'http://', ''), 'https://', '')}"></strong>
                         </div>
                         <div class="route-card-field">
-                            <span>监听地址</span>
-                            <strong th:attr="title=${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '已配置 ' + cfg.effectiveLocalIp() + ':' + cfg.localPort + '，启用后监听')}"
-                                    th:text="${cfg.localPort == null ? '未配置' : (cfg.enabled ? cfg.effectiveLocalIp() + ':' + cfg.localPort : '停用中，不监听代理端口')}"></strong>
+                            <span>代理地址</span>
+                            <strong th:attr="title=${#strings.isEmpty(cfg.accessPageBaseUrl) ? '未配置' : cfg.accessPageBaseUrl}"
+                                    th:text="${#strings.isEmpty(cfg.accessPageBaseUrl) ? '未配置' : #strings.replace(#strings.replace(cfg.accessPageBaseUrl, 'http://', ''), 'https://', '')}"></strong>
                         </div>
                         <div class="route-card-field route-card-path-field">
                             <span>路径前缀</span>
@@ -156,7 +161,7 @@
                         <button class="btn btn-sm btn-edit" type="button" th:attr="data-id=${cfg.id}">编辑</button>
                         <button class="btn btn-sm btn-access"
                                 type="button"
-                                th:attr="data-id=${cfg.id},disabled=${#strings.isEmpty(cfg.accessPageBaseUrl) && #strings.isEmpty(cfg.accessPage) && #lists.isEmpty(cfg.effectivePathPrefixes())},title=${#strings.isEmpty(cfg.accessPageBaseUrl) && #strings.isEmpty(cfg.accessPage) && #lists.isEmpty(cfg.effectivePathPrefixes()) ? '请先编辑路由并填写访问页地址、访问页或路径前缀' : '新标签页打开访问页'}">访问</button>
+                                th:attr="data-id=${cfg.id},disabled=${!cfg.enabled || cfg.localPort == null || (#strings.isEmpty(cfg.accessPage) && #lists.isEmpty(cfg.effectivePathPrefixes()))},title=${#strings.isEmpty(cfg.accessPage) && #lists.isEmpty(cfg.effectivePathPrefixes()) ? '请先编辑路由并填写访问页或路径前缀' : (!cfg.enabled || cfg.localPort == null ? '请先启用路由并填写监听端口' : '新标签页打开访问页')}">访问</button>
                     </div>
                 </article>
                 <div class="empty" th:if="${#lists.isEmpty(configs)}">
@@ -184,7 +189,6 @@
                 <input type="text" id="name" required maxlength="50" placeholder="如 我的服务 / API-测试">
                 <small>最多 50 个字；可输入中文、英文、数字和符号；配置文件名会自动生成</small>
             </div>
-            <input type="hidden" id="accessPageBaseUrl" value="">
             <div class="form-row form-row-listener">
                 <div class="form-group">
                     <label for="localIp">监听 IP</label>
@@ -197,23 +201,26 @@
                     <input type="text" id="localPort" required inputmode="numeric" placeholder="如 9191">
                     <small>范围 1-65535</small>
                 </div>
+            </div>
+            <div class="form-row form-row-default">
+                <div class="form-group">
+                    <label for="targetUrl">默认地址（兜底） <span class="required">*</span></label>
+                    <input type="text" id="targetUrl" required placeholder="如 192.168.1.100:8080">
+                    <small>未匹配前缀时使用</small>
+                </div>
+            </div>
+            <div class="form-row form-row-proxy">
+                <div class="form-group">
+                    <label for="accessPageBaseUrl">代理地址</label>
+                    <input type="text" id="accessPageBaseUrl" placeholder="如 127.0.0.1:9999">
+                    <small>匹配路径前缀时使用</small>
+                </div>
+            </div>
+            <div class="form-row form-row-access-page">
                 <div class="form-group">
                     <label for="accessPage">访问页</label>
                     <input type="text" id="accessPage" placeholder="如 /portal/login.html">
                     <small>可选访问入口</small>
-                </div>
-            </div>
-            <div class="form-row form-row-addresses">
-                <div class="form-group">
-                    <label for="targetUrl">默认地址（兜底） <span class="required">*</span></label>
-                    <input type="text" id="targetUrl" required placeholder="如 192.168.1.100:8080 或 api.example.com:8080">
-                    <small>未命中路径前缀、其他路径走默认地址；协议由后台自动补全为 http://</small>
-                </div>
-                <div class="form-group">
-                    <label for="proxyAddress">代理地址</label>
-                    <input type="text" id="proxyAddress" readonly aria-readonly="true"
-                           placeholder="填写监听端口后生成">
-                    <small>由监听 IP 和端口生成</small>
                 </div>
             </div>
             <div class="form-group">
@@ -226,7 +233,7 @@
                         <button type="button" class="btn btn-sm btn-primary" id="btnAddPathPrefix">添加路径</button>
                     </div>
                 </div>
-                <small>配置路径前缀将指向代理地址</small>
+                <small>匹配前缀走代理地址，未匹配走默认地址</small>
             </div>
             <div class="form-actions">
                 <button type="button" class="btn" id="btnCancel">取消</button>

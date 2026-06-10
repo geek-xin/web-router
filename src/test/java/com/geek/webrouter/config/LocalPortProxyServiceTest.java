@@ -156,7 +156,7 @@ class LocalPortProxyServiceTest {
     }
 
     @Test
-    void localProxyAppendsOriginalRequestUriToTarget() {
+    void localProxyChoosesProxyAddressForMatchedPrefixesAndDefaultAddressForOthers() {
         LocalPortProxyService service = new LocalPortProxyService(
                 new ProxyRequestLogService(),
                 (config, handler) -> new FakeServer(config.getLocalPort())
@@ -166,26 +166,38 @@ class LocalPortProxyServiceTest {
                 .name("Route A")
                 .pathPrefixes(List.of("/iotmgr", "/portal"))
                 .targetUrl("http://127.0.0.1:8080")
+                .accessPageBaseUrl("http://127.0.0.1:9090")
                 .localIp("127.0.0.1")
                 .localPort(18080)
                 .enabled(true)
                 .build();
 
         assertThat(service.targetUri(config, "/iotmgr/api/page?page=1"))
-                .isEqualTo("http://127.0.0.1:8080/iotmgr/api/page?page=1");
+                .isEqualTo("http://127.0.0.1:9090/iotmgr/api/page?page=1");
         assertThat(service.targetUri(config, "/portal"))
-                .isEqualTo("http://127.0.0.1:8080/portal");
+                .isEqualTo("http://127.0.0.1:9090/portal");
+        assertThat(service.targetUri(config, "/reportManage/api/page?page=1"))
+                .isEqualTo("http://127.0.0.1:8080/reportManage/api/page?page=1");
     }
 
     @Test
     void localProxyForwardsRequestsOutsideConfiguredPrefixesToTarget() throws IOException, InterruptedException {
-        AtomicInteger targetRequests = new AtomicInteger();
-        DisposableServer targetServer = HttpServer.create()
+        AtomicInteger defaultRequests = new AtomicInteger();
+        DisposableServer defaultServer = HttpServer.create()
                 .host("127.0.0.1")
                 .port(0)
                 .handle((request, response) -> {
-                    targetRequests.incrementAndGet();
-                    return response.sendString(Mono.just("proxied " + request.uri()));
+                    defaultRequests.incrementAndGet();
+                    return response.sendString(Mono.just("default " + request.uri()));
+                })
+                .bindNow();
+        AtomicInteger proxyRequests = new AtomicInteger();
+        DisposableServer proxyServer = HttpServer.create()
+                .host("127.0.0.1")
+                .port(0)
+                .handle((request, response) -> {
+                    proxyRequests.incrementAndGet();
+                    return response.sendString(Mono.just("proxy " + request.uri()));
                 })
                 .bindNow();
         ProxyRequestLogService logService = new ProxyRequestLogService();
@@ -195,7 +207,8 @@ class LocalPortProxyServiceTest {
                 .id("route-a")
                 .name("Route A")
                 .pathPrefixes(List.of("/iotmgr", "/portal"))
-                .targetUrl("http://127.0.0.1:" + targetServer.port())
+                .targetUrl("http://127.0.0.1:" + defaultServer.port())
+                .accessPageBaseUrl("http://127.0.0.1:" + proxyServer.port())
                 .localIp("127.0.0.1")
                 .localPort(localPort)
                 .enabled(true)
@@ -212,26 +225,37 @@ class LocalPortProxyServiceTest {
                     .hasValue("no-store, no-cache, must-revalidate, max-age=0");
             assertThat(response.headers().firstValue("Pragma")).hasValue("no-cache");
             assertThat(response.headers().firstValue("Expires")).hasValue("0");
-            assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration?show=1");
-            assertThat(targetRequests).hasValue(1);
+            assertThat(response.body()).isEqualTo("default /reportManage/api/configuration?show=1");
+            assertThat(defaultRequests).hasValue(1);
+            assertThat(proxyRequests).hasValue(0);
             assertThat(logService.snapshot().totalRequests()).isEqualTo(1);
             assertThat(logService.snapshot().recentLogs().getFirst().accessAddress())
                     .isEqualTo("127.0.0.1:" + localPort);
         } finally {
             service.stopAll();
-            targetServer.disposeNow();
+            defaultServer.disposeNow();
+            proxyServer.disposeNow();
         }
     }
 
     @Test
     void localProxyForwardsConfiguredReportManagePrefix() throws IOException, InterruptedException {
-        AtomicInteger targetRequests = new AtomicInteger();
-        DisposableServer targetServer = HttpServer.create()
+        AtomicInteger defaultRequests = new AtomicInteger();
+        DisposableServer defaultServer = HttpServer.create()
                 .host("127.0.0.1")
                 .port(0)
                 .handle((request, response) -> {
-                    targetRequests.incrementAndGet();
-                    return response.sendString(Mono.just("proxied " + request.uri()));
+                    defaultRequests.incrementAndGet();
+                    return response.sendString(Mono.just("default " + request.uri()));
+                })
+                .bindNow();
+        AtomicInteger proxyRequests = new AtomicInteger();
+        DisposableServer proxyServer = HttpServer.create()
+                .host("127.0.0.1")
+                .port(0)
+                .handle((request, response) -> {
+                    proxyRequests.incrementAndGet();
+                    return response.sendString(Mono.just("proxy " + request.uri()));
                 })
                 .bindNow();
         LocalPortProxyService service = new LocalPortProxyService(new ProxyRequestLogService());
@@ -240,7 +264,8 @@ class LocalPortProxyServiceTest {
                 .id("route-a")
                 .name("Route A")
                 .pathPrefixes(List.of("/iotmgr", "/sysmgr", "/idc-ui", "/portal", "/door", "/reportManage"))
-                .targetUrl("http://127.0.0.1:" + targetServer.port())
+                .targetUrl("http://127.0.0.1:" + defaultServer.port())
+                .accessPageBaseUrl("http://127.0.0.1:" + proxyServer.port())
                 .localIp("127.0.0.1")
                 .localPort(localPort)
                 .enabled(true)
@@ -257,11 +282,13 @@ class LocalPortProxyServiceTest {
                     .hasValue("no-store, no-cache, must-revalidate, max-age=0");
             assertThat(response.headers().firstValue("Pragma")).hasValue("no-cache");
             assertThat(response.headers().firstValue("Expires")).hasValue("0");
-            assertThat(response.body()).isEqualTo("proxied /reportManage/api/configuration/");
-            assertThat(targetRequests).hasValue(1);
+            assertThat(response.body()).isEqualTo("proxy /reportManage/api/configuration/");
+            assertThat(defaultRequests).hasValue(0);
+            assertThat(proxyRequests).hasValue(1);
         } finally {
             service.stopAll();
-            targetServer.disposeNow();
+            defaultServer.disposeNow();
+            proxyServer.disposeNow();
         }
     }
 

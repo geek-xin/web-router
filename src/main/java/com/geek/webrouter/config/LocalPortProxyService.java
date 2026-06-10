@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 /**
- * 为单个路由启动独立的本地 IP/端口监听，并把本地端口收到的全部路径转发到该路由目标地址。
+ * 为单个路由启动独立的本地 IP/端口监听，按路径前缀决定转发到代理地址或默认地址。
  */
 @Slf4j
 @Service
@@ -137,7 +137,8 @@ public class LocalPortProxyService {
             LocalProxyServer server = LocalProxyServer.start(config, serverFactory, this::proxy);
             servers.put(binding, server);
             log.info("已启动本地端口代理: {} {}:{} -> {}",
-                    config.getId(), config.effectiveLocalIp(), config.getLocalPort(), config.getTargetUrl());
+                    config.getId(), config.effectiveLocalIp(), config.getLocalPort(),
+                    proxyTargetUrl(config));
         } catch (Exception e) {
             throw new BusinessException(ErrorCodeEnum.BAD_REQUEST,
                     "启动本地端口代理失败: " + config.effectiveLocalIp() + ":" + config.getLocalPort()
@@ -250,7 +251,52 @@ public class LocalPortProxyService {
     }
 
     String targetUri(RouteConfig config, String requestUri) {
-        return buildTargetUri(config.getTargetUrl(), requestUri);
+        return buildTargetUri(targetBaseUrl(config, requestUri), requestUri);
+    }
+
+    private String targetBaseUrl(RouteConfig config, String requestUri) {
+        if (matchesConfiguredPrefix(config, requestPath(requestUri)) && config.getAccessPageBaseUrl() != null) {
+            return config.getAccessPageBaseUrl();
+        }
+        return config.getTargetUrl();
+    }
+
+    private String proxyTargetUrl(RouteConfig config) {
+        if (config.getAccessPageBaseUrl() == null) {
+            return config.getTargetUrl();
+        }
+        return config.getAccessPageBaseUrl() + " (prefix) / " + config.getTargetUrl() + " (default)";
+    }
+
+    private boolean matchesConfiguredPrefix(RouteConfig config, String path) {
+        List<String> prefixes = config.effectivePathPrefixes();
+        if (prefixes.isEmpty()) {
+            return false;
+        }
+        String normalizedPath = path == null || path.isBlank() ? "/" : path;
+        if (!normalizedPath.startsWith("/")) {
+            normalizedPath = "/" + normalizedPath;
+        }
+        final String requestPath = normalizedPath;
+        return prefixes.stream().anyMatch(prefix -> matchesPrefix(prefix, requestPath));
+    }
+
+    private boolean matchesPrefix(String prefix, String requestPath) {
+        if (prefix == null || prefix.isBlank()) {
+            return false;
+        }
+        if ("/".equals(prefix)) {
+            return true;
+        }
+        return requestPath.equals(prefix) || requestPath.startsWith(prefix + "/");
+    }
+
+    private String requestPath(String requestUri) {
+        if (requestUri == null || requestUri.isBlank()) {
+            return "/";
+        }
+        int queryStart = requestUri.indexOf('?');
+        return queryStart < 0 ? requestUri : requestUri.substring(0, queryStart);
     }
 
     private String buildTargetUri(String targetUrl, String requestUri) {

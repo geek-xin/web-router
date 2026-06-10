@@ -43,6 +43,7 @@ class RouteConfigServiceImplTest {
                 .name("API")
                 .pathPrefixes(List.of("/api/", "/admin//"))
                 .targetUrl("http://127.0.0.1:8081")
+                .accessPageBaseUrl("http://127.0.0.1:8082")
                 .enabled(true)
                 .build();
 
@@ -93,7 +94,6 @@ class RouteConfigServiceImplTest {
     void createStoresBlankAccessPageAsNull() {
         RouteConfig config = RouteConfig.builder()
                 .name("Blank Portal")
-                .pathPrefixes(List.of("/blank-portal"))
                 .targetUrl("http://127.0.0.1:8082")
                 .accessPageBaseUrl("   ")
                 .accessPage("   ")
@@ -107,6 +107,22 @@ class RouteConfigServiceImplTest {
     }
 
     @Test
+    void createRejectsPathPrefixesWithoutProxyAddress() {
+        RouteConfig config = RouteConfig.builder()
+                .name("Missing Proxy")
+                .pathPrefixes(List.of("/portal"))
+                .targetUrl("http://127.0.0.1:8081")
+                .localIp("127.0.0.1")
+                .localPort(18080)
+                .enabled(false)
+                .build();
+
+        assertThatThrownBy(() -> service().create(config))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("配置路径前缀时代理地址不能为空");
+    }
+
+    @Test
     void listAllUsesFileNameAsAuthoritativeRouteIdWhenJsonIdDiffers() throws Exception {
         Files.writeString(tempDir.resolve("route-file.json"), """
                 {
@@ -115,6 +131,7 @@ class RouteConfigServiceImplTest {
                   "pathPrefix": "/file",
                   "pathPrefixes": ["/file"],
                   "targetUrl": "http://127.0.0.1:8081",
+                  "accessPageBaseUrl": "http://127.0.0.1:8082",
                   "enabled": true
                 }
                 """);
@@ -131,6 +148,7 @@ class RouteConfigServiceImplTest {
                 .name("Invalid IP")
                 .pathPrefixes(List.of("/invalid-ip"))
                 .targetUrl("http://127.0.0.1:8081")
+                .accessPageBaseUrl("http://127.0.0.1:8082")
                 .localIp("999.999.999.999")
                 .enabled(false)
                 .build();
@@ -147,6 +165,7 @@ class RouteConfigServiceImplTest {
                 .name("演示环境")
                 .pathPrefixes(List.of("/iotmgr", "/sysmgr", "/portal"))
                 .targetUrl("http://127.0.0.1:9080")
+                .accessPageBaseUrl("http://127.0.0.1:9082")
                 .localIp("127.0.0.1")
                 .localPort(9191)
                 .enabled(true)
@@ -155,6 +174,7 @@ class RouteConfigServiceImplTest {
                 .name("演示环境-copy")
                 .pathPrefixes(List.of("/iotmgr", "/sysmgr", "/portal"))
                 .targetUrl("http://127.0.0.1:9081")
+                .accessPageBaseUrl("http://127.0.0.1:9083")
                 .localIp("127.0.0.1")
                 .localPort(8081)
                 .enabled(true)
