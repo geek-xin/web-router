@@ -30,10 +30,10 @@ class RouteConfigTemplateTest {
         assertThat(html).contains("可选访问入口");
         assertThat(html).contains("<div class=\"form-row form-row-default\">");
         assertThat(html).contains("<label for=\"targetUrl\">默认地址（兜底） <span class=\"required\">*</span></label>");
-        assertThat(html).contains("未匹配前缀时使用");
+        assertThat(html).contains("未命中前缀时转发到此地址");
         assertThat(html).contains("<label for=\"accessPageBaseUrl\">代理地址</label>");
         assertThat(html).contains("<input type=\"text\" id=\"accessPageBaseUrl\" placeholder=\"如 127.0.0.1:9999\">");
-        assertThat(html).contains("匹配路径前缀时使用");
+        assertThat(html).contains("命中路径前缀时转发到此地址");
         assertThat(html).doesNotContain("<div class=\"form-row form-row-proxy\">");
         assertThat(html).doesNotContain("<div class=\"form-row form-row-access-page\">");
         assertThat(html.indexOf("<label for=\"localPort\">监听端口 <span class=\"required\">*</span></label>"))
@@ -66,10 +66,10 @@ class RouteConfigTemplateTest {
 
         assertThat(html).contains("<label for=\"pathPrefixInput\">路径前缀</label>");
         assertThat(html).doesNotContain("<label for=\"pathPrefixInput\">路径前缀 <span class=\"required\">*</span></label>");
-        assertThat(html).contains("匹配前缀走代理地址，未匹配走默认地址");
+        assertThat(html).contains("访问监听地址时，命中前缀走代理地址，否则走默认地址");
         assertThat(html).doesNotContain("不填写时，本地端口会代理全部路径");
         assertThat(script).contains("未配置路径前缀，请求走默认地址");
-        assertThat(script).contains("匹配前缀走代理地址，未匹配走默认地址");
+        assertThat(script).contains("访问监听地址时，命中前缀走代理地址，否则走默认地址");
         assertThat(script).doesNotContain("请输入路径前缀");
     }
 

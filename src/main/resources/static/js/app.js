@@ -429,7 +429,7 @@
             const label = document.createElement('span');
             label.className = 'path-prefix-chip-text';
             label.textContent = prefix;
-            label.title = '匹配前缀走代理地址，未匹配走默认地址';
+            label.title = '访问监听地址时，命中前缀走代理地址，否则走默认地址';
             chip.appendChild(label);
             const button = document.createElement('button');
             button.type = 'button';
