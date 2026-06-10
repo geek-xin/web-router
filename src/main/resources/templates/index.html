@@ -201,6 +201,11 @@
                     <input type="text" id="localPort" required inputmode="numeric" placeholder="如 9191">
                     <small>范围 1-65535</small>
                 </div>
+                <div class="form-group">
+                    <label for="accessPage">访问页</label>
+                    <input type="text" id="accessPage" placeholder="如 /portal/login.html">
+                    <small>可选访问入口</small>
+                </div>
             </div>
             <div class="form-row form-row-default">
                 <div class="form-group">
@@ -208,19 +213,10 @@
                     <input type="text" id="targetUrl" required placeholder="如 192.168.1.100:8080">
                     <small>未匹配前缀时使用</small>
                 </div>
-            </div>
-            <div class="form-row form-row-proxy">
                 <div class="form-group">
                     <label for="accessPageBaseUrl">代理地址</label>
                     <input type="text" id="accessPageBaseUrl" placeholder="如 127.0.0.1:9999">
                     <small>匹配路径前缀时使用</small>
-                </div>
-            </div>
-            <div class="form-row form-row-access-page">
-                <div class="form-group">
-                    <label for="accessPage">访问页</label>
-                    <input type="text" id="accessPage" placeholder="如 /portal/login.html">
-                    <small>可选访问入口</small>
                 </div>
             </div>
             <div class="form-group">

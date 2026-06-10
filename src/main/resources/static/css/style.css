@@ -1725,23 +1725,10 @@ td code {
 }
 
 .form-row-listener {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 0.58fr) minmax(0, 0.58fr) minmax(0, 1.34fr);
     justify-content: stretch;
     gap: 12px;
-    width: calc((100% - 12px) / 2);
-    max-width: 100%;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-}
-
-.form-row-default,
-.form-row-proxy,
-.form-row-access-page {
-    grid-template-columns: minmax(0, 1fr);
-    justify-content: stretch;
-    gap: 10px;
+    width: 100%;
     max-width: 100%;
     padding: 0;
     border: 0;
@@ -1750,16 +1737,15 @@ td code {
 }
 
 .form-row-default {
-    width: calc((100% - 12px) / 2);
-}
-
-.form-row-proxy,
-.form-row-access-page {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 10px;
     width: 100%;
-}
-
-.form-row-access-page {
     max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 .form-group label {
@@ -1881,26 +1867,20 @@ td code {
 
 .form-row-addresses .form-group,
 .form-row-listener .form-group,
-.form-row-default .form-group,
-.form-row-proxy .form-group,
-.form-row-access-page .form-group {
+.form-row-default .form-group {
     margin-bottom: 0;
 }
 
 .form-row-addresses .form-group label,
 .form-row-listener .form-group label,
-.form-row-default .form-group label,
-.form-row-proxy .form-group label,
-.form-row-access-page .form-group label {
+.form-row-default .form-group label {
     margin-bottom: 4px;
     font-size: 12px;
 }
 
 .form-row-addresses .form-group input,
 .form-row-listener .form-group input,
-.form-row-default .form-group input,
-.form-row-proxy .form-group input,
-.form-row-access-page .form-group input {
+.form-row-default .form-group input {
     min-height: 38px;
     padding: 8px 10px;
     font-size: 14px;
@@ -1908,9 +1888,7 @@ td code {
 
 .form-row-addresses .form-group small,
 .form-row-listener .form-group small,
-.form-row-default .form-group small,
-.form-row-proxy .form-group small,
-.form-row-access-page .form-group small {
+.form-row-default .form-group small {
     margin-top: 4px;
     font-size: 11px;
     line-height: 1.35;
@@ -2058,9 +2036,7 @@ td code {
     }
 
     .form-row-listener,
-    .form-row-default,
-    .form-row-proxy,
-    .form-row-access-page {
+    .form-row-default {
         width: 100%;
     }
 

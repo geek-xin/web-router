@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RouteConfigTemplateTest {
 
     @Test
-    void routeFormPlacesDefaultAddressWithListenerFieldsAndProxyAddressAboveAccessPage() {
+    void routeFormPlacesAccessPageWithListenerFieldsAndProxyAddressWithDefaultAddress() {
         String html = routeFormTemplate();
 
         assertThat(html).contains("<div class=\"form-row form-row-listener\">");
@@ -25,22 +25,23 @@ class RouteConfigTemplateTest {
         assertThat(html).contains("默认 127.0.0.1");
         assertThat(html).contains("<label for=\"localPort\">监听端口 <span class=\"required\">*</span></label>");
         assertThat(html).contains("<input type=\"text\" id=\"localPort\" required inputmode=\"numeric\"");
+        assertThat(html).contains("<label for=\"accessPage\">访问页</label>");
+        assertThat(html).contains("<input type=\"text\" id=\"accessPage\"");
+        assertThat(html).contains("可选访问入口");
         assertThat(html).contains("<div class=\"form-row form-row-default\">");
         assertThat(html).contains("<label for=\"targetUrl\">默认地址（兜底） <span class=\"required\">*</span></label>");
         assertThat(html).contains("未匹配前缀时使用");
-        assertThat(html).contains("<div class=\"form-row form-row-proxy\">");
         assertThat(html).contains("<label for=\"accessPageBaseUrl\">代理地址</label>");
         assertThat(html).contains("<input type=\"text\" id=\"accessPageBaseUrl\" placeholder=\"如 127.0.0.1:9999\">");
         assertThat(html).contains("匹配路径前缀时使用");
-        assertThat(html).contains("<div class=\"form-row form-row-access-page\">");
-        assertThat(html).contains("<label for=\"accessPage\">访问页</label>");
-        assertThat(html).contains("<input type=\"text\" id=\"accessPage\"");
+        assertThat(html).doesNotContain("<div class=\"form-row form-row-proxy\">");
+        assertThat(html).doesNotContain("<div class=\"form-row form-row-access-page\">");
+        assertThat(html.indexOf("<label for=\"localPort\">监听端口 <span class=\"required\">*</span></label>"))
+                .isLessThan(html.indexOf("<label for=\"accessPage\">访问页</label>"));
         assertThat(html.indexOf("<div class=\"form-row form-row-listener\">"))
                 .isLessThan(html.indexOf("<div class=\"form-row form-row-default\">"));
-        assertThat(html.indexOf("<div class=\"form-row form-row-default\">"))
-                .isLessThan(html.indexOf("<div class=\"form-row form-row-proxy\">"));
-        assertThat(html.indexOf("<label for=\"accessPageBaseUrl\">代理地址</label>"))
-                .isLessThan(html.indexOf("<label for=\"accessPage\">访问页</label>"));
+        assertThat(html.indexOf("<label for=\"targetUrl\">默认地址（兜底） <span class=\"required\">*</span></label>"))
+                .isLessThan(html.indexOf("<label for=\"accessPageBaseUrl\">代理地址</label>"));
         assertThat(html).doesNotContain("id=\"localBinding\"");
         assertThat(html).doesNotContain("id=\"proxyAddress\"");
         assertThat(html).doesNotContain("留空则不启用本地端口访问");
