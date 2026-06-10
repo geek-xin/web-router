@@ -162,9 +162,10 @@ public class LocalPortProxyService {
     private Publisher<Void> proxy(RouteConfig config, HttpServerRequest request, HttpServerResponse response) {
         long start = System.nanoTime();
         prepareLocalProxyResponse(response);
-        String targetUri = targetUri(config, request.uri());
+        String targetBaseUrl = targetBaseUrl(config, request.uri());
+        String targetUri = buildTargetUri(targetBaseUrl, request.uri());
         String requestParams = requestParams(request.uri());
-        String accessAddress = accessAddress(config, request.uri());
+        String accessAddress = accessAddress(targetBaseUrl);
         StringBuilder requestBody = new StringBuilder();
         StringBuilder responseBody = new StringBuilder();
         String requestContentType = request.requestHeaders().get(HttpHeaderNames.CONTENT_TYPE);
@@ -201,7 +202,7 @@ public class LocalPortProxyService {
 
     private void recordLog(RouteConfig config, HttpServerRequest request, int status, long start) {
         recordLog(config, request, status, start, requestParams(request.uri()), "", "",
-                accessAddress(config, request.uri()));
+                accessAddress(targetBaseUrl(config, request.uri())));
     }
 
     private void recordLog(RouteConfig config,
@@ -383,8 +384,11 @@ public class LocalPortProxyService {
         return config.effectiveLocalIp() + ":" + config.getLocalPort();
     }
 
-    private String accessAddress(RouteConfig config, String requestUri) {
-        return ProxyAccessAddressFormatter.accessAddress(localBinding(config), requestUri);
+    private String accessAddress(String targetBaseUrl) {
+        if (targetBaseUrl == null || targetBaseUrl.isBlank()) {
+            return "-";
+        }
+        return ProxyAccessAddressFormatter.hostPort(URI.create(targetBaseUrl));
     }
 
     @FunctionalInterface

@@ -126,7 +126,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
                 throw new BusinessException(ErrorCodeEnum.DUPLICATE_NAME, "路由 ID 已存在: " + id);
             }
             checkNameConflict(id, config.getName());
-            checkTargetUrlConflict(id, config.getTargetUrl());
             checkLocalBindingConflict(id, config);
 
             try {
@@ -165,7 +164,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
             validateProxyAddressConfigured(config);
             config.setId(name);
             checkNameConflict(name, config.getName());
-            checkTargetUrlConflict(name, config.getTargetUrl());
             checkLocalBindingConflict(name, config);
 
             try {
@@ -197,19 +195,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     }
 
     /**
-     * 检查默认地址（兜底）是否与其他路由重复（排除自身）。
-     */
-    private void checkTargetUrlConflict(String excludeId, String targetUrl) {
-        Optional<RouteConfig> conflict = listAll().stream()
-                .filter(c -> !routeId(c).equals(excludeId) && Objects.equals(c.getTargetUrl(), targetUrl))
-                .findFirst();
-        if (conflict.isPresent()) {
-            throw new BusinessException(ErrorCodeEnum.DUPLICATE_TARGET,
-                    "默认地址（兜底）已被 [" + conflict.get().getName() + "] 使用: " + targetUrl);
-        }
-    }
-
-    /**
      * 检查本地监听地址是否与其他路由重复（排除自身）。
      */
     private void checkLocalBindingConflict(String excludeId, RouteConfig config) {
@@ -218,7 +203,6 @@ public class RouteConfigServiceImpl implements RouteConfigService {
         }
         String binding = localBinding(config);
         Optional<RouteConfig> conflict = listAll().stream()
-                .filter(RouteConfig::isEnabled)
                 .filter(RouteConfig::hasLocalBinding)
                 .filter(c -> !routeId(c).equals(excludeId) && Objects.equals(localBinding(c), binding))
                 .findFirst();

@@ -230,7 +230,7 @@ class LocalPortProxyServiceTest {
             assertThat(proxyRequests).hasValue(0);
             assertThat(logService.snapshot().totalRequests()).isEqualTo(1);
             assertThat(logService.snapshot().recentLogs().getFirst().accessAddress())
-                    .isEqualTo("127.0.0.1:" + localPort);
+                    .isEqualTo("127.0.0.1:" + defaultServer.port());
         } finally {
             service.stopAll();
             defaultServer.disposeNow();
@@ -258,7 +258,8 @@ class LocalPortProxyServiceTest {
                     return response.sendString(Mono.just("proxy " + request.uri()));
                 })
                 .bindNow();
-        LocalPortProxyService service = new LocalPortProxyService(new ProxyRequestLogService());
+        ProxyRequestLogService logService = new ProxyRequestLogService();
+        LocalPortProxyService service = new LocalPortProxyService(logService);
         int localPort = freePort();
         RouteConfig config = RouteConfig.builder()
                 .id("route-a")
@@ -285,6 +286,8 @@ class LocalPortProxyServiceTest {
             assertThat(response.body()).isEqualTo("proxy /reportManage/api/configuration/");
             assertThat(defaultRequests).hasValue(0);
             assertThat(proxyRequests).hasValue(1);
+            assertThat(logService.snapshot().recentLogs().getFirst().accessAddress())
+                    .isEqualTo("127.0.0.1:" + proxyServer.port());
         } finally {
             service.stopAll();
             defaultServer.disposeNow();

@@ -185,4 +185,53 @@ class RouteConfigServiceImplTest {
 
         assertThat(savedCopy.effectivePathPrefixes()).containsExactly("/iotmgr", "/sysmgr", "/portal");
     }
+
+    @Test
+    void createAllowsSameDefaultTargetUrlAcrossDifferentRoutes() {
+        RouteConfigServiceImpl service = service();
+        RouteConfig source = RouteConfig.builder()
+                .name("默认地址源路由")
+                .targetUrl("http://127.0.0.1:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(false)
+                .build();
+        RouteConfig copy = RouteConfig.builder()
+                .name("默认地址复制路由")
+                .targetUrl("http://127.0.0.1:9080")
+                .localIp("127.0.0.1")
+                .localPort(9192)
+                .enabled(false)
+                .build();
+
+        service.create(source);
+        RouteConfig savedCopy = service.create(copy);
+
+        assertThat(savedCopy.getTargetUrl()).isEqualTo("http://127.0.0.1:9080");
+    }
+
+    @Test
+    void createRejectsConfiguredLocalBindingConflictEvenWhenExistingRouteIsDisabled() {
+        RouteConfigServiceImpl service = service();
+        RouteConfig existing = RouteConfig.builder()
+                .name("停用演示环境")
+                .targetUrl("http://127.0.0.1:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(false)
+                .build();
+        RouteConfig copied = RouteConfig.builder()
+                .name("停用演示环境-copy")
+                .targetUrl("http://127.0.0.1:9081")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(false)
+                .build();
+
+        service.create(existing);
+
+        assertThatThrownBy(() -> service.create(copied))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("本地监听地址已被 [停用演示环境] 使用: 127.0.0.1:9191");
+    }
 }

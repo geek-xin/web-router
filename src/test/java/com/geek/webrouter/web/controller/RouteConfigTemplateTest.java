@@ -150,8 +150,11 @@ class RouteConfigTemplateTest {
         assertThat(script).contains("localPort: localPort ? Number(localPort) : null");
         assertThat(script).contains("accessPageBaseUrl: normalizedOptionalText(elements.accessPageBaseUrl.value)");
         assertThat(script).contains("配置路径前缀时请输入代理地址");
+        assertThat(script).doesNotContain("hasTargetUrlConflict");
+        assertThat(script).doesNotContain("默认地址（兜底）已存在，不能重复新增");
         assertThat(script).contains("监听 IP 格式不正确，如 127.0.0.1 或 localhost");
         assertThat(script).contains("监听端口需为 1-65535 的整数");
+        assertThat(script).contains("card.dataset.localAccess === value");
         assertThat(script).doesNotContain("function parseLocalBinding(value)");
         assertThat(script).doesNotContain("document.getElementById('localBinding')");
     }

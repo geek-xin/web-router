@@ -124,7 +124,7 @@
 - `pathPrefixes` 至少一项；每项必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
 - 路径前缀冲突检查是“完全相同前缀”冲突，不做父子前缀包含判断。
 - `targetUrl` DTO 入参格式为 `host:port` 或 `http(s)://host:port`；保存前会归一化为带协议 URL。
-- `targetUrl` 不能与其他路由重复。
+- `targetUrl` 允许与其他路由重复；拷贝路由可复用同一个默认地址（兜底）。
 - `localPort` 范围为 `1-65535`。
 - `localIp` 允许空值、`localhost` 或 IPv4；设置本地端口后最终会规范为有效监听 IP。
 - `localIp:localPort` 不能与其他启用本地绑定的路由重复。

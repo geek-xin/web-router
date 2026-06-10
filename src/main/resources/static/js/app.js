@@ -170,12 +170,6 @@
             .some((card) => card.dataset.id !== excludeRouteId && comparableRouteName(card.dataset.name) === value);
     }
 
-    function hasTargetUrlConflict(targetUrl, excludeRouteId) {
-        const value = comparableTargetUrl(targetUrl);
-        return Array.from(elements.routeCards.querySelectorAll('.route-card'))
-            .some((card) => card.dataset.id !== excludeRouteId && comparableTargetUrl(card.dataset.target) === value);
-    }
-
     function normalizedLocalIp(localIp) {
         return (localIp || '').trim() || '127.0.0.1';
     }
@@ -226,7 +220,7 @@
             return false;
         }
         return Array.from(elements.routeCards.querySelectorAll('.route-card'))
-            .some((card) => card.dataset.id !== excludeRouteId && card.dataset.localBinding === value);
+            .some((card) => card.dataset.id !== excludeRouteId && card.dataset.localAccess === value);
     }
 
     function routeCard(routeId) {
@@ -1545,10 +1539,6 @@
         }
         if (!isValidTargetUrl(payload.targetUrl)) {
             showToast('默认地址（兜底）需包含端口，如 127.0.0.1:8080 或 api.example.com:8080', 'error');
-            return;
-        }
-        if (hasTargetUrlConflict(payload.targetUrl, isEdit ? oldRouteId : '')) {
-            showToast('默认地址（兜底）已存在，不能重复新增', 'error');
             return;
         }
         if (pathPrefixes.length > 0 && !payload.accessPageBaseUrl) {
