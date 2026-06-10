@@ -39,7 +39,7 @@ class RouteConfigControllerTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(false)
                 .jsonPath("$.code").isEqualTo(400)
-                .jsonPath("$.message").isEqualTo("目标地址格式不正确，如 192.168.1.100:8080 或 api.example.com:8080");
+                .jsonPath("$.message").isEqualTo("默认地址（兜底）格式不正确，如 192.168.1.100:8080 或 api.example.com:8080");
     }
 
     @Test
@@ -68,6 +68,36 @@ class RouteConfigControllerTest {
                 .jsonPath("$.success").isEqualTo(false)
                 .jsonPath("$.code").isEqualTo(400)
                 .jsonPath("$.message").isEqualTo("本地端口不能为空");
+    }
+
+    @Test
+    void createReturnsValidationMessageWhenAccessPageBaseUrlHasNoPort() {
+        WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
+                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                .controllerAdvice(new GlobalExceptionHandler())
+                .validator(validator())
+                .build();
+
+        client.post()
+                .uri("/admin/api/routes")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {
+                          "name": "iotmgr",
+                          "pathPrefix": "/iotmgr",
+                          "targetUrl": "127.0.0.1:8080",
+                          "accessPageBaseUrl": "127.0.0.1",
+                          "localIp": "127.0.0.1",
+                          "localPort": 9191,
+                          "enabled": false
+                        }
+                        """)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.code").isEqualTo(400)
+                .jsonPath("$.message").isEqualTo("访问页地址格式不正确，如 192.168.1.100:8080 或 web.example.com:8080");
     }
 
 

@@ -23,40 +23,14 @@ final class ProxyAccessAddressFormatter {
     }
 
     static String accessAddress(URI baseUri, String requestUri) {
-        return accessAddress(hostPort(baseUri), requestUri);
+        return hostPort(baseUri);
     }
 
     static String accessAddress(String baseAddress, String requestUri) {
         if (baseAddress == null || baseAddress.isBlank() || "-".equals(baseAddress)) {
             return "-";
         }
-        return baseAddress + normalizedRequestUri(requestUri);
-    }
-
-    static String requestUri(URI uri) {
-        if (uri == null) {
-            return "/";
-        }
-        String path = uri.getRawPath();
-        if (path == null || path.isBlank()) {
-            path = "/";
-        }
-        String query = uri.getRawQuery();
-        if (query == null || query.isBlank()) {
-            return path;
-        }
-        return path + "?" + query;
-    }
-
-    private static String normalizedRequestUri(String requestUri) {
-        if (requestUri == null || requestUri.isBlank()) {
-            return "/";
-        }
-        String value = requestUri.trim();
-        if (value.startsWith("?")) {
-            return "/" + value;
-        }
-        return value.startsWith("/") ? value : "/" + value;
+        return baseAddress;
     }
 
     private static int defaultPort(String scheme) {

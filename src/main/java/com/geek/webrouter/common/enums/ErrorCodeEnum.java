@@ -26,8 +26,8 @@ public enum ErrorCodeEnum {
     /** 单条路由配置内路径前缀重复。 */
     DUPLICATE_PREFIX(409, "路径前缀重复"),
 
-    /** 路由配置目标地址重复。 */
-    DUPLICATE_TARGET(409, "目标地址已存在"),
+    /** 路由配置默认地址（兜底）重复。 */
+    DUPLICATE_TARGET(409, "默认地址（兜底）已存在"),
 
     /** 本地监听地址重复。 */
     DUPLICATE_LOCAL_BINDING(409, "本地监听地址已存在"),

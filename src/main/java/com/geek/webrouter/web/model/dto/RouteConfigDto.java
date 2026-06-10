@@ -30,10 +30,14 @@ public class RouteConfigDto {
 
     private List<String> pathPrefixes;
 
-    @NotBlank(message = "目标地址不能为空")
+    @NotBlank(message = "默认地址（兜底）不能为空")
     @Pattern(regexp = "^(https?://)?[-a-zA-Z0-9.]+:\\d{1,5}$",
-            message = "目标地址格式不正确，如 192.168.1.100:8080 或 api.example.com:8080")
+            message = "默认地址（兜底）格式不正确，如 192.168.1.100:8080 或 api.example.com:8080")
     private String targetUrl;
+
+    @Pattern(regexp = "^$|^(https?://)?[-a-zA-Z0-9.]+:\\d{1,5}$",
+            message = "访问页地址格式不正确，如 192.168.1.100:8080 或 web.example.com:8080")
+    private String accessPageBaseUrl;
 
     private String accessPage;
 

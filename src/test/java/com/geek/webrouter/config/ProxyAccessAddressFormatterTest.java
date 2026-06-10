@@ -19,23 +19,16 @@ class ProxyAccessAddressFormatterTest {
     }
 
     @Test
-    void formatsAccessAddressWithRequestUri() {
+    void formatsAccessAddressAsHostAndPortOnly() {
         assertThat(ProxyAccessAddressFormatter.accessAddress(
                 URI.create("http://127.0.0.1:9191"),
                 "/portal/notice/heartbeat?show=1"
-        )).isEqualTo("127.0.0.1:9191/portal/notice/heartbeat?show=1");
+        )).isEqualTo("127.0.0.1:9191");
         assertThat(ProxyAccessAddressFormatter.accessAddress("127.0.0.1:9191", "portal/messageHandler"))
-                .isEqualTo("127.0.0.1:9191/portal/messageHandler");
+                .isEqualTo("127.0.0.1:9191");
         assertThat(ProxyAccessAddressFormatter.accessAddress("127.0.0.1:9191", "?show=1"))
-                .isEqualTo("127.0.0.1:9191/?show=1");
+                .isEqualTo("127.0.0.1:9191");
         assertThat(ProxyAccessAddressFormatter.accessAddress("127.0.0.1:9191", ""))
-                .isEqualTo("127.0.0.1:9191/");
-    }
-
-    @Test
-    void extractsRawRequestUriFromAbsoluteUri() {
-        assertThat(ProxyAccessAddressFormatter.requestUri(
-                URI.create("http://localhost:8090/portal/notice/heartbeat?show=1")
-        )).isEqualTo("/portal/notice/heartbeat?show=1");
+                .isEqualTo("127.0.0.1:9191");
     }
 }

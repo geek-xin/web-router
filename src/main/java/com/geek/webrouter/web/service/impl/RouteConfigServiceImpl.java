@@ -195,7 +195,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     }
 
     /**
-     * 检查目标地址是否与其他路由重复（排除自身）。
+     * 检查默认地址（兜底）是否与其他路由重复（排除自身）。
      */
     private void checkTargetUrlConflict(String excludeId, String targetUrl) {
         Optional<RouteConfig> conflict = listAll().stream()
@@ -203,7 +203,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
                 .findFirst();
         if (conflict.isPresent()) {
             throw new BusinessException(ErrorCodeEnum.DUPLICATE_TARGET,
-                    "目标地址已被 [" + conflict.get().getName() + "] 使用: " + targetUrl);
+                    "默认地址（兜底）已被 [" + conflict.get().getName() + "] 使用: " + targetUrl);
         }
     }
 
@@ -252,6 +252,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     private boolean hasSameEditableContent(RouteConfig currentConfig, RouteConfig nextConfig) {
         return Objects.equals(currentConfig.getName(), nextConfig.getName())
                 && Objects.equals(currentConfig.getTargetUrl(), nextConfig.getTargetUrl())
+                && Objects.equals(currentConfig.getAccessPageBaseUrl(), nextConfig.getAccessPageBaseUrl())
                 && Objects.equals(currentConfig.getAccessPage(), nextConfig.getAccessPage())
                 && Objects.equals(currentConfig.effectiveLocalIp(), nextConfig.effectiveLocalIp())
                 && Objects.equals(currentConfig.getLocalPort(), nextConfig.getLocalPort())
@@ -307,6 +308,13 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     }
 
     private void normalizeAccessPage(RouteConfig config) {
+        String accessPageBaseUrl = config.getAccessPageBaseUrl();
+        if (accessPageBaseUrl == null || accessPageBaseUrl.trim().isEmpty()) {
+            config.setAccessPageBaseUrl(null);
+        } else {
+            config.setAccessPageBaseUrl(accessPageBaseUrl.trim());
+        }
+
         String accessPage = config.getAccessPage();
         if (accessPage == null || accessPage.trim().isEmpty()) {
             config.setAccessPage(null);

@@ -37,8 +37,11 @@ public class RouteConfig {
     private List<String> pathPrefixes = new ArrayList<>();
 
     /** 目标服务地址，如 http://192.168.1.100:8080。 */
-    @NotBlank(message = "目标地址不能为空")
+    @NotBlank(message = "默认地址（兜底）不能为空")
     private String targetUrl;
+
+    /** 可选访问页地址，如 http://127.0.0.1:8080，用于打开入口页。 */
+    private String accessPageBaseUrl;
 
     /** 可选访问页，如 /portal/login.html 或 http://127.0.0.1:9191/portal/login.html。 */
     private String accessPage;

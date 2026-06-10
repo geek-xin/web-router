@@ -108,6 +108,7 @@ public class RouteConfigController {
         RouteConfig config = RouteConfig.builder()
                 .name(dto.getName().trim())
                 .targetUrl(RouteTargetUrlNormalizer.normalize(dto.getTargetUrl()))
+                .accessPageBaseUrl(normalizeOptionalUrl(dto.getAccessPageBaseUrl()))
                 .accessPage(dto.getAccessPage())
                 .localIp(dto.getLocalIp())
                 .localPort(dto.getLocalPort())
@@ -115,5 +116,12 @@ public class RouteConfigController {
                 .build();
         config.setEffectivePathPrefixes(dto.effectivePathPrefixes());
         return config;
+    }
+
+    private String normalizeOptionalUrl(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return RouteTargetUrlNormalizer.normalize(value);
     }
 }

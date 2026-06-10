@@ -21,9 +21,11 @@
         pathPrefixList: document.getElementById('pathPrefixList'),
         btnAddPathPrefix: document.getElementById('btnAddPathPrefix'),
         targetUrl: document.getElementById('targetUrl'),
+        accessPageBaseUrl: document.getElementById('accessPageBaseUrl'),
         accessPage: document.getElementById('accessPage'),
         localIp: document.getElementById('localIp'),
         localPort: document.getElementById('localPort'),
+        proxyAddress: document.getElementById('proxyAddress'),
         enabled: document.getElementById('enabled'),
         viewTitle: document.getElementById('viewTitle'),
         btnToggleEdit: document.getElementById('btnToggleEdit'),
@@ -184,6 +186,18 @@
         return port ? normalizedLocalIp(localIp) + ':' + port : '';
     }
 
+    function updateProxyAddress() {
+        const value = localBinding(elements.localIp.value, elements.localPort.value);
+        elements.proxyAddress.value = value;
+        elements.proxyAddress.title = value || '填写监听端口后生成';
+    }
+
+    function setListenerFields(localIp, localPort) {
+        elements.localIp.value = normalizedLocalIp(localIp);
+        elements.localPort.value = localPort || '';
+        updateProxyAddress();
+    }
+
     function isValidLocalIp(localIp) {
         const value = normalizedLocalIp(localIp);
         if (value === 'localhost') {
@@ -203,10 +217,14 @@
     }
 
     function isValidLocalPort(localPort) {
-        if (!localPort) {
+        const text = (localPort || '').toString().trim();
+        if (!text) {
             return false;
         }
-        const value = Number(localPort);
+        if (!/^\d{1,5}$/.test(text)) {
+            return false;
+        }
+        const value = Number(text);
         return Number.isInteger(value) && value >= 1 && value <= 65535;
     }
 
@@ -328,6 +346,13 @@
         if (!card) {
             return '';
         }
+        const configuredAccessPage = (card.dataset.accessPage || '').trim();
+        const accessPageBaseUrl = normalizedAbsoluteUrl(card.dataset.accessPageBaseUrl);
+        if (accessPageBaseUrl) {
+            return configuredAccessPage
+                ? appendPathToBaseUrl(accessPageBaseUrl, configuredAccessPage)
+                : accessPageBaseUrl;
+        }
         const accessPage = routeAccessPath(routeId);
         if (!accessPage) {
             return '';
@@ -448,7 +473,7 @@
         if (pathPrefixes.length === 0) {
             const empty = document.createElement('span');
             empty.className = 'path-prefix-empty';
-            empty.textContent = '未配置路径前缀，本地端口默认代理全部路径';
+            empty.textContent = '未配置路径前缀，代理地址默认代理全部路径';
             elements.pathPrefixList.appendChild(empty);
             return;
         }
@@ -458,7 +483,7 @@
             const label = document.createElement('span');
             label.className = 'path-prefix-chip-text';
             label.textContent = prefix;
-            label.title = '配置后对应路径会通过本地 IP 和端口访问；本地端口仍可访问任意路径';
+            label.title = '配置路径前缀将指向代理地址';
             chip.appendChild(label);
             const button = document.createElement('button');
             button.type = 'button';
@@ -543,6 +568,7 @@
             const searchable = [
                 card.dataset.name || '',
                 card.dataset.target || '',
+                card.dataset.accessPageBaseUrl || '',
                 card.dataset.accessPage || '',
                 (card.dataset.localAccess || card.dataset.localBinding) || '',
                 prefixes,
@@ -1280,7 +1306,7 @@
         elements.oldRouteId.value = '';
         elements.routeForm.reset();
         elements.enabled.value = 'false';
-        elements.localIp.value = '127.0.0.1';
+        setListenerFields('127.0.0.1', '');
         elements.pathPrefixInput.value = '';
         setPathPrefixes([]);
         elements.modal.classList.add('active');
@@ -1335,6 +1361,8 @@
             addPathPrefixFromInput();
         }
     });
+    elements.localPort.addEventListener('input', updateProxyAddress);
+    updateProxyAddress();
 
     elements.routeCards.addEventListener('click', (e) => {
         if (e.target.classList.contains('route-select-checkbox')) {
@@ -1408,9 +1436,9 @@
             elements.pathPrefixInput.value = '';
             setPathPrefixes(cfg.pathPrefixes || [cfg.pathPrefix].filter(Boolean));
             elements.targetUrl.value = displayTargetUrl(cfg.targetUrl);
+            elements.accessPageBaseUrl.value = displayTargetUrl(cfg.accessPageBaseUrl);
             elements.accessPage.value = cfg.accessPage || '';
-            elements.localIp.value = cfg.localIp || '127.0.0.1';
-            elements.localPort.value = '';
+            setListenerFields('127.0.0.1', '');
             elements.enabled.value = 'false';
             elements.modal.classList.add('active');
             elements.name.focus();
@@ -1430,9 +1458,9 @@
             elements.pathPrefixInput.value = '';
             setPathPrefixes(cfg.pathPrefixes || [cfg.pathPrefix].filter(Boolean));
             elements.targetUrl.value = displayTargetUrl(cfg.targetUrl);
+            elements.accessPageBaseUrl.value = displayTargetUrl(cfg.accessPageBaseUrl);
             elements.accessPage.value = cfg.accessPage || '';
-            elements.localIp.value = cfg.localIp || '127.0.0.1';
-            elements.localPort.value = cfg.localPort || '';
+            setListenerFields(cfg.localIp, cfg.localPort);
             elements.enabled.value = cfg.enabled.toString();
             elements.modal.classList.add('active');
         } catch (error) {
@@ -1443,7 +1471,7 @@
     async function toggleRouteStatus(routeId, enabled) {
         try {
             if (!enabled && !routeHasLocalPort(routeId)) {
-                showToast('请先编辑路由并填写本地端口后再启用', 'error');
+                showToast('请先编辑路由并填写监听端口后再启用', 'error');
                 return;
             }
             const cfg = await fetchJson('/admin/api/routes/' + encodeURIComponent(routeId));
@@ -1453,6 +1481,7 @@
                 name: cfg.name,
                 pathPrefixes: pathPrefixes,
                 targetUrl: cfg.targetUrl,
+                accessPageBaseUrl: cfg.accessPageBaseUrl || null,
                 accessPage: cfg.accessPage || null,
                 localIp: cfg.localIp,
                 localPort: cfg.localPort,
@@ -1492,6 +1521,7 @@
                 name: (updated.name || '').trim(),
                 pathPrefixes: pathPrefixes,
                 targetUrl: updated.targetUrl,
+                accessPageBaseUrl: normalizedOptionalText(updated.accessPageBaseUrl),
                 accessPage: normalizedOptionalText(updated.accessPage),
                 localIp: updated.localIp,
                 localPort: updated.localPort,
@@ -1542,13 +1572,15 @@
         const isEdit = elements.isEdit.value === 'true';
         const oldRouteId = elements.oldRouteId.value;
         const pathPrefixes = pathPrefixValues();
+        const localPort = elements.localPort.value.trim();
         const payload = {
             name: elements.name.value.trim(),
             pathPrefixes: pathPrefixes,
             targetUrl: elements.targetUrl.value.trim(),
+            accessPageBaseUrl: normalizedOptionalText(elements.accessPageBaseUrl.value),
             accessPage: normalizedOptionalText(elements.accessPage.value),
-            localIp: normalizedLocalIp(elements.localIp.value),
-            localPort: elements.localPort.value ? Number(elements.localPort.value) : null,
+            localIp: normalizedOptionalText(elements.localIp.value),
+            localPort: localPort ? Number(localPort) : null,
             enabled: elements.enabled.value === 'true'
         };
 
@@ -1565,27 +1597,35 @@
             return;
         }
         if (!payload.targetUrl) {
-            showToast('请输入目标地址', 'error');
+            showToast('请输入默认地址（兜底）', 'error');
             return;
         }
         if (!isValidTargetUrl(payload.targetUrl)) {
-            showToast('目标地址需包含端口，如 127.0.0.1:8080 或 api.example.com:8080', 'error');
+            showToast('默认地址（兜底）需包含端口，如 127.0.0.1:8080 或 api.example.com:8080', 'error');
             return;
         }
         if (hasTargetUrlConflict(payload.targetUrl, isEdit ? oldRouteId : '')) {
-            showToast('目标地址已存在，不能重复新增', 'error');
+            showToast('默认地址（兜底）已存在，不能重复新增', 'error');
             return;
         }
-        if (!isValidLocalIp(payload.localIp)) {
-            showToast('本地 IP 格式不正确，如 127.0.0.1', 'error');
+        if (payload.accessPageBaseUrl && !isValidTargetUrl(payload.accessPageBaseUrl)) {
+            showToast('访问页地址需包含端口，如 127.0.0.1:8080 或 web.example.com:8080', 'error');
             return;
         }
-        if (!isValidLocalPort(payload.localPort)) {
-            showToast('请输入本地端口，范围为 1-65535', 'error');
+        if (!isValidLocalIp(elements.localIp.value)) {
+            showToast('监听 IP 格式不正确，如 127.0.0.1 或 localhost', 'error');
+            return;
+        }
+        if (!localPort) {
+            showToast('请输入监听端口', 'error');
+            return;
+        }
+        if (!isValidLocalPort(elements.localPort.value)) {
+            showToast('监听端口需为 1-65535 的整数', 'error');
             return;
         }
         if (hasLocalBindingConflict(payload.localIp, payload.localPort, isEdit ? oldRouteId : '')) {
-            showToast('本地 IP 和端口已存在，不能重复新增', 'error');
+            showToast('监听 IP 和端口已存在，不能重复新增', 'error');
             return;
         }
 

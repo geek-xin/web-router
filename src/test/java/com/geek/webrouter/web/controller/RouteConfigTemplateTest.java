@@ -16,13 +16,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RouteConfigTemplateTest {
 
     @Test
-    void routeFormLocksDefaultLocalIpAndRequiresLocalPort() {
+    void routeFormPlacesListenerRowAboveDefaultAddressAndShowsProxyAddress() {
         String html = routeFormTemplate();
 
-        assertThat(html).contains("<label for=\"localIp\">本地 IP</label>");
-        assertThat(html).contains("<input type=\"text\" id=\"localIp\" value=\"127.0.0.1\" readonly");
-        assertThat(html).contains("<label for=\"localPort\">本地端口 <span class=\"required\">*</span></label>");
-        assertThat(html).contains("<input type=\"number\" id=\"localPort\" min=\"1\" max=\"65535\" required");
+        assertThat(html).contains("<div class=\"form-row form-row-listener\">");
+        assertThat(html).contains("<label for=\"localIp\">监听 IP</label>");
+        assertThat(html).contains("<input type=\"text\" id=\"localIp\" value=\"127.0.0.1\" readonly aria-readonly=\"true\"");
+        assertThat(html).contains("默认 127.0.0.1");
+        assertThat(html).contains("<label for=\"localPort\">监听端口 <span class=\"required\">*</span></label>");
+        assertThat(html).contains("<input type=\"text\" id=\"localPort\" required inputmode=\"numeric\"");
+        assertThat(html).contains("<label for=\"accessPage\">访问页</label>");
+        assertThat(html).contains("<input type=\"text\" id=\"accessPage\"");
+        assertThat(html).contains("<div class=\"form-row form-row-addresses\">");
+        assertThat(html).contains("<label for=\"targetUrl\">默认地址（兜底） <span class=\"required\">*</span></label>");
+        assertThat(html).contains("<label for=\"proxyAddress\">代理地址</label>");
+        assertThat(html).contains("<input type=\"text\" id=\"proxyAddress\" readonly aria-readonly=\"true\"");
+        assertThat(html.indexOf("<div class=\"form-row form-row-listener\">"))
+                .isLessThan(html.indexOf("<div class=\"form-row form-row-addresses\">"));
+        assertThat(html).doesNotContain("id=\"localBinding\"");
         assertThat(html).doesNotContain("留空则不启用本地端口访问");
     }
 
@@ -31,8 +42,10 @@ class RouteConfigTemplateTest {
         String html = routeFormTemplate();
 
         assertThat(html).contains("<input type=\"text\" id=\"name\" required maxlength=\"50\"");
+        assertThat(html).contains("<input type=\"hidden\" id=\"accessPageBaseUrl\" value=\"\">");
         assertThat(html).contains("<label for=\"accessPage\">访问页</label>");
         assertThat(html).contains("<input type=\"text\" id=\"accessPage\"");
+        assertThat(html).contains("可选访问入口");
         assertThat(html).doesNotContain("<label for=\"accessPage\">访问页 <span class=\"required\">*</span></label>");
     }
 
@@ -44,11 +57,10 @@ class RouteConfigTemplateTest {
 
         assertThat(html).contains("<label for=\"pathPrefixInput\">路径前缀</label>");
         assertThat(html).doesNotContain("<label for=\"pathPrefixInput\">路径前缀 <span class=\"required\">*</span></label>");
-        assertThat(html).contains("本地端口始终代理目标地址的全部路径");
-        assertThat(html).contains("配置后对应路径会通过本地 IP 和端口访问");
+        assertThat(html).contains("配置路径前缀将指向代理地址");
         assertThat(html).doesNotContain("不填写时，本地端口会代理全部路径");
-        assertThat(script).contains("未配置路径前缀，本地端口默认代理全部路径");
-        assertThat(script).contains("配置后对应路径会通过本地 IP 和端口访问；本地端口仍可访问任意路径");
+        assertThat(script).contains("未配置路径前缀，代理地址默认代理全部路径");
+        assertThat(script).contains("配置路径前缀将指向代理地址");
         assertThat(script).doesNotContain("请输入路径前缀");
     }
 
@@ -79,6 +91,7 @@ class RouteConfigTemplateTest {
                 .name("访问页路由")
                 .pathPrefixes(List.of("/portal"))
                 .targetUrl("http://127.0.0.1:8081")
+                .accessPageBaseUrl("http://127.0.0.1:18080")
                 .accessPage("/portal/login.html")
                 .localIp("127.0.0.1")
                 .localPort(9191)
@@ -88,6 +101,7 @@ class RouteConfigTemplateTest {
 
         String html = renderIndex(List.of(config));
 
+        assertThat(html).contains("data-access-page-base-url=\"http://127.0.0.1:18080\"");
         assertThat(html).contains("data-access-page=\"/portal/login.html\"");
         assertThat(html).contains("data-target-url=\"http://127.0.0.1:8081\"");
         assertThat(html).contains("data-local-access=\"127.0.0.1:9191\"");
@@ -102,8 +116,28 @@ class RouteConfigTemplateTest {
         assertThat(script).contains("function routeAccessPath(routeId)");
         assertThat(script).contains("function isConfiguredAccessPath(path, routeId)");
         assertThat(script).contains("if (binding && isConfiguredAccessPath(path, routeId))");
+        assertThat(script).contains("const accessPageBaseUrl = normalizedAbsoluteUrl(card.dataset.accessPageBaseUrl)");
+        assertThat(script).contains("if (accessPageBaseUrl)");
+        assertThat(script).contains("appendPathToBaseUrl(accessPageBaseUrl, configuredAccessPage)");
         assertThat(script).contains("const targetUrl = normalizedAbsoluteUrl(card.dataset.targetUrl || card.dataset.target)");
         assertThat(script).contains("return appendPathToBaseUrl(targetUrl, path)");
+    }
+
+    @Test
+    void routeFormScriptSerializesSeparateListenerFieldsIntoLocalBindingPayload() throws Exception {
+        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+
+        assertThat(script).contains("localIp: document.getElementById('localIp')");
+        assertThat(script).contains("localPort: document.getElementById('localPort')");
+        assertThat(script).contains("proxyAddress: document.getElementById('proxyAddress')");
+        assertThat(script).contains("function updateProxyAddress()");
+        assertThat(script).contains("elements.localPort.addEventListener('input', updateProxyAddress)");
+        assertThat(script).contains("localIp: normalizedOptionalText(elements.localIp.value)");
+        assertThat(script).contains("localPort: localPort ? Number(localPort) : null");
+        assertThat(script).contains("监听 IP 格式不正确，如 127.0.0.1 或 localhost");
+        assertThat(script).contains("监听端口需为 1-65535 的整数");
+        assertThat(script).doesNotContain("function parseLocalBinding(value)");
+        assertThat(script).doesNotContain("document.getElementById('localBinding')");
     }
 
     @Test
@@ -210,7 +244,7 @@ class RouteConfigTemplateTest {
 
         String html = renderIndex(List.of(config));
 
-        assertThat(html).contains("停用中，不监听本地端口");
+        assertThat(html).contains("停用中，不监听代理端口");
         assertThat(html).doesNotContain("<strong title=\"127.0.0.1:9191\">127.0.0.1:9191</strong>");
         assertThat(html).doesNotContain("data-local-binding=\"127.0.0.1:9191\"");
     }
@@ -229,7 +263,7 @@ class RouteConfigTemplateTest {
         String html = renderIndex(List.of(config));
 
         assertThat(html).contains("data-has-local-port=\"false\"");
-        assertThat(html).contains("data-enabled=\"false\" disabled=\"disabled\" title=\"请先编辑路由并填写本地端口后再启用\"");
+        assertThat(html).contains("data-enabled=\"false\" disabled=\"disabled\" title=\"请先编辑路由并填写监听端口后再启用\"");
     }
 
     private String renderIndex(List<RouteConfig> configs) {

@@ -75,6 +75,7 @@ class RouteConfigServiceImplTest {
                 .name("Portal")
                 .pathPrefixes(List.of("/portal"))
                 .targetUrl("http://127.0.0.1:8081")
+                .accessPageBaseUrl("  http://127.0.0.1:18080  ")
                 .accessPage("  /portal/login.html  ")
                 .enabled(false)
                 .build();
@@ -82,6 +83,8 @@ class RouteConfigServiceImplTest {
         RouteConfig saved = service().create(config);
         RouteConfig loaded = service().getByName(saved.getId());
 
+        assertThat(saved.getAccessPageBaseUrl()).isEqualTo("http://127.0.0.1:18080");
+        assertThat(loaded.getAccessPageBaseUrl()).isEqualTo("http://127.0.0.1:18080");
         assertThat(saved.getAccessPage()).isEqualTo("/portal/login.html");
         assertThat(loaded.getAccessPage()).isEqualTo("/portal/login.html");
     }
@@ -92,12 +95,14 @@ class RouteConfigServiceImplTest {
                 .name("Blank Portal")
                 .pathPrefixes(List.of("/blank-portal"))
                 .targetUrl("http://127.0.0.1:8082")
+                .accessPageBaseUrl("   ")
                 .accessPage("   ")
                 .enabled(false)
                 .build();
 
         RouteConfig saved = service().create(config);
 
+        assertThat(saved.getAccessPageBaseUrl()).isNull();
         assertThat(saved.getAccessPage()).isNull();
     }
 

@@ -216,7 +216,7 @@ class LocalPortProxyServiceTest {
             assertThat(targetRequests).hasValue(1);
             assertThat(logService.snapshot().totalRequests()).isEqualTo(1);
             assertThat(logService.snapshot().recentLogs().getFirst().accessAddress())
-                    .isEqualTo("127.0.0.1:" + localPort + "/reportManage/api/configuration?show=1");
+                    .isEqualTo("127.0.0.1:" + localPort);
         } finally {
             service.stopAll();
             targetServer.disposeNow();
