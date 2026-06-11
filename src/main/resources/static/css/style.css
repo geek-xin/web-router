@@ -2838,7 +2838,7 @@ td code {
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(2),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(2),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(2) {
-    width: 160px;
+    width: 146px;
     white-space: nowrap;
 }
 
@@ -2854,22 +2854,22 @@ td code {
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(4),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(4),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(4) {
-    width: auto;
+    width: 190px;
+    white-space: nowrap;
 }
 
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(5),
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(5),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(5),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(5) {
-    width: 58px;
-    white-space: nowrap;
+    width: auto;
 }
 
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(6),
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(6),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(6),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(6) {
-    width: 82px;
+    width: 58px;
     white-space: nowrap;
 }
 
@@ -2877,6 +2877,14 @@ td code {
 .route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(7),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(7),
 .route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(7) {
+    width: 82px;
+    white-space: nowrap;
+}
+
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table th:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="realtime"] .compact-table td:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table th:nth-child(8),
+.route-log-tabs-card [data-route-log-panel="slow"] .compact-table td:nth-child(8) {
     width: 136px;
     white-space: nowrap;
 }
@@ -2897,7 +2905,7 @@ td code {
 
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(2),
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(2) {
-    width: 160px;
+    width: 146px;
 }
 
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(3),
@@ -2906,7 +2914,10 @@ td code {
 }
 
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(4),
-.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(4),
+.route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(4) {
+    width: 190px;
+}
+
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table th:nth-child(5),
 .route-log-tabs-card [data-route-log-panel="diagnostics"] .compact-table td:nth-child(5) {
     width: auto;

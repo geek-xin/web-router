@@ -32,6 +32,8 @@ class ProxyRequestLogControllerTest {
                 .jsonPath("$.data.requestsByIp['127.0.0.1']").isEqualTo(2)
                 .jsonPath("$.data.pathStats['/route-a/one']").isEqualTo(1)
                 .jsonPath("$.data.pathStats['/route-a/three']").isEqualTo(1)
+                .jsonPath("$.data.durationTopLogs.length()").isEqualTo(2)
+                .jsonPath("$.data.durationTopLogs[0].path").isEqualTo("/route-a/one")
                 .jsonPath("$.data.recentLogs.length()").isEqualTo(2)
                 .jsonPath("$.data.recentLogs[0].routeId").isEqualTo("route-a")
                 .jsonPath("$.data.recentLogs[0].path").isEqualTo("/route-a/three")

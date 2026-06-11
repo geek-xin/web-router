@@ -122,7 +122,10 @@ cd "\${APP_DIR}"
 JAR_FILE="\${APP_DIR}/${APP_NAME}.jar"
 PID_FILE="\${APP_DIR}/web-router.pid"
 LOG_DIR="\${APP_DIR}/logs"
-LOG_FILE="\${LOG_DIR}/web-router.out"
+LOG_OUT_FILE="\${LOG_DIR}/web-router.out"
+LOG_ERR_FILE="\${LOG_DIR}/web-router.err"
+BOOTSTRAP_OUT_FILE="\${LOG_DIR}/web-router.bootstrap.out"
+BOOTSTRAP_ERR_FILE="\${LOG_DIR}/web-router.bootstrap.err"
 START_WAIT_SECONDS="\${WEB_ROUTER_START_WAIT_SECONDS:-5}"
 
 pid_matches_app() {
@@ -150,7 +153,7 @@ if [ -f "\${PID_FILE}" ]; then
 fi
 
 mkdir -p "\${LOG_DIR}" "\${APP_DIR}/config/routes"
-nohup java -jar "\${JAR_FILE}" "\$@" > "\${LOG_FILE}" 2>&1 &
+nohup java -jar "\${JAR_FILE}" "\$@" > "\${BOOTSTRAP_OUT_FILE}" 2> "\${BOOTSTRAP_ERR_FILE}" &
 APP_PID=\$!
 echo "\${APP_PID}" > "\${PID_FILE}"
 
@@ -158,12 +161,16 @@ sleep "\${START_WAIT_SECONDS}"
 if ! kill -0 "\${APP_PID}" 2>/dev/null; then
   rm -f "\${PID_FILE}"
   echo "web-router failed to start. Recent log output:" >&2
-  tail -n 80 "\${LOG_FILE}" >&2 || true
+  tail -n 80 "\${LOG_ERR_FILE}" >&2 || true
+  tail -n 80 "\${LOG_OUT_FILE}" >&2 || true
+  tail -n 80 "\${BOOTSTRAP_ERR_FILE}" >&2 || true
+  tail -n 80 "\${BOOTSTRAP_OUT_FILE}" >&2 || true
   exit 1
 fi
 
 echo "web-router started, pid=\${APP_PID}"
-echo "Log file: \${LOG_FILE}"
+echo "Log file: \${LOG_OUT_FILE}"
+echo "Error log file: \${LOG_ERR_FILE}"
 RUNEOF
 chmod +x "${STAGING_DIR}/run.sh"
 
@@ -255,8 +262,10 @@ set "APP_DIR=%CD%"
 set "JAR_FILE=%CD%\\%APP_NAME%.jar"
 set "PID_FILE=%CD%\\web-router.pid"
 set "LOG_DIR=%CD%\\logs"
-set "LOG_FILE=%LOG_DIR%\\web-router.out"
-set "ERR_FILE=%LOG_DIR%\\web-router.err"
+set "LOG_OUT_FILE=%LOG_DIR%\\web-router.out"
+set "LOG_ERR_FILE=%LOG_DIR%\\web-router.err"
+set "BOOTSTRAP_OUT_FILE=%LOG_DIR%\\web-router.bootstrap.out"
+set "BOOTSTRAP_ERR_FILE=%LOG_DIR%\\web-router.bootstrap.err"
 set "APP_ARGS=%*"
 if "%WEB_ROUTER_START_WAIT_SECONDS%"=="" set "WEB_ROUTER_START_WAIT_SECONDS=5"
 
@@ -281,7 +290,7 @@ if exist "%PID_FILE%" (
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 if not exist "%CD%\\config\\routes" mkdir "%CD%\\config\\routes"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "\$jar = \$env:JAR_FILE; \$appArgs = \$env:APP_ARGS; \$quote = [char]34; \$argLine = '-jar ' + \$quote + \$jar + \$quote; if (\$appArgs) { \$argLine = \$argLine + ' ' + \$appArgs }; \$process = Start-Process -FilePath 'java' -ArgumentList \$argLine -WorkingDirectory \$env:APP_DIR -RedirectStandardOutput \$env:LOG_FILE -RedirectStandardError \$env:ERR_FILE -WindowStyle Hidden -PassThru; \$process.Id" > "%PID_FILE%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "\$jar = \$env:JAR_FILE; \$appArgs = \$env:APP_ARGS; \$quote = [char]34; \$argLine = '-jar ' + \$quote + \$jar + \$quote; if (\$appArgs) { \$argLine = \$argLine + ' ' + \$appArgs }; \$process = Start-Process -FilePath 'java' -ArgumentList \$argLine -WorkingDirectory \$env:APP_DIR -RedirectStandardOutput \$env:BOOTSTRAP_OUT_FILE -RedirectStandardError \$env:BOOTSTRAP_ERR_FILE -WindowStyle Hidden -PassThru; \$process.Id" > "%PID_FILE%"
 
 if errorlevel 1 (
   del /f /q "%PID_FILE%" >nul 2>nul
@@ -295,13 +304,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Get-Process -Id %APP
 if errorlevel 1 (
   del /f /q "%PID_FILE%" >nul 2>nul
   echo web-router failed to start. Recent log output:
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \$env:LOG_FILE) { Get-Content \$env:LOG_FILE -Tail 80 }; if (Test-Path \$env:ERR_FILE) { Get-Content \$env:ERR_FILE -Tail 80 }"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \$env:LOG_ERR_FILE) { Get-Content \$env:LOG_ERR_FILE -Tail 80 }; if (Test-Path \$env:LOG_OUT_FILE) { Get-Content \$env:LOG_OUT_FILE -Tail 80 }; if (Test-Path \$env:BOOTSTRAP_ERR_FILE) { Get-Content \$env:BOOTSTRAP_ERR_FILE -Tail 80 }; if (Test-Path \$env:BOOTSTRAP_OUT_FILE) { Get-Content \$env:BOOTSTRAP_OUT_FILE -Tail 80 }"
   exit /b 1
 )
 
 echo web-router started, pid=%APP_PID%
-echo Log file: %LOG_FILE%
-echo Error log file: %ERR_FILE%
+echo Log file: %LOG_OUT_FILE%
+echo Error log file: %LOG_ERR_FILE%
 RUNBATEOF
 
 cat > "${STAGING_DIR}/stop.bat" <<STOPBATEOF

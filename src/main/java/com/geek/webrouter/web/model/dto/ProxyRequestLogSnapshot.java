@@ -11,6 +11,7 @@ public record ProxyRequestLogSnapshot(
         Map<String, Long> pathStats,
         Map<String, Long> pathDurationStats,
         Map<String, Long> pathMaxDurationStats,
+        List<ProxyRequestLogEntry> durationTopLogs,
         List<ProxyRequestLogEntry> recentLogs
 ) {
 }

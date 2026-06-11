@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 public class ProxyRequestLogService {
 
     private static final int MAX_RECENT_LOGS = 100;
+    private static final int MAX_DURATION_TOP_LOGS = 100;
 
     private final AtomicLong totalRequests = new AtomicLong();
     private final AtomicLong totalDurationMs = new AtomicLong();
@@ -34,6 +35,8 @@ public class ProxyRequestLogService {
     private final Map<String, Map<String, AtomicLong>> durationByRouteAndPath = new ConcurrentHashMap<>();
     private final Map<String, Map<String, AtomicLong>> maxDurationByRouteAndPath = new ConcurrentHashMap<>();
     private final ArrayDeque<ProxyRequestLogEntry> recentLogs = new ArrayDeque<>();
+    private final ArrayList<ProxyRequestLogEntry> durationTopLogs = new ArrayList<>();
+    private final Map<String, ArrayList<ProxyRequestLogEntry>> durationTopLogsByRoute = new ConcurrentHashMap<>();
     private final Sinks.Many<ProxyRequestLogEntry> sink = Sinks.many().multicast().directBestEffort();
 
     public void record(ProxyRequestLogEntry entry) {
@@ -81,6 +84,14 @@ public class ProxyRequestLogService {
                 recentLogs.removeLast();
             }
         }
+        synchronized (durationTopLogs) {
+            addDurationTopLog(durationTopLogs, timestamped);
+        }
+        ArrayList<ProxyRequestLogEntry> routeDurationTopLogs = durationTopLogsByRoute
+                .computeIfAbsent(routeId, ignored -> new ArrayList<>());
+        synchronized (routeDurationTopLogs) {
+            addDurationTopLog(routeDurationTopLogs, timestamped);
+        }
 
         sink.tryEmitNext(timestamped);
     }
@@ -94,6 +105,10 @@ public class ProxyRequestLogService {
         synchronized (recentLogs) {
             logs = new ArrayList<>(recentLogs);
         }
+        ArrayList<ProxyRequestLogEntry> topLogs;
+        synchronized (durationTopLogs) {
+            topLogs = new ArrayList<>(durationTopLogs);
+        }
         return new ProxyRequestLogSnapshot(
                 totalRequests.get(),
                 totalDurationMs.get(),
@@ -102,6 +117,7 @@ public class ProxyRequestLogService {
                 pathStats,
                 pathDurationStats,
                 pathMaxDurationStats,
+                topLogs,
                 logs
         );
     }
@@ -117,6 +133,15 @@ public class ProxyRequestLogService {
                     .filter(entry -> routeId.equals(baseRouteId(entry.routeId())))
                     .collect(Collectors.toCollection(ArrayList::new));
         }
+        ArrayList<ProxyRequestLogEntry> routeTopLogs = durationTopLogsByRoute.get(routeId);
+        ArrayList<ProxyRequestLogEntry> topLogs;
+        if (routeTopLogs == null) {
+            topLogs = new ArrayList<>();
+        } else {
+            synchronized (routeTopLogs) {
+                topLogs = new ArrayList<>(routeTopLogs);
+            }
+        }
         long routeTotal = totalRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
         long routeDurationMs = totalDurationMsByRoute.getOrDefault(routeId, new AtomicLong()).get();
         return new ProxyRequestLogSnapshot(
@@ -127,6 +152,7 @@ public class ProxyRequestLogService {
                 pathStats,
                 pathDurationStats,
                 pathMaxDurationStats,
+                topLogs,
                 logs
         );
     }
@@ -171,5 +197,40 @@ public class ProxyRequestLogService {
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
+    }
+
+    private void addDurationTopLog(ArrayList<ProxyRequestLogEntry> logs, ProxyRequestLogEntry entry) {
+        logs.add(entry);
+        logs.sort(this::compareDurationTopLog);
+        while (logs.size() > MAX_DURATION_TOP_LOGS) {
+            logs.removeLast();
+        }
+    }
+
+    private int compareDurationTopLog(ProxyRequestLogEntry left, ProxyRequestLogEntry right) {
+        int durationCompare = Long.compare(
+                Math.max(0, right.durationMs()),
+                Math.max(0, left.durationMs())
+        );
+        if (durationCompare != 0) {
+            return durationCompare;
+        }
+        Instant leftTime = left.timestamp();
+        Instant rightTime = right.timestamp();
+        if (leftTime != null && rightTime != null) {
+            int timestampCompare = rightTime.compareTo(leftTime);
+            if (timestampCompare != 0) {
+                return timestampCompare;
+            }
+        } else if (leftTime == null && rightTime != null) {
+            return 1;
+        } else if (leftTime != null) {
+            return -1;
+        }
+        return normalizedPath(left.path()).compareTo(normalizedPath(right.path()));
+    }
+
+    private String normalizedPath(String path) {
+        return path == null || path.isBlank() ? "/" : path;
     }
 }

@@ -253,7 +253,8 @@ class RouteConfigTemplateTest {
         assertThat(html).contains("id=\"routeLogDiagnosticsPanel\"");
         assertThat(html).contains("id=\"routeLogDiagnosticEmpty\"");
         assertThat(html).contains("id=\"routeLogDiagnosticRows\"");
-        assertThat(html).contains("<th>详情</th>");
+        assertThat(html).contains("<th>操作</th>");
+        assertThat(html).doesNotContain("<th>参数</th>");
         assertThat(html).doesNotContain("REQUEST DIAGNOSTICS");
         assertThat(html).doesNotContain("已复制请求列表");
     }

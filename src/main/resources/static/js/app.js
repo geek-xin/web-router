@@ -92,6 +92,7 @@
         pathStats: {},
         pathDurationStats: {},
         pathMaxDurationStats: {},
+        durationTopLogs: [],
         recentLogs: []
     };
     let routeFilterTimer = null;
@@ -909,6 +910,31 @@
         return !pathKeyword || (path || '').toLowerCase().includes(pathKeyword);
     }
 
+    function compareDurationTopLogs(left, right) {
+        const durationDiff = (Number(right.durationMs) || 0) - (Number(left.durationMs) || 0);
+        if (durationDiff) {
+            return durationDiff;
+        }
+        const rightTime = new Date(right.timestamp || 0).getTime() || 0;
+        const leftTime = new Date(left.timestamp || 0).getTime() || 0;
+        if (rightTime !== leftTime) {
+            return rightTime - leftTime;
+        }
+        return normalizedLogPath(left.path).localeCompare(normalizedLogPath(right.path));
+    }
+
+    function buildDurationTopLogs(logs) {
+        return [...(logs || [])]
+            .sort(compareDurationTopLogs)
+            .slice(0, ROUTE_LOG_MAX_RECENT);
+    }
+
+    function updateDurationTopLogs(logs, entry) {
+        return [entry, ...(logs || [])]
+            .sort(compareDurationTopLogs)
+            .slice(0, ROUTE_LOG_MAX_RECENT);
+    }
+
     function routeLogRow(entry, durationLabel, index) {
         const tr = document.createElement('tr');
         tr.appendChild(cell(String((index || 0) + 1), 'col-index'));
@@ -966,13 +992,6 @@
         const pathKeyword = (elements.routeLogPathSearch.value || '').trim().toLowerCase();
         const visibleLogs = (logs || [])
             .filter(routeLogMatchesSearch)
-            .sort((a, b) => {
-                const durationDiff = (Number(b.durationMs) || 0) - (Number(a.durationMs) || 0);
-                if (durationDiff) {
-                    return durationDiff;
-                }
-                return normalizedLogPath(a.path).localeCompare(normalizedLogPath(b.path));
-            })
             .slice(0, routeLogDisplayLimit());
         renderLogRows(elements.routeLogSlowRows, visibleLogs, pathKeyword ? '没有匹配的路径' : '暂无代理请求');
     }
@@ -1018,7 +1037,6 @@
             const accessAddress = displayLogDetailValue(entry.accessAddress);
             tr.appendChild(cell(accessAddress, 'access-cell', accessAddress === '-' ? '' : accessAddress));
             tr.appendChild(cell(normalizedLogPath(entry.path), 'path-cell'));
-            tr.appendChild(cell(logDetailText(entry.requestParams), 'path-cell'));
             tr.appendChild(cell((entry.status || 0).toString()));
             tr.appendChild(cell(formatDuration(entry.durationMs || 0)));
             const actionCell = document.createElement('td');
@@ -1068,7 +1086,7 @@
     function renderRouteLogTables() {
         renderPathStats();
         renderRouteLogs(routeLogState.recentLogs || []);
-        renderSlowLogs(routeLogState.recentLogs || []);
+        renderSlowLogs(routeLogState.durationTopLogs || []);
     }
 
     function addRouteLog(entry) {
@@ -1085,6 +1103,7 @@
         routeLogState.pathDurationStats[path] = (routeLogState.pathDurationStats[path] || 0) + durationMs;
         routeLogState.pathMaxDurationStats[path] = Math.max(routeLogState.pathMaxDurationStats[path] || 0, durationMs);
         routeLogState.recentLogs = [entry, ...(routeLogState.recentLogs || [])].slice(0, ROUTE_LOG_MAX_RECENT);
+        routeLogState.durationTopLogs = updateDurationTopLogs(routeLogState.durationTopLogs, entry);
         renderRouteLogStats();
     }
 
@@ -1178,6 +1197,7 @@
                 pathStats: snapshot.pathStats || buildPathStats(logs),
                 pathDurationStats: snapshot.pathDurationStats || buildPathDurationStats(logs),
                 pathMaxDurationStats: snapshot.pathMaxDurationStats || buildPathMaxDurationStats(logs),
+                durationTopLogs: (snapshot.durationTopLogs || buildDurationTopLogs(logs)).slice(0, ROUTE_LOG_MAX_RECENT),
                 recentLogs: logs.slice(0, ROUTE_LOG_MAX_RECENT)
             };
             renderRouteLogStats();
@@ -1218,6 +1238,7 @@
             pathStats: {},
             pathDurationStats: {},
             pathMaxDurationStats: {},
+            durationTopLogs: [],
             recentLogs: []
         };
         elements.routeLogTitle.textContent = '路由日志';

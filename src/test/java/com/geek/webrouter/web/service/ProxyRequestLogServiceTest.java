@@ -39,6 +39,9 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/test/a", 12L)
                 .containsEntry("/test/b", 20L)
                 .containsEntry("/test/c", 8L);
+        assertThat(snapshot.durationTopLogs())
+                .extracting(ProxyRequestLogEntry::path)
+                .containsExactly("/test/b", "/test/a", "/test/c");
         assertThat(snapshot.recentLogs()).hasSize(3);
         assertThat(snapshot.recentLogs().getFirst().path()).isEqualTo("/test/c");
         assertThat(snapshot.recentLogs().getFirst().accessAddress()).isEqualTo("127.0.0.1:9191");
@@ -91,6 +94,9 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/route-a/one", 12L)
                 .containsEntry("/route-a/three", 8L)
                 .doesNotContainKey("/route-b/two");
+        assertThat(snapshot.durationTopLogs())
+                .extracting(ProxyRequestLogEntry::path)
+                .containsExactly("/route-a/one", "/route-a/three");
         assertThat(snapshot.recentLogs())
                 .extracting(ProxyRequestLogEntry::routeId)
                 .containsExactly("route-a", "route-a");
@@ -125,9 +131,32 @@ class ProxyRequestLogServiceTest {
                 .containsEntry("/api/one", 12L)
                 .containsEntry("/admin/two", 9L)
                 .doesNotContainKey("/other");
+        assertThat(snapshot.durationTopLogs())
+                .extracting(ProxyRequestLogEntry::routeId)
+                .containsExactly("route-a", "route-a__1");
         assertThat(snapshot.recentLogs())
                 .extracting(ProxyRequestLogEntry::routeId)
                 .containsExactly("route-a__1", "route-a");
+    }
+
+    @Test
+    void durationTopLogsKeepSlowEntriesBeyondRecentLogLimit() {
+        ProxyRequestLogService service = new ProxyRequestLogService();
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/old-slowest", "127.0.0.1", 200, 1_000));
+        for (int index = 0; index < 100; index += 1) {
+            service.record(new ProxyRequestLogEntry(
+                    null, "route-a", "GET", "/recent-" + index, "127.0.0.1", 200, index));
+        }
+
+        var snapshot = service.snapshot("route-a");
+
+        assertThat(snapshot.recentLogs())
+                .extracting(ProxyRequestLogEntry::path)
+                .doesNotContain("/old-slowest");
+        assertThat(snapshot.durationTopLogs()).hasSize(100);
+        assertThat(snapshot.durationTopLogs().getFirst().path()).isEqualTo("/old-slowest");
     }
 
 }
