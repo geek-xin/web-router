@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Activity, Eye, Network, RefreshCw, Route as RouteIcon, Sparkles } from 'lucide-react';
+import { Activity, Eye, RefreshCw, Route as RouteIcon, Sparkles } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -152,11 +152,11 @@ export default function App() {
   return (
     <main className="min-h-screen px-4 py-6 text-clay-ink sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-6">
-        <BankingHero onRefresh={loadRoutes} loading={loading} />
+        <ChunkyHero onRefresh={loadRoutes} loading={loading} />
         <section className="grid gap-4 md:grid-cols-3" aria-label="路由概览">
-          <StatusCard tone="glass-card-gold" label="配置总数" value={routes.length} icon={<RouteIcon className="h-6 w-6" />} />
-          <StatusCard tone="glass-card-green" label="启用路由" value={routes.filter((route) => route.enabled).length} icon={<Activity className="h-6 w-6" />} />
-          <Card className="glass-card-cyan p-5">
+          <StatusCard tone="chunky-card-yellow" label="配置总数" value={routes.length} icon={<RouteIcon className="h-6 w-6" />} />
+          <StatusCard tone="chunky-card-mint" label="启用路由" value={routes.filter((route) => route.enabled).length} icon={<Activity className="h-6 w-6" />} />
+          <Card className="chunky-card-blue p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <span className="text-xs font-black uppercase tracking-[0.2em] text-clay-muted">配置目录</span>
@@ -220,29 +220,25 @@ export default function App() {
   );
 }
 
-function BankingHero({ onRefresh, loading }: { onRefresh: () => void; loading: boolean }) {
+function ChunkyHero({ onRefresh, loading }: { onRefresh: () => void; loading: boolean }) {
   return (
-    <header className="glass-panel relative overflow-hidden p-6 md:p-8">
-      <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-clay-primary/35 blur-2xl" />
-      <div className="absolute -left-16 bottom-0 h-36 w-36 rounded-full bg-clay-accent/30 blur-2xl" />
-      <div className="absolute bottom-4 right-10 hidden rotate-6 rounded-[24px] border border-clay-border bg-clay-glass p-5 shadow-clay backdrop-blur-[18px] md:block">
-        <Network className="h-14 w-14 text-clay-ink" />
-      </div>
-      <div className="relative grid gap-6 md:grid-cols-[1fr_360px] md:items-center">
+    <header className="chunky-panel relative overflow-hidden bg-white p-6 md:p-8">
+      <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full border-[3px] border-clay-border bg-clay-yellow" />
+      <div className="relative grid gap-6 md:grid-cols-[1fr_340px] md:items-center">
         <div>
-          <Badge variant="indigo" className="mb-4 gap-2"><Sparkles className="h-4 w-4" />WEB ROUTER TRUST CONSOLE</Badge>
+          <Badge variant="orange" className="mb-4 gap-2"><Sparkles className="h-4 w-4" />WEB ROUTER CONTROL</Badge>
           <h1 className="max-w-3xl text-4xl font-black leading-tight text-clay-ink md:text-6xl">路由管理</h1>
-          <p className="mt-3 max-w-2xl text-lg font-bold text-clay-muted">以数字银行级玻璃态视图管理路径转发、监听端口和实时日志，重点突出安全、稳定和可信状态。</p>
+          <p className="mt-3 max-w-2xl text-lg font-bold text-clay-muted">路径转发、监听端口、实时日志，一处管理。</p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button variant="primary" onClick={onRefresh} disabled={loading}><RefreshCw className="h-4 w-4" />刷新路由</Button>
             <Badge variant="mint">SSE 实时日志</Badge>
-            <Badge variant="yellow">玻璃态卡片</Badge>
+            <Badge variant="yellow">JSON 配置</Badge>
           </div>
         </div>
         <div className="grid grid-cols-3 items-center gap-3 text-center font-black">
-          <FlowStep label="请求" value="/api/**" tone="glass-card-blue" />
-          <FlowStep label="匹配" value="前缀" tone="glass-card-gold" />
-          <FlowStep label="转发" value="host:port" tone="glass-card-green" />
+          <FlowStep label="请求" value="/api/**" tone="chunky-card-blue" />
+          <FlowStep label="匹配" value="前缀" tone="chunky-card-yellow" />
+          <FlowStep label="转发" value="host:port" tone="chunky-card-mint" />
         </div>
       </div>
     </header>
@@ -250,7 +246,7 @@ function BankingHero({ onRefresh, loading }: { onRefresh: () => void; loading: b
 }
 
 function FlowStep({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return <div className={`${tone} glass-pressable rounded-[24px] border border-clay-border p-4 shadow-clay-sm backdrop-blur-[16px]`}><strong className="block text-sm md:text-base">{value}</strong><small className="font-black text-clay-muted">{label}</small></div>;
+  return <div className={`${tone} chunky-pressable rounded-[24px] border-[3px] border-clay-border p-4 shadow-clay-sm`}><strong className="block text-sm md:text-base">{value}</strong><small className="font-black text-clay-muted">{label}</small></div>;
 }
 
 function StatusCard({ label, value, icon, tone }: { label: string; value: number; icon: React.ReactNode; tone: string }) {
@@ -261,7 +257,7 @@ function StatusCard({ label, value, icon, tone }: { label: string; value: number
           <span className="text-xs font-black uppercase tracking-[0.2em] text-clay-muted">{label}</span>
           <strong className="mt-2 block text-4xl font-black text-clay-ink">{value}</strong>
         </div>
-        <div className="rounded-2xl border border-clay-border bg-white/10 p-3 shadow-clay-sm">{icon}</div>
+        <div className="rounded-2xl border-[3px] border-clay-border bg-white p-3 shadow-clay-sm">{icon}</div>
       </div>
     </Card>
   );
