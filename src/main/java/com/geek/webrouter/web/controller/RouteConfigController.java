@@ -39,14 +39,11 @@ public class RouteConfigController {
 
     @GetMapping
     public String index(Model model) {
-        List<RouteConfig> configs = routeConfigService.listAll();
-        model.addAttribute("configs", configs);
         model.addAttribute("routesConfigDirLabel", CommonConstants.ROUTES_CONFIG_DIR);
         model.addAttribute("routesConfigDir", Paths.get(CommonConstants.ROUTES_CONFIG_DIR)
                 .toAbsolutePath()
                 .normalize()
                 .toString());
-        model.addAttribute("assetVersion", System.currentTimeMillis());
         return "index";
     }
 

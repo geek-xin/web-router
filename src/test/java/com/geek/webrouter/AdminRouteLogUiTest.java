@@ -11,29 +11,30 @@ class AdminRouteLogUiTest {
 
     @Test
     void routeLogTablesUseOperationHeaderAndHideDiagnosticParamsColumn() throws Exception {
-        String template = Files.readString(Path.of("src/main/resources/templates/index.html"));
-        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+        String source = Files.readString(Path.of("frontend/src/features/logs/RouteLogDialog.tsx"));
 
-        assertThat(template).doesNotContain("<th>详情</th>");
-        assertThat(template).contains("<th>操作</th>");
-        assertThat(template).doesNotContain("<th>参数</th>");
-        assertThat(script).doesNotContain("tr.appendChild(cell(logDetailText(entry.requestParams), 'path-cell'));");
+        assertThat(source).contains("<TableHead>操作</TableHead>");
+        assertThat(source).contains("诊断分析");
+        assertThat(source).doesNotContain("<TableHead>参数</TableHead>");
+        assertThat(source).contains("拷贝分析");
     }
 
     @Test
     void singleDurationTopUsesBackendStartupScopeList() throws Exception {
-        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+        String dialog = Files.readString(Path.of("frontend/src/features/logs/RouteLogDialog.tsx"));
+        String utils = Files.readString(Path.of("frontend/src/features/logs/log-utils.ts"));
 
-        assertThat(script).contains("durationTopLogs: (snapshot.durationTopLogs || buildDurationTopLogs(logs)).slice(0, ROUTE_LOG_MAX_RECENT)");
-        assertThat(script).contains("renderSlowLogs(routeLogState.durationTopLogs || [])");
-        assertThat(script).contains("routeLogState.durationTopLogs = updateDurationTopLogs(routeLogState.durationTopLogs, entry)");
+        assertThat(dialog).contains("state.durationTopLogs.length > 0 ? state.durationTopLogs : buildDurationTopLogs(state.recentLogs)");
+        assertThat(utils).contains("durationTopLogs: (snapshot.durationTopLogs || buildDurationTopLogs(recentLogs)).slice(0, ROUTE_LOG_MAX_RECENT)");
+        assertThat(utils).contains("durationTopLogs: updateDurationTopLogs(state.durationTopLogs, entry)");
     }
 
     @Test
-    void routeLogTimeAndAccessColumnsFavorCompactTimeAndWiderAccessAddress() throws Exception {
-        String css = Files.readString(Path.of("src/main/resources/static/css/style.css"));
+    void routeLogTimeAndAccessColumnsFavorCompactTimeAndAccessAddress() throws Exception {
+        String source = Files.readString(Path.of("frontend/src/features/logs/RouteLogDialog.tsx"));
 
-        assertThat(css).contains("width: 146px;\n    white-space: nowrap;");
-        assertThat(css).contains("width: 190px;\n    white-space: nowrap;");
+        assertThat(source).contains("formatTime(entry.time)");
+        assertThat(source).contains("entry.accessAddress || '-'");
+        assertThat(source).contains("实际访问: ");
     }
 }
