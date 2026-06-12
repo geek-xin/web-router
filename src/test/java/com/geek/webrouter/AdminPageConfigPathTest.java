@@ -10,34 +10,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AdminPageConfigPathTest {
 
     @Test
-    void configDirectoryFullPathIsHiddenUntilUserTogglesIt() throws Exception {
+    void adminTemplateMountsReactAppAndPassesConfigDirectoryMetadata() throws Exception {
         String template = Files.readString(Path.of("src/main/resources/templates/index.html"));
-        String script = Files.readString(Path.of("src/main/resources/static/js/app.js"));
+        String app = Files.readString(Path.of("frontend/src/App.tsx"));
 
-        assertThat(template).contains("id=\"btnToggleConfigPath\"");
-        assertThat(template).contains("aria-controls=\"configPathFull\"");
-        assertThat(template).contains("aria-expanded=\"false\"");
-        assertThat(template).contains("id=\"configPathFull\"");
-        assertThat(template).contains("hidden");
-        assertThat(template).contains("class=\"status-path-toggle-icon status-path-toggle-icon-eye\"");
-        assertThat(template).contains("class=\"status-path-toggle-icon status-path-toggle-icon-eye-off\"");
+        assertThat(template).contains("id=\"root\"");
+        assertThat(template).contains("/admin/assets/app.css");
+        assertThat(template).contains("/admin/assets/app.js");
+        assertThat(template).contains("name=\"routes-config-dir\"");
+        assertThat(template).contains("name=\"routes-config-dir-label\"");
+        assertThat(template).doesNotContain("/css/style.css");
+        assertThat(template).doesNotContain("/js/app.js");
 
-        assertThat(script).contains("btnToggleConfigPath: document.getElementById('btnToggleConfigPath')");
-        assertThat(script).contains("configPathFull: document.getElementById('configPathFull')");
-        assertThat(script).contains("elements.configPathFull.hidden = !willShow");
-        assertThat(script).contains("elements.btnToggleConfigPath.setAttribute('aria-expanded', String(willShow))");
-        assertThat(script).contains("elements.btnToggleConfigPath.setAttribute('aria-label', willShow ? '隐藏完整配置目录' : '显示完整配置目录')");
-        assertThat(script).doesNotContain("elements.btnToggleConfigPath.textContent");
+        assertThat(app).contains("routes-config-dir");
+        assertThat(app).contains("routes-config-dir-label");
+        assertThat(app).contains("显示完整配置目录");
+        assertThat(app).contains("隐藏完整配置目录");
+    }
 
-        String css = Files.readString(Path.of("src/main/resources/static/css/style.css"));
-        String statusGridCss = css.substring(css.indexOf(".status-grid {"),
-                css.indexOf(".status-card,", css.indexOf(".status-grid {")));
-        assertThat(css).contains(".status-grid {\n    display: grid;\n    grid-template-columns: repeat(3, minmax(0, 1fr));\n    gap: 14px;");
-        assertThat(statusGridCss).doesNotContain("align-items: start;");
-        assertThat(css).contains(".status-card-file .status-path-full[hidden]");
-        assertThat(css).contains("display: block;\n    visibility: hidden;\n    opacity: 0;\n    pointer-events: none;");
-        assertThat(css).contains(".status-path-toggle-icon");
-        assertThat(css).contains(".status-path-toggle[aria-expanded=\"true\"] .status-path-toggle-icon-eye");
-        assertThat(css).doesNotContain(".status-path-toggle-pupil");
+    @Test
+    void chunkyThemeDefinesConsolePaletteAndAccessibleInteractions() throws Exception {
+        String css = Files.readString(Path.of("frontend/src/styles.css"));
+
+        assertThat(css).contains("chunky-panel");
+        assertThat(css).contains("chunky-card-blue");
+        assertThat(css).contains("chunky-card-yellow");
+        assertThat(css).contains("chunky-card-mint");
+        assertThat(css).contains("glass-card-blue");
+        assertThat(css).contains("glass-card-gold");
+        assertThat(css).contains("glass-card-green");
+        assertThat(css).contains("--color-primary: #F45113");
+        assertThat(css).contains("border-[3px]");
+        assertThat(css).contains("shadow-clay");
+        assertThat(css).contains("prefers-reduced-motion");
     }
 }

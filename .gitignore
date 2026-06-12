@@ -1,6 +1,7 @@
 # Maven / build outputs
 target/
 *.class
+node_modules/
 
 # IDE / editor
 .idea/
@@ -9,7 +10,7 @@ target/
 
 # Application runtime data
 config/routes/*.json
-logs/
+/logs/
 *.log
 *.pid
 

@@ -10,15 +10,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AdminPageHeroGuideTest {
 
     @Test
-    void heroGuideArrowsUseOutlinedShapeConsistentWithCards() throws Exception {
-        String css = Files.readString(Path.of("src/main/resources/static/css/style.css"));
+    void heroUsesChunkyRouteConsoleLanguageAndNoEmojiIcons() throws Exception {
+        String app = Files.readString(Path.of("frontend/src/App.tsx"));
 
-        assertThat(css).contains(".guide-line::before");
-        assertThat(css).contains(".guide-line::after");
-        assertThat(css).contains("border-left: 12px solid var(--color-border)");
-        assertThat(css).contains("--color-guide-arrow: #5b9aa8");
-        assertThat(css).contains("border-left: 9px solid var(--color-guide-arrow)");
-        assertThat(css).contains("background: var(--color-guide-arrow)");
-        assertThat(css).contains("filter: drop-shadow(2px 2px 0 rgba(24, 38, 61, 0.12))");
+        assertThat(app).contains("ChunkyHero");
+        assertThat(app).contains("WEB ROUTER CONTROL");
+        assertThat(app).contains("路径转发、监听端口、实时日志，一处管理。");
+        assertThat(app).contains("JSON 配置");
+        assertThat(app).contains("chunky-panel");
+        assertThat(app).contains("FlowStep");
+        assertThat(app).contains("lucide-react").doesNotContain("🚀").doesNotContain("🎨").doesNotContain("⚙️");
     }
 }
