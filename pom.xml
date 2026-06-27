@@ -13,7 +13,7 @@
 
     <groupId>com.geek</groupId>
     <artifactId>web-router</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <packaging>jar</packaging>
     <name>web-router</name>
     <description>Web 路由代理 — 支持路径前缀匹配转发到多个后端服务</description>
@@ -37,10 +37,44 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Spring Cloud Gateway 路由代理 -->
+        <!-- Spring Cloud Gateway 路由代理：使用精确模块，避免 starter 带入未用的 Spring Cloud 通用栈 -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-gateway</artifactId>
+            <artifactId>spring-cloud-gateway-server</artifactId>
+        </dependency>
+
+        <!-- Gateway 自动配置会引用 Spring Cloud Commons 中的 ReactiveLoadBalancer 类型 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-commons</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.security</groupId>
+                    <artifactId>spring-security-crypto</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Gateway 刷新监听器需要 Spring Cloud Context 中的刷新事件类型 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-context</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.security</groupId>
+                    <artifactId>spring-security-crypto</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>bcprov-jdk18on</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- WebFlux / Reactor Netty 运行时，Gateway Server 依赖它提供响应式 Web 环境 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
         <!-- Thymeleaf 管理页面 -->

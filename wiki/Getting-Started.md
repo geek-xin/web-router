@@ -1,5 +1,7 @@
 # 快速开始
 
+当前版本：`1.1.0`。
+
 ## 环境要求
 
 - JDK 21
@@ -40,6 +42,8 @@ curl -X POST http://localhost:8090/admin/api/routes \
     "name": "测试服务",
     "pathPrefixes": ["/test"],
     "targetUrl": "localhost:8081",
+    "accessPageBaseUrl": "localhost:8082",
+    "accessPage": "/test/hello",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
@@ -74,6 +78,9 @@ curl http://localhost:8090/test/hello
 
 ```json
 {
+  "targetUrl": "http://localhost:8081",
+  "accessPageBaseUrl": "http://localhost:8082",
+  "pathPrefixes": ["/test"],
   "localIp": "127.0.0.1",
   "localPort": 18081
 }
@@ -85,13 +92,13 @@ curl http://localhost:8090/test/hello
 curl http://127.0.0.1:18081/test/hello
 ```
 
-目标服务收到的路径仍是：
+命中路径前缀时，上游请求地址是：
 
 ```text
-/test/hello
+http://localhost:8082/test/hello
 ```
 
-原因：本地端口代理只按 `pathPrefixes` 做入口隔离，不剥离路径前缀。
+原因：本地端口代理不剥离路径前缀，并会在命中前缀时选择 `accessPageBaseUrl`。
 
 ## 查看请求日志
 
@@ -111,8 +118,8 @@ scripts/build-dist.sh --with-tests
 输出：
 
 ```text
-target/web-router-1.0.0.tar.gz
-target/dist/web-router-1.0.0.tar.gz
+target/web-router-1.1.0.tar.gz
+target/dist/web-router-1.1.0.tar.gz
 ```
 
 发布包内包含 `run.sh`、`stop.sh`、`run.bat`、`stop.bat`、`config/application.yml` 和 `config/routes/`。Linux/macOS 可执行 `./run.sh` 后台启动并通过 `./stop.sh` 停止；Windows 可执行 `run.bat` 启动并通过 `stop.bat` 停止。

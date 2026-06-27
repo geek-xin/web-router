@@ -40,9 +40,9 @@ export default {
         },
       },
       boxShadow: {
-        clay: '8px 10px 0 #111111',
-        'clay-sm': '4px 5px 0 #111111',
-        'clay-hover': '10px 12px 0 #111111',
+        clay: '5px 6px 0 rgba(17, 17, 17, 0.78)',
+        'clay-sm': '2px 3px 0 rgba(17, 17, 17, 0.72)',
+        'clay-hover': '6px 7px 0 rgba(17, 17, 17, 0.82)',
       },
       borderRadius: {
         clay: '1.5rem',

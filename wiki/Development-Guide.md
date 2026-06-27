@@ -2,6 +2,8 @@
 
 本文面向维护者，说明核心文件、修改约定、测试验证和发布方式。
 
+当前版本：`1.1.0`。
+
 ## 技术栈
 
 | 类型 | 技术 |
@@ -27,9 +29,12 @@
 | `src/main/java/com/geek/webrouter/web/controller/RouteConfigController.java` | 管理页面与路由配置 REST API |
 | `src/main/java/com/geek/webrouter/web/controller/ProxyRequestLogController.java` | 请求日志 REST/SSE API |
 | `src/main/java/com/geek/webrouter/web/support/RouteTargetUrlNormalizer.java` | 目标地址协议归一化 |
-| `src/main/resources/templates/index.html` | 管理后台页面 |
-| `src/main/resources/static/js/app.js` | 管理后台交互逻辑 |
-| `src/main/resources/static/css/style.css` | 管理后台样式 |
+| `src/main/resources/templates/index.html` | 管理后台 Thymeleaf 挂载页 |
+| `frontend/src/App.tsx` | React 管理后台入口组件 |
+| `frontend/src/features/*` | 管理后台业务组件、工具与类型 |
+| `frontend/src/styles.css` | 管理后台样式入口 |
+| `src/main/resources/static/admin/assets/app.js` | Vite 构建后的管理后台脚本 |
+| `src/main/resources/static/admin/assets/app.css` | Vite 构建后的管理后台样式 |
 | `src/main/resources/application.yml` | 端口、Gateway、Thymeleaf、Actuator 配置 |
 | `scripts/build-dist.sh` | 发布包构建脚本 |
 
@@ -77,21 +82,24 @@
 - `RouteConfig`
 - `RouteConfigDto`
 - `RouteConfigServiceImpl` 读写、校验、冲突检测
-- `index.html` 表单
-- `app.js` 列表、复制、编辑、JSON 预览逻辑
-- `style.css` 必要展示样式
+- `frontend/src/features/routes/*` 表单、列表、复制、编辑、JSON 预览逻辑
+- `frontend/src/styles.css` 必要展示样式
+- `src/main/resources/templates/index.html` 挂载页和元数据
 - `README.md`、`USAGE.md`、`wiki/*`
 - 旧 JSON 兼容逻辑和测试
 
 ## 修改前端
 
-当前项目没有 npm 构建流程。修改前端时同步检查：
+当前管理后台源码位于 `frontend/`，通过 Vite 构建到 Spring Boot 静态目录。修改前端时同步检查：
 
+- `frontend/src/App.tsx`
+- `frontend/src/features/**`
+- `frontend/src/styles.css`
 - `src/main/resources/templates/index.html`
-- `src/main/resources/static/js/app.js`
-- `src/main/resources/static/css/style.css`
+- `src/main/resources/static/admin/assets/app.js`
+- `src/main/resources/static/admin/assets/app.css`
 
-如果改动管理后台行为，优先用 `mvn test` 覆盖 Thymeleaf 渲染和服务层契约；必要时再手动启动访问 `/admin` 验证。
+如果改动管理后台行为，先运行 `npm run build` 更新静态资源，再用 `mvn test` 覆盖 Thymeleaf 渲染和服务层契约；必要时再手动启动访问 `/admin` 验证。
 
 ## 修改请求日志
 
@@ -136,4 +144,3 @@ scripts/build-dist.sh --with-tests
 ```bash
 scripts/build-dist.sh
 ```
-

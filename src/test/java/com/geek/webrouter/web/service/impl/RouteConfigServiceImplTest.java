@@ -211,7 +211,7 @@ class RouteConfigServiceImplTest {
     }
 
     @Test
-    void createRejectsConfiguredLocalBindingConflictEvenWhenExistingRouteIsDisabled() {
+    void createAllowsDisabledCopyToKeepBindingUsedByDisabledRoute() {
         RouteConfigServiceImpl service = service();
         RouteConfig existing = RouteConfig.builder()
                 .name("停用演示环境")
@@ -229,9 +229,61 @@ class RouteConfigServiceImplTest {
                 .build();
 
         service.create(existing);
+        RouteConfig savedCopy = service.create(copied);
 
-        assertThatThrownBy(() -> service.create(copied))
+        assertThat(savedCopy.isEnabled()).isFalse();
+        assertThat(savedCopy.getLocalPort()).isEqualTo(9191);
+    }
+
+    @Test
+    void createRejectsLocalBindingConflictWhenNewRouteIsEnabled() {
+        RouteConfigServiceImpl service = service();
+        RouteConfig existing = RouteConfig.builder()
+                .name("启用演示环境")
+                .targetUrl("http://127.0.0.1:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+        RouteConfig copy = RouteConfig.builder()
+                .name("启用演示环境-copy")
+                .targetUrl("http://127.0.0.1:9081")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+
+        service.create(existing);
+
+        assertThatThrownBy(() -> service.create(copy))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("本地监听地址已被 [停用演示环境] 使用: 127.0.0.1:9191");
+                .hasMessageContaining("本地监听地址已被 [启用演示环境] 使用: 127.0.0.1:9191");
+    }
+
+    @Test
+    void updateRejectsLocalBindingConflictWhenEnablingRoute() {
+        RouteConfigServiceImpl service = service();
+        RouteConfig enabled = RouteConfig.builder()
+                .name("启用演示环境")
+                .targetUrl("http://127.0.0.1:9080")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(true)
+                .build();
+        RouteConfig disabled = RouteConfig.builder()
+                .name("待启用演示环境")
+                .targetUrl("http://127.0.0.1:9081")
+                .localIp("127.0.0.1")
+                .localPort(9191)
+                .enabled(false)
+                .build();
+
+        service.create(enabled);
+        RouteConfig savedDisabled = service.create(disabled);
+        disabled.setEnabled(true);
+
+        assertThatThrownBy(() -> service.update(savedDisabled.getId(), disabled))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("本地监听地址已被 [启用演示环境] 使用: 127.0.0.1:9191");
     }
 }

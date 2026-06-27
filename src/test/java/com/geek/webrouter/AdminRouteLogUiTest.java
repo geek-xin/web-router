@@ -17,6 +17,7 @@ class AdminRouteLogUiTest {
         assertThat(source).contains("诊断分析");
         assertThat(source).doesNotContain("<TableHead>参数</TableHead>");
         assertThat(source).contains("拷贝分析");
+        assertThat(source).doesNotContain("复制诊断上下文");
     }
 
     @Test
@@ -33,7 +34,8 @@ class AdminRouteLogUiTest {
     void routeLogTimeAndAccessColumnsFavorCompactTimeAndAccessAddress() throws Exception {
         String source = Files.readString(Path.of("frontend/src/features/logs/RouteLogDialog.tsx"));
 
-        assertThat(source).contains("formatTime(entry.time)");
+        assertThat(source).contains("formatTime(logTimestamp(entry))");
+        assertThat(source).contains("return entry.timestamp || entry.time");
         assertThat(source).contains("entry.accessAddress || '-'");
         assertThat(source).contains("实际访问: ");
     }

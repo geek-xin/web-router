@@ -1,6 +1,6 @@
 # web-router 使用说明
 
-本文说明如何启动、配置和使用 `web-router`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
+本文说明如何启动、配置和使用 `web-router` `1.1.0`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
 
 ## 环境要求
 
@@ -43,6 +43,8 @@ config/routes/<id>.json
   "pathPrefix": "/test",
   "pathPrefixes": ["/test", "/api/test"],
   "targetUrl": "http://localhost:8081",
+  "accessPageBaseUrl": "http://localhost:8082",
+  "accessPage": "/test/hello",
   "localIp": "127.0.0.1",
   "localPort": 18081,
   "enabled": true
@@ -53,11 +55,13 @@ config/routes/<id>.json
 | --- | --- |
 | `id` | 内部路由 ID；创建时自动生成，用作配置文件名和 Gateway routeId 基础值。 |
 | `name` | 展示名称，不能为空，不能与其他路由重复。 |
-| `pathPrefixes` | 路径前缀列表，至少一项；同一路由内和不同路由间都不能重复。 |
+| `pathPrefixes` | 路径前缀列表；同一路由内不能重复，不同路由可复用相同前缀。为空时本地监听请求走默认地址。 |
 | `pathPrefix` | 兼容旧配置的单路径字段，写回时与 `pathPrefixes[0]` 同步。 |
-| `targetUrl` | 目标服务地址；API 入参可省略协议，保存时默认补 `http://`。 |
-| `localIp` | 可选本地监听 IP；空值且配置了本地端口时默认 `127.0.0.1`。 |
-| `localPort` | 可选本地监听端口；为空表示不启用独立本地端口代理。 |
+| `targetUrl` | 默认地址（兜底）；API 入参可省略协议，保存时默认补 `http://`。 |
+| `accessPageBaseUrl` | 代理地址；本地监听请求命中 `pathPrefixes` 时转发到此地址。配置路径前缀时必填。 |
+| `accessPage` | 可选访问页；管理后台“访问”按钮优先打开该路径或绝对 URL。 |
+| `localIp` | 本地监听 IP；空值且配置了本地端口时默认 `127.0.0.1`。 |
+| `localPort` | 本地监听端口；当前管理 API/后台表单要求填写 `1-65535`。 |
 | `enabled` | 是否启用；禁用后保留文件，但不注册 Gateway 路由，也不启动本地端口代理。 |
 
 ## 管理后台
@@ -67,10 +71,10 @@ config/routes/<id>.json
 - 新增、编辑、删除路由。
 - 启用或禁用路由。
 - 为一条路由配置多个路径前缀。
-- 配置可选本地监听 IP/端口。
+- 配置本地监听 IP/端口、默认地址（兜底）、代理地址和访问页。
 - 查看原始 JSON 配置和配置目录。
 - 复制 Gateway 或本地端口访问地址。
-- 查看全部/单路由请求统计、Top 路径、最近请求日志和实时刷新状态。
+- 查看全部/单路由请求统计、Top 路径、慢请求、最近请求日志和实时刷新状态。
 
 保存路由后，后台会立即刷新 Gateway 路由和本地端口代理。
 
@@ -91,6 +95,9 @@ config/routes/<id>.json
   "name": "测试服务",
   "pathPrefixes": ["/test"],
   "targetUrl": "http://localhost:8081",
+  "accessPageBaseUrl": "http://localhost:8082",
+  "localIp": "127.0.0.1",
+  "localPort": 18081,
   "enabled": true
 }
 ```
@@ -101,7 +108,7 @@ config/routes/<id>.json
 curl http://localhost:8090/test/hello
 ```
 
-目标服务收到：
+上游请求地址：
 
 ```text
 /hello
@@ -116,6 +123,7 @@ curl http://localhost:8090/test/hello
   "name": "测试服务",
   "pathPrefixes": ["/test"],
   "targetUrl": "http://localhost:8081",
+  "accessPageBaseUrl": "http://localhost:8082",
   "localIp": "127.0.0.1",
   "localPort": 18081,
   "enabled": true
@@ -131,15 +139,16 @@ curl http://127.0.0.1:18081/test/hello
 目标服务收到：
 
 ```text
-/test/hello
+http://localhost:8082/test/hello
 ```
 
 本地端口代理特点：
 
 - 只对 `enabled=true` 且设置了 `localPort` 的路由启动。
 - `localIp` 为空时使用 `127.0.0.1`。
-- 只允许命中当前路由 `pathPrefixes` 的请求进入；未命中请求返回 `404`。
-- 不执行 `StripPrefix`，原始请求 URI 会追加到 `targetUrl` 后。
+- 命中当前路由 `pathPrefixes` 的请求转发到 `accessPageBaseUrl`。
+- 未命中当前路由 `pathPrefixes` 的请求转发到 `targetUrl` 默认地址。
+- 不执行 `StripPrefix`，原始请求 URI 会追加到选中的上游地址后。
 - 透传请求方法、请求体和大部分 Header，并把 `Host` 改为目标地址 Host。
 - 响应设置 `Connection: close` 和禁用缓存头，减少配置刷新后的旧连接/旧缓存影响。
 - 代理失败时返回 HTTP 502，文本为 `Proxy request failed`。
@@ -162,16 +171,16 @@ curl http://127.0.0.1:18081/test/hello
 
 ### 路由配置 API
 
-> 路径变量当前由控制器命名为 `{name}`，实际传入的是配置文件 ID，例如 `route-20260603234846-4d2deb`。
+> URL 路径中的路由标识传入配置文件 ID，例如 `route-20260603234846-4d2deb`。控制器内部变量名仍为 `{name}`，对外语义按 routeId 使用。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/admin/api/routes` | 查询全部路由，按配置文件最后修改时间倒序。 |
-| `GET` | `/admin/api/routes/{id}` | 查询单条路由。 |
-| `GET` | `/admin/api/routes/{id}/raw` | 查看原始 JSON 文件内容。 |
+| `GET` | `/admin/api/routes/{routeId}` | 查询单条路由。 |
+| `GET` | `/admin/api/routes/{routeId}/raw` | 查看原始 JSON 文件内容。 |
 | `POST` | `/admin/api/routes` | 创建路由并刷新代理。 |
-| `PUT` | `/admin/api/routes/{id}` | 更新路由并刷新代理。 |
-| `DELETE` | `/admin/api/routes/{id}` | 删除路由并刷新代理。 |
+| `PUT` | `/admin/api/routes/{routeId}` | 更新路由并刷新代理。 |
+| `DELETE` | `/admin/api/routes/{routeId}` | 删除路由并刷新代理。 |
 
 创建示例：
 
@@ -182,6 +191,8 @@ curl -X POST http://localhost:8090/admin/api/routes \
     "name": "测试服务",
     "pathPrefixes": ["/test"],
     "targetUrl": "localhost:8081",
+    "accessPageBaseUrl": "localhost:8082",
+    "accessPage": "/test/hello",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
@@ -197,6 +208,8 @@ curl -X PUT http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb \
     "name": "测试服务",
     "pathPrefixes": ["/test", "/api/test"],
     "targetUrl": "http://localhost:8081",
+    "accessPageBaseUrl": "http://localhost:8082",
+    "accessPage": "/test/hello",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
@@ -224,6 +237,7 @@ curl -X DELETE http://localhost:8090/admin/api/routes/route-20260603234846-4d2de
 - 去重 IP 数。
 - 按 IP 请求次数排序。
 - Top 路径统计。
+- 慢请求 Top。
 - 最近 100 条请求日志。
 
 订阅 SSE：
@@ -236,11 +250,12 @@ curl -N http://localhost:8090/admin/api/proxy-logs/stream
 
 - `id` 只允许英文、数字、下划线和连字符。
 - `name` 不能为空，不能与其他路由重复。
-- `pathPrefixes` 至少一项；每项必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
+- `pathPrefixes` 可以为空；每项必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
 - 路径前缀会规范化：非根路径末尾 `/` 会被移除，例如 `/api/` -> `/api`。
 - 路径前缀冲突只判断“完全相同前缀”，不判断父子包含关系。
-- `targetUrl` 入参格式为 `host:port` 或 `http(s)://host:port`，保存前归一化为带协议 URL，且不能与其他路由重复。
-- `localPort` 范围为 `1-65535`。
+- `targetUrl` 入参格式为 `host:port` 或 `http(s)://host:port`，保存前归一化为带协议 URL；可与其他路由重复。
+- `accessPageBaseUrl` 入参格式为 `host:port` 或 `http(s)://host:port`；配置路径前缀时不能为空。
+- `localPort` 当前管理 API/后台表单必填，范围为 `1-65535`。
 - `localIp` 允许空值、`localhost` 或有效 IPv4；非空时即使未配置 `localPort` 也会校验。
 - `localIp:localPort` 不能与其他启用本地绑定的路由重复。
 
@@ -261,8 +276,8 @@ scripts/build-dist.sh --with-tests
 输出位置：
 
 ```text
-target/web-router-1.0.0.tar.gz
-target/dist/web-router-1.0.0.tar.gz
+target/web-router-1.1.0.tar.gz
+target/dist/web-router-1.1.0.tar.gz
 ```
 
 发布包包含：
@@ -297,4 +312,4 @@ stop.bat
 - Gateway 转发会剥离路径前缀；本地端口代理不会剥离路径前缀。
 - 修改 `pathPrefixes` 后刷新只影响后续 HTTP 请求；已加载页面若没有重新请求，代理无法主动改变页面内状态。
 - 请求日志保存在内存中，应用重启后清空。
-- 当前项目没有 npm 构建流程，前端静态资源直接由 Spring Boot 提供。
+- 管理后台源码位于 `frontend/`，发布前需要通过 `npm run build` 更新 Spring Boot 静态资源。

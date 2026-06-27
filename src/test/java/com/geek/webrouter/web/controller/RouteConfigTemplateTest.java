@@ -16,9 +16,10 @@ class RouteConfigTemplateTest {
 
         assertThat(form).contains("监听 IP");
         assertThat(form).contains("readOnly aria-readonly=\"true\"");
-        assertThat(form).contains("监听端口 *");
+        assertThat(form).contains("required-field-mark");
+        assertThat(form).contains("监听端口");
         assertThat(form).contains("访问页");
-        assertThat(form).contains("默认地址（兜底） *");
+        assertThat(form).contains("默认地址（兜底）");
         assertThat(form).contains("代理地址");
         assertThat(form).contains("访问监听地址时，命中前缀走代理地址，否则走默认地址");
         assertThat(form).contains("未配置路径前缀，请求走默认地址");

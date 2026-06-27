@@ -14,9 +14,6 @@ public final class CommonConstants {
     /** 路由配置文件目录（相对于工作目录）。 */
     public static final String ROUTES_CONFIG_DIR = "config/routes";
 
-    /** 默认代理端口。 */
-    public static final int DEFAULT_PORT = 8080;
-
     /** 路由配置文件名前缀。 */
     public static final String CONFIG_FILE_EXTENSION = ".json";
 }

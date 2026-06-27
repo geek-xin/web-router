@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-`web-router` 是一个轻量 Web 路由代理，基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty 和 Thymeleaf。它通过本地 JSON 文件维护路由配置，支持：
+`web-router` 是一个轻量 Web 路由代理，当前版本 `1.1.0`，基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty、Thymeleaf 挂载页和 React/Vite 管理后台。它通过本地 JSON 文件维护路由配置，支持：
 
 - 按一个或多个路径前缀转发到目标服务。
 - 为单条路由可选启动独立本地 IP/端口代理。
@@ -21,8 +21,10 @@
 - `name`：展示名称，可包含中文和符号；不同路由之间不能重复。
 - `pathPrefixes`：路径前缀列表，如 `/api/users`、`/admin`；同一路由内不能重复，不同路由之间允许使用相同前缀（常用于复制一套路由到不同目标/本地端口）。
 - `pathPrefix`：兼容旧配置的单路径字段；读写时与 `pathPrefixes` 第一项同步。
-- `targetUrl`：目标服务地址；API 入参可省略协议，保存前由 `RouteTargetUrlNormalizer` 补为 `http://`。
-- `localIp` / `localPort`：可选本地监听地址；`localPort` 为空表示不启动独立本地端口代理，`localIp` 默认 `127.0.0.1`。
+- `targetUrl`：默认地址（兜底）；API 入参可省略协议，保存前由 `RouteTargetUrlNormalizer` 补为 `http://`。
+- `accessPageBaseUrl`：代理地址；本地监听请求命中 `pathPrefixes` 时转发到此地址，未命中时转发到 `targetUrl`。
+- `accessPage`：可选访问页；管理后台“访问”按钮优先打开该路径或绝对 URL。
+- `localIp` / `localPort`：本地监听地址；当前管理 API/后台表单要求填写 `localPort`，`localIp` 默认 `127.0.0.1`。
 - `enabled`：是否启用；禁用配置仍保留文件，但不会注册 Gateway 路由，也不会启动本地端口代理。
 
 示例配置：
@@ -34,6 +36,8 @@
   "pathPrefix": "/test",
   "pathPrefixes": ["/test", "/api/test"],
   "targetUrl": "http://localhost:8081",
+  "accessPageBaseUrl": "http://localhost:8082",
+  "accessPage": "/test/hello",
   "localIp": "127.0.0.1",
   "localPort": 18081,
   "enabled": true
@@ -70,9 +74,9 @@
 - 监听地址为 `effectiveLocalIp():localPort`，`localIp` 为空时默认 `127.0.0.1`。
 - 刷新动态路由时会停止旧本地代理并按当前启用配置重启。
 - 本地端口代理使用 Reactor Netty `HttpServer` + `HttpClient`，会透传请求方法、请求体和大部分 Header，并把 `Host` 改为目标地址 Host。
-- 本地端口代理转发时会先按当前路由的 `pathPrefixes` 做入口隔离；命中后不会按 `pathPrefixes` 剥离前缀，而是把原始请求 URI 追加到 `targetUrl` 后。
+- 本地端口代理转发时不会按 `pathPrefixes` 剥离前缀，而是把原始请求 URI 追加到选中的上游地址后：命中当前路由 `pathPrefixes` 时使用 `accessPageBaseUrl`，未命中时使用 `targetUrl` 默认地址。
 - 本地端口代理响应会设置 `Connection: close` 和 `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`，避免浏览器在增删 `pathPrefixes` 后复用刷新前的旧连接或缓存旧页面/接口结果。
-- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）如果没有重新发起网络请求，web-router 无法主动改变页面内已有状态。可通过 `本地端口代理转发请求` / `本地端口代理拒绝未配置前缀请求` 日志判断请求是否真正到达 9191。
+- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）如果没有重新发起网络请求，web-router 无法主动改变页面内已有状态。可通过 `本地端口代理转发请求` 日志判断请求是否真正到达本地监听端口。
 - 代理失败时返回 HTTP 502 和文本 `Proxy request failed`。
 
 ### 请求日志
@@ -104,11 +108,11 @@
 所有 API 统一返回 `Result<T>`。
 
 - `GET /admin/api/routes`：查询全部路由。
-- `GET /admin/api/routes/{id}`：查询单条路由。
-- `GET /admin/api/routes/{id}/raw`：读取原始 JSON 文件内容。
+- `GET /admin/api/routes/{routeId}`：查询单条路由（控制器内部变量名仍为 `{name}`，实际传入配置文件 ID）。
+- `GET /admin/api/routes/{routeId}/raw`：读取原始 JSON 文件内容。
 - `POST /admin/api/routes`：创建路由，成功后刷新动态路由。
-- `PUT /admin/api/routes/{id}`：更新路由，成功后刷新动态路由。
-- `DELETE /admin/api/routes/{id}`：删除路由，成功后刷新动态路由。
+- `PUT /admin/api/routes/{routeId}`：更新路由，成功后刷新动态路由。
+- `DELETE /admin/api/routes/{routeId}`：删除路由，成功后刷新动态路由。
 
 ### 请求日志 API
 
@@ -119,13 +123,14 @@
 
 ## 校验与约束
 
-- 路由 `id` 只允许英文、数字、下划线和连字符；外部路径变量 `{id}` 最终会进入 `resolveFilePath()` 校验。
+- 路由 `id` 只允许英文、数字、下划线和连字符；外部 routeId 路径变量最终会进入 `resolveFilePath()` 校验。
 - `name` 不能为空，作为展示名称使用，不能与其他路由重复。
-- `pathPrefixes` 至少一项；每项必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
+- `pathPrefixes` 可以为空；每项必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
 - 路径前缀冲突检查是“完全相同前缀”冲突，不做父子前缀包含判断。
 - `targetUrl` DTO 入参格式为 `host:port` 或 `http(s)://host:port`；保存前会归一化为带协议 URL。
+- `accessPageBaseUrl` DTO 入参格式为 `host:port` 或 `http(s)://host:port`；配置 `pathPrefixes` 时不能为空。
 - `targetUrl` 允许与其他路由重复；拷贝路由可复用同一个默认地址（兜底）。
-- `localPort` 范围为 `1-65535`。
+- `localPort` 当前管理 API/后台表单必填，范围为 `1-65535`。
 - `localIp` 允许空值、`localhost` 或 IPv4；设置本地端口后最终会规范为有效监听 IP。
 - `localIp:localPort` 不能与其他启用本地绑定的路由重复。
 
@@ -148,7 +153,9 @@
 - `src/main/java/com/geek/webrouter/web/controller/RouteConfigController.java`：管理页面与路由配置 REST API。
 - `src/main/java/com/geek/webrouter/web/controller/ProxyRequestLogController.java`：请求日志 REST/SSE API。
 - `src/main/java/com/geek/webrouter/web/support/RouteTargetUrlNormalizer.java`：目标地址协议归一化。
-- `src/main/resources/templates/index.html`、`src/main/resources/static/js/app.js`、`src/main/resources/static/css/style.css`：管理后台页面、交互和样式；当前无 npm 构建。
+- `src/main/resources/templates/index.html`：管理后台 Thymeleaf 挂载页。
+- `frontend/src/App.tsx`、`frontend/src/features/**`、`frontend/src/styles.css`：React 管理后台源码。
+- `src/main/resources/static/admin/assets/app.js`、`src/main/resources/static/admin/assets/app.css`：Vite 构建后的管理后台资源。
 - `src/main/resources/application.yml`：端口、Gateway、Thymeleaf、Actuator 配置。
 
 ## 运行与验证
@@ -168,8 +175,8 @@ mvn spring-boot:run
 - 改本地端口代理优先看 `LocalPortProxyService`；注意刷新时停止/重启代理和端口冲突处理。
 - 改配置存储优先看 `RouteConfigServiceImpl`；保持 `id` 文件名机制和旧字段 `pathPrefix` 兼容。
 - 改 API 保持 `Result<T>` 结构；业务错误优先抛 `BusinessException`。
-- 新增路由字段需同步：`RouteConfig`、`RouteConfigDto`、`RouteConfigServiceImpl` 读写/校验、`index.html` 表单、`app.js` 列表/复制/编辑/JSON 预览逻辑，并考虑旧 JSON 兼容。
-- 改前端时同步检查 `index.html`、`app.js`、`style.css`；本项目没有 npm 构建流程。
+- 新增路由字段需同步：`RouteConfig`、`RouteConfigDto`、`RouteConfigServiceImpl` 读写/校验、`frontend/src/features/routes/**` 表单/列表/复制/编辑/JSON 预览逻辑、构建后的 `src/main/resources/static/admin/assets/*`，并考虑旧 JSON 兼容。
+- 改前端时同步检查 `frontend/src/App.tsx`、`frontend/src/features/**`、`frontend/src/styles.css`、`src/main/resources/templates/index.html`，并运行 `npm run build` 更新静态资源。
 - 改请求日志时同时考虑 Gateway 路由和本地端口代理两条路径，避免统计口径不一致。
 - 改常量或配置值前先全局搜索引用；特别注意 `application.yml` 默认端口为 `8090`，而 `CommonConstants.DEFAULT_PORT` 当前为 `8080`。
 
@@ -178,4 +185,4 @@ mvn spring-boot:run
 - `config/routes` 是运行时目录，受启动工作目录影响。
 - 配置文件中的旧 `pathPrefix` 仍需兼容；写回 JSON 时应保持 `pathPrefix` 与 `pathPrefixes[0]` 同步。
 - 多路径前缀会产生派生 Gateway routeId；日志展示和统计通常应归并到基础 `id`。
-- 本地端口代理与 Gateway 转发语义不同：Gateway 会按前缀 `StripPrefix`，本地端口代理只按前缀隔离请求但保留原始 URI。
+- 本地端口代理与 Gateway 转发语义不同：Gateway 会按前缀 `StripPrefix`，本地端口代理保留原始 URI，并按是否命中前缀选择代理地址或默认地址。

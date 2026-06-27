@@ -1,6 +1,6 @@
 # API 参考
 
-所有管理 API 统一返回 `Result<T>`。
+适用于 `web-router` `1.1.0`。所有管理 API 统一返回 `Result<T>`。
 
 ## 响应结构
 
@@ -27,16 +27,16 @@
 
 ## 路由配置 API
 
-> 控制器路径变量当前命名为 `{name}`，实际使用的是配置文件 ID。
+> URL 路径中的路由标识使用配置文件 ID，例如 `route-20260603234846-4d2deb`。控制器内部变量名仍为 `{name}`，对外语义按 routeId 使用。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/admin/api/routes` | 查询全部路由，按配置文件最后修改时间倒序 |
-| `GET` | `/admin/api/routes/{id}` | 查询单条路由 |
-| `GET` | `/admin/api/routes/{id}/raw` | 查看原始 JSON 文件内容 |
+| `GET` | `/admin/api/routes/{routeId}` | 查询单条路由 |
+| `GET` | `/admin/api/routes/{routeId}/raw` | 查看原始 JSON 文件内容 |
 | `POST` | `/admin/api/routes` | 创建路由并刷新代理 |
-| `PUT` | `/admin/api/routes/{id}` | 更新路由并刷新代理 |
-| `DELETE` | `/admin/api/routes/{id}` | 删除路由并刷新代理 |
+| `PUT` | `/admin/api/routes/{routeId}` | 更新路由并刷新代理 |
+| `DELETE` | `/admin/api/routes/{routeId}` | 删除路由并刷新代理 |
 
 ### 创建路由
 
@@ -47,6 +47,8 @@ curl -X POST http://localhost:8090/admin/api/routes \
     "name": "测试服务",
     "pathPrefixes": ["/test"],
     "targetUrl": "localhost:8081",
+    "accessPageBaseUrl": "localhost:8082",
+    "accessPage": "/test/hello",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
@@ -62,6 +64,8 @@ curl -X PUT http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb \
     "name": "测试服务",
     "pathPrefixes": ["/test", "/api/test"],
     "targetUrl": "http://localhost:8081",
+    "accessPageBaseUrl": "http://localhost:8082",
+    "accessPage": "/test/hello",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
@@ -107,4 +111,3 @@ curl -N http://localhost:8090/admin/api/proxy-logs/routes/route-20260603234846-4
 | 未捕获异常 | `500` | `success=false` |
 
 前端 `fetchJson()` 依赖“业务错误 HTTP 200 + 响应体 `success=false`”的约定。
-

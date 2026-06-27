@@ -198,11 +198,12 @@ public class RouteConfigServiceImpl implements RouteConfigService {
      * 检查本地监听地址是否与其他路由重复（排除自身）。
      */
     private void checkLocalBindingConflict(String excludeId, RouteConfig config) {
-        if (!config.hasLocalBinding()) {
+        if (!config.isEnabled() || !config.hasLocalBinding()) {
             return;
         }
         String binding = localBinding(config);
         Optional<RouteConfig> conflict = listAll().stream()
+                .filter(RouteConfig::isEnabled)
                 .filter(RouteConfig::hasLocalBinding)
                 .filter(c -> !routeId(c).equals(excludeId) && Objects.equals(localBinding(c), binding))
                 .findFirst();

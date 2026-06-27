@@ -1,4 +1,5 @@
 export interface ProxyRequestLogEntry {
+  timestamp?: string | null;
   time?: string | null;
   routeId?: string | null;
   method?: string | null;

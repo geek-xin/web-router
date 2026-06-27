@@ -2,6 +2,38 @@
 
 本文记录 `web-router` 正式发布版本的主要能力和行为变化。
 
+## [1.1.0] - 2026-06-27
+
+### 版本定位
+
+- 发布新版本号 `1.1.0`，用于承载当前 React 管理后台、访问页代理、配置目录展示、路由日志和发布文档刷新。
+- 同步 Maven 项目版本、前端 package 版本、发布包文件名和公开文档版本说明。
+
+### 管理后台
+
+- 管理后台升级为 `frontend/` 下的 React + Vite 源码，并构建到 `src/main/resources/static/admin/` 由 Spring Boot 提供。
+- 首页采用新的路由控制台布局，支持配置总数、启用/停用路由筛选和配置目录绝对路径显示/隐藏。
+- 路由卡片、详情抽屉、表单和 JSON 预览整合为同一套交互，便于在列表与详情之间编辑、复制、访问和删除路由。
+- 新增浏览器标签页图标和最新管理后台截图。
+
+### 路由配置与本地代理
+
+- 路由配置新增 `accessPageBaseUrl`（代理地址）和 `accessPage`（访问页）。
+- `targetUrl` 明确为“默认地址（兜底）”；本地监听请求命中 `pathPrefixes` 时转发到 `accessPageBaseUrl`，未命中时转发到 `targetUrl`。
+- 当前管理 API/后台表单要求填写 `localPort`；配置路径前缀时要求填写 `accessPageBaseUrl`。
+- `targetUrl` 可在不同路由之间重复，方便复制路由后复用默认地址。
+- 后台继续保持旧字段 `pathPrefix` 与 `pathPrefixes[0]` 同步，兼容旧 JSON。
+
+### 请求日志
+
+- 路由日志类型补充 `accessAddress`，用于展示最终实际访问的上游 `host:port`。
+- 日志面板补充慢请求 Top、实时日志和诊断信息展示，继续归并多前缀派生 routeId。
+
+### 管理 API 与文档
+
+- 路由配置 API 对外文档统一按 routeId 说明：`/admin/api/routes/{routeId}`、`/admin/api/routes/{routeId}/raw`、`PUT` 和 `DELETE` 同理。
+- 全量整理 `README.md`、`USAGE.md` 和 GitHub Wiki 文档，使字段说明、校验规则、发布包路径和前端构建方式与 `1.1.0` 对齐。
+
 ## [1.0.0] - 2026-06-07
 
 ### 核心功能
@@ -55,11 +87,11 @@
 ### 管理 API
 
 - `GET /admin/api/routes`：查询全部路由。
-- `GET /admin/api/routes/{id}`：查询单条路由。
-- `GET /admin/api/routes/{id}/raw`：读取原始 JSON 文件内容。
+- `GET /admin/api/routes/{routeId}`：查询单条路由。
+- `GET /admin/api/routes/{routeId}/raw`：读取原始 JSON 文件内容。
 - `POST /admin/api/routes`：创建路由并刷新代理。
-- `PUT /admin/api/routes/{id}`：更新路由并刷新代理。
-- `DELETE /admin/api/routes/{id}`：删除路由并刷新代理。
+- `PUT /admin/api/routes/{routeId}`：更新路由并刷新代理。
+- `DELETE /admin/api/routes/{routeId}`：删除路由并刷新代理。
 - `GET /admin/api/proxy-logs`：查询全部路由日志快照。
 - `GET /admin/api/proxy-logs/routes/{routeId}`：查询指定路由日志快照。
 - `GET /admin/api/proxy-logs/stream`：订阅全部路由实时日志。

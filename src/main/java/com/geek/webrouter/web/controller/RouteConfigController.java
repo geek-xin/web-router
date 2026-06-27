@@ -39,7 +39,6 @@ public class RouteConfigController {
 
     @GetMapping
     public String index(Model model) {
-        model.addAttribute("routesConfigDirLabel", CommonConstants.ROUTES_CONFIG_DIR);
         model.addAttribute("routesConfigDir", Paths.get(CommonConstants.ROUTES_CONFIG_DIR)
                 .toAbsolutePath()
                 .normalize()

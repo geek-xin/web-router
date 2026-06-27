@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { ClipboardCopy, Eye, Pause, Radio, RefreshCw, Search, X } from 'lucide-react';
+import { Eye, Pause, Radio, RefreshCw, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,6 +39,25 @@ const refreshModes = [
 ];
 
 export function RouteLogDialog({ open, route, onOpenChange }: RouteLogDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(98vw,1180px)] bg-[#F8F6F3]">
+        <RouteLogPanel open={open} route={route} onClose={() => onOpenChange(false)} />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RouteLogPanelProps {
+  open: boolean;
+  route: RouteConfig | null;
+  onClose?: () => void;
+}
+
+export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
   const [state, setState] = React.useState<LogViewState>(initialState);
   const [activeTab, setActiveTab] = React.useState('realtime');
   const [modeIndex, setModeIndex] = React.useState(0);
@@ -143,39 +162,27 @@ export function RouteLogDialog({ open, route, onOpenChange }: RouteLogDialogProp
     toast.success('已复制到诊断分析');
   }
 
-  async function copyDiagnosticContext() {
-    if (diagnostics.length === 0) {
-      toast.error('请先添加诊断请求');
-      return;
-    }
-    await copyText(diagnosticContextText(diagnostics));
-    toast.success('诊断上下文已复制');
-  }
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(98vw,1180px)] bg-[#F8F6F3]">
-        <DialogHeader>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <Badge variant="indigo" className="mb-3 gap-2"><Radio className="h-4 w-4" />ROUTE TRAFFIC</Badge>
-              <DialogTitle>路由日志</DialogTitle>
-              <DialogDescription>{route?.name || '请选择路由'} · {status}</DialogDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pr-10">
-              <Button size="sm" variant="outline" onClick={() => setModeIndex((index) => (index + 1) % refreshModes.length)}>
-                {refreshModes[modeIndex].intervalMs === -1 ? <Pause className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
-                {refreshModes[modeIndex].label}
-              </Button>
-              <Button size="sm" variant="primary" onClick={() => void refreshSnapshot(true)}>立即刷新</Button>
-            </div>
-          </div>
-        </DialogHeader>
+    <div className="grid gap-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Badge variant="indigo" className="mb-3 gap-2"><Radio className="h-4 w-4" />ROUTE TRAFFIC</Badge>
+          <h3 className="text-2xl font-black text-clay-ink">路由日志</h3>
+          <p className="text-sm font-bold text-clay-muted">{route?.name || '请选择路由'} · {status}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setModeIndex((index) => (index + 1) % refreshModes.length)}>
+            {refreshModes[modeIndex].intervalMs === -1 ? <Pause className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
+            {refreshModes[modeIndex].label}
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => void refreshSnapshot(true)}>立即刷新</Button>
+        </div>
+      </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-4">
           <Metric label="请求数" value={state.totalRequests} tone="glass-card-gold" />
           <Metric label="失败请求" value={failures} tone="glass-card-blue" />
-          <Metric label="慢请求" value={slowCount(state.recentLogs)} tone="glass-card-cyan" />
+          <Metric label="慢请求" value={slowCount(state.recentLogs)} tone="glass-card-purple" />
           <Metric label="成功率" value={successRate(state.totalRequests, failures)} tone="glass-card-green" />
         </div>
 
@@ -218,21 +225,14 @@ export function RouteLogDialog({ open, route, onOpenChange }: RouteLogDialogProp
               </div>
             ) : (
               <div className="grid gap-3">
-                <div className="flex justify-end">
-                  <Button size="sm" variant="orange" onClick={() => void copyDiagnosticContext()}><ClipboardCopy className="h-4 w-4" />复制诊断上下文</Button>
-                </div>
                 <LogTable logs={diagnostics} emptyText="暂无诊断请求" onDetail={setDetail} onAnalyze={(entry) => setDiagnostics((current) => current.filter((item) => diagnosticKey(item) !== diagnosticKey(entry)))} analyzeLabel="移除" />
               </div>
             )}
           </TabsContent>
         </Tabs>
 
-        {detail && <LogDetail entry={detail} onClose={() => setDetail(null)} />}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {detail && <LogDetail entry={detail} onClose={() => setDetail(null)} />}
+    </div>
   );
 }
 
@@ -261,7 +261,7 @@ function LogTable({ logs, emptyText, durationLabel = '耗时', analyzeLabel = '�
         {logs.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-clay-ink/60">{emptyText}</TableCell></TableRow> : logs.map((entry, index) => (
           <TableRow key={diagnosticKey(entry) + index}>
             <TableCell>{index + 1}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatTime(entry.time)}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatTime(logTimestamp(entry))}</TableCell>
             <TableCell><Badge variant="indigo">{entry.method || '-'}</Badge></TableCell>
             <TableCell className="max-w-[190px] truncate" title={entry.accessAddress || '-'}>{entry.accessAddress || '-'}</TableCell>
             <TableCell className="max-w-[320px] truncate" title={normalizedLogPath(entry.path)}>{normalizedLogPath(entry.path)}</TableCell>
@@ -280,7 +280,7 @@ function LogDetail({ entry, onClose }: { entry: ProxyRequestLogEntry; onClose: (
     <div className="rounded-[24px] border border-clay-border bg-clay-glass p-4 shadow-clay-sm backdrop-blur-[16px]">
       <div className="mb-3 flex items-center justify-between"><h3 className="text-xl font-black">请求详情</h3><Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" />关闭</Button></div>
       <div className="grid gap-3 md:grid-cols-5">
-        <Detail label="时间" value={formatTime(entry.time)} />
+        <Detail label="时间" value={formatTime(logTimestamp(entry))} />
         <Detail label="方法" value={entry.method || '-'} />
         <Detail label="状态" value={String(entry.status || '-')} />
         <Detail label="耗时" value={formatDuration(entry.durationMs)} />
@@ -332,13 +332,17 @@ function normalizeLimit(value: string): number {
 }
 
 function diagnosticKey(entry: ProxyRequestLogEntry): string {
-  return [entry.time || '', entry.method || '', normalizedLogPath(entry.path), entry.status || '', entry.durationMs || ''].join('|');
+  return [logTimestamp(entry) || '', entry.method || '', normalizedLogPath(entry.path), entry.status || '', entry.durationMs || ''].join('|');
+}
+
+function logTimestamp(entry: ProxyRequestLogEntry): string | null | undefined {
+  return entry.timestamp || entry.time;
 }
 
 function diagnosticContextText(entries: ProxyRequestLogEntry[]): string {
   return entries.map((entry, index) => [
     `#${index + 1}`,
-    '时间: ' + formatTime(entry.time),
+    '时间: ' + formatTime(logTimestamp(entry)),
     '方法: ' + (entry.method || '-'),
     '实际访问: ' + (entry.accessAddress || '-'),
     '路径: ' + normalizedLogPath(entry.path),

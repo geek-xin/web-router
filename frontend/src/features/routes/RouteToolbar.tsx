@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 interface RouteToolbarProps {
+  headingId?: string;
   search: string;
   selectedCount: number;
   onSearchChange: (value: string) => void;
@@ -10,12 +11,12 @@ interface RouteToolbarProps {
   onBatchDelete: () => void;
 }
 
-export function RouteToolbar({ search, selectedCount, onSearchChange, onAdd, onBatchDelete }: RouteToolbarProps) {
+export function RouteToolbar({ headingId, search, selectedCount, onSearchChange, onAdd, onBatchDelete }: RouteToolbarProps) {
   return (
-    <div className="chunky-panel flex flex-col gap-4 bg-white p-4 lg:flex-row lg:items-center lg:justify-between">
-      <div>
+    <div className="route-toolbar flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="route-toolbar-heading">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-clay-primary">ROUTE OPERATIONS</p>
-        <h2 className="text-2xl font-black text-clay-ink">路由配置</h2>
+        <h2 id={headingId} className="text-2xl font-black text-clay-ink">路由配置</h2>
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <label className="relative block min-w-[240px]">

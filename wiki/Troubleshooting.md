@@ -64,17 +64,17 @@ http://localhost:8090/test/hello
 1. 路由是否 `enabled=true`。
 2. 是否配置了 `localPort`。
 3. `localIp:localPort` 是否被其他进程占用。
-4. 访问路径是否命中当前路由的 `pathPrefixes`。
+4. 访问路径命中前缀时是否已配置 `accessPageBaseUrl`。
 5. `localIp` 是否是当前机器可监听地址。
 
-本地端口代理只允许匹配当前路由 `pathPrefixes` 的请求进入；不匹配会返回 `404`。
+本地端口代理命中当前路由 `pathPrefixes` 时走代理地址；不匹配时走 `targetUrl` 默认地址。若访问结果不符合预期，先确认请求路径、代理地址和默认地址分别指向的上游服务。
 
 ## Gateway 和本地端口代理路径不一致
 
 这是预期行为。
 
 - Gateway 会按路径层级 `StripPrefix`。
-- 本地端口代理只做入口隔离，不剥离前缀。
+- 本地端口代理不剥离前缀，并按是否命中路径前缀选择代理地址或默认地址。
 
 例如请求路径：
 

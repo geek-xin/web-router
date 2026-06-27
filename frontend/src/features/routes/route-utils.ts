@@ -1,9 +1,19 @@
 import type { RouteConfig, RouteFormValues, RouteValidationResult } from './types';
 import { normalizedOptionalText } from '@/lib/utils';
 
+const PREFIX_TONE_CLASSES = ['route-prefix-chip-blue', 'route-prefix-chip-mint', 'route-prefix-chip-yellow', 'route-prefix-chip-pink'] as const;
+
 export function effectivePathPrefixes(route: Pick<RouteConfig, 'pathPrefixes' | 'pathPrefix'>): string[] {
   const prefixes = route.pathPrefixes && route.pathPrefixes.length > 0 ? route.pathPrefixes : route.pathPrefix ? [route.pathPrefix] : [];
   return uniquePathPrefixes(prefixes.map(normalizePathPrefix).filter(Boolean));
+}
+
+export function prefixToneClass(index: number): string {
+  return PREFIX_TONE_CLASSES[Math.abs(index) % PREFIX_TONE_CLASSES.length];
+}
+
+export function routeCardToneClass(_route: Pick<RouteConfig, 'enabled'>, _index: number): string {
+  return 'route-card-tone-pink';
 }
 
 export function normalizePathPrefix(value: string): string {
@@ -155,7 +165,7 @@ export function validateRoutePayload(values: RouteFormValues, existingNames: str
     errors.push('代理地址格式不正确，如 192.168.1.100:8080 或 proxy.example.com:8080');
   }
   const binding = localBinding(localIp, localPortText);
-  if (binding && existingBindings.includes(binding)) {
+  if (values.enabled === true && binding && existingBindings.includes(binding)) {
     errors.push('监听地址已被其他启用路由使用');
   }
 

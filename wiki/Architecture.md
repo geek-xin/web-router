@@ -4,7 +4,7 @@
 
 核心实体：`RouteConfig`。
 
-一条路由包含展示名称、一个或多个路径前缀、目标地址、可选本地监听地址/端口和启用状态。旧字段 `pathPrefix` 仍被读取，并在写回时与 `pathPrefixes[0]` 同步。
+一条路由包含展示名称、路径前缀列表、默认地址（兜底）`targetUrl`、代理地址 `accessPageBaseUrl`、访问页 `accessPage`、本地监听地址/端口和启用状态。旧字段 `pathPrefix` 仍被读取，并在写回时与 `pathPrefixes[0]` 同步。
 
 ## 配置存储
 
@@ -20,7 +20,7 @@ config/routes/<id>.json
 - 文件名来自路由 `id`，读取时文件名 ID 是权威值。
 - `resolveFilePath()` 会校验 ID，只允许英文、数字、下划线和连字符。
 - `listAll()` 按文件最后修改时间倒序返回。
-- 写入前会校验展示名称、路径前缀、目标地址、本地 IP/端口和本地绑定冲突。
+- 写入前会校验展示名称、路径前缀、默认地址、代理地址、本地 IP/端口和本地绑定冲突。
 
 ## 动态 Gateway 路由
 
@@ -83,8 +83,8 @@ effectiveLocalIp():localPort
 
 - 使用 Reactor Netty `HttpServer` + `HttpClient`。
 - 每个本地监听绑定到一条启用路由。
-- 请求路径必须命中该路由 `pathPrefixes`；否则返回 `404`。
-- 命中后保留原始 URI，不剥离前缀。
+- 请求路径命中该路由 `pathPrefixes` 时使用 `accessPageBaseUrl`，未命中时使用 `targetUrl` 默认地址。
+- 保留原始 URI，不剥离前缀。
 - 透传请求方法、请求体和大部分 Header。
 - 将 `Host` 改为目标地址 Host。
 - 响应设置 `Connection: close` 和禁用缓存头。
@@ -116,13 +116,16 @@ effectiveLocalIp():localPort
 - 去重 IP 数。
 - 按 IP 请求次数排序。
 - Top 路径统计。
+- 慢请求 Top。
 - 最近 100 条请求日志。
 
 ## 管理后台资源
 
-- `src/main/resources/templates/index.html`：页面结构。
-- `src/main/resources/static/js/app.js`：表单、列表、复制、日志和 SSE 交互。
-- `src/main/resources/static/css/style.css`：后台布局和弹窗样式。
+- `src/main/resources/templates/index.html`：Thymeleaf 挂载页和后端注入的元数据。
+- `frontend/src/App.tsx`：React 管理后台入口。
+- `frontend/src/features/*`：表单、列表、复制、日志、SSE 和详情抽屉交互。
+- `frontend/src/styles.css`：后台布局和组件样式入口。
+- `src/main/resources/static/admin/assets/app.js`：Vite 构建后的浏览器脚本。
+- `src/main/resources/static/admin/assets/app.css`：Vite 构建后的样式文件。
 
-当前没有 npm 构建流程，静态资源由 Spring Boot 直接提供。
-
+当前前端源码通过 `frontend/` 下的 npm/Vite 构建流程产出静态资源，最终由 Spring Boot 直接提供。
