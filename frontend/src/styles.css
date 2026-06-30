@@ -631,6 +631,56 @@ h6,
     color: #F04438;
   }
 
+  .route-log-table-scroll {
+    min-width: 0;
+    border-radius: 1rem;
+  }
+
+  .route-log-table-scroll > div {
+    max-height: min(32rem, calc(100vh - 18rem));
+  }
+
+  .route-log-table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #DCEBFF;
+  }
+
+  .route-log-detail-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(17, 17, 17, 0.32);
+    backdrop-filter: blur(2px);
+  }
+
+  .route-log-detail-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 61;
+    display: flex;
+    width: min(92vw, 520px);
+    height: 100vh;
+    flex-direction: column;
+    overflow: auto;
+    border-left: 3px solid var(--color-border);
+    background: #F8F6F3;
+    padding: 1.25rem;
+    box-shadow: -6px 0 0 rgba(17, 17, 17, 0.78);
+    animation: route-log-detail-drawer-in 180ms ease-out;
+  }
+
+  @keyframes route-log-detail-drawer-in {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
   @media (min-width: 900px) {
     .route-detail-edit-layout {
       grid-template-columns: minmax(0, 1fr) minmax(26rem, 32rem);

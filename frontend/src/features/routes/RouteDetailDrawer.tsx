@@ -50,7 +50,7 @@ export function RouteDetailDrawer({ open, route, fileName, content, loading, err
   const jsonDisplayValue = jsonEditing ? jsonEditValue : formatJsonForDisplay(jsonPreview);
 
   function startJsonEdit() {
-    setJsonEditValue(formatJsonText(jsonPreview));
+    setJsonEditValue(formatJsonForDisplay(jsonPreview));
     setJsonError('');
     setJsonEditing(true);
   }
@@ -289,10 +289,22 @@ function formatJsonText(value: string): string {
 
 function formatJsonForDisplay(value: string): string {
   try {
-    return formatJsonText(value);
+    return JSON.stringify(stripLegacyPreviewFields(JSON.parse(value)), null, 2);
   } catch {
     return value;
   }
+}
+
+function stripLegacyPreviewFields(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  const routeJson = value as Record<string, unknown>;
+  if (!Array.isArray(routeJson.pathPrefixes)) {
+    return value;
+  }
+  const { pathPrefix: _legacyPathPrefix, ...previewJson } = routeJson;
+  return previewJson;
 }
 
 function jsonToPayload(value: unknown): RouteConfigPayload {
@@ -316,7 +328,6 @@ function formatDraftJson(route: RouteConfig, values: RouteFormValues): string {
   return JSON.stringify({
     id: route.id,
     name: values.name.trim(),
-    pathPrefix: prefixes[0] || null,
     pathPrefixes: prefixes,
     targetUrl: normalizePreviewUrl(values.targetUrl) || '',
     accessPageBaseUrl: normalizePreviewUrl(values.accessPageBaseUrl),

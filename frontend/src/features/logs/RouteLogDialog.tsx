@@ -231,7 +231,7 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
           </TabsContent>
         </Tabs>
 
-      {detail && <LogDetail entry={detail} onClose={() => setDetail(null)} />}
+      {detail && <LogDetailDrawer entry={detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }
@@ -242,66 +242,92 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
 
 function PathStatsTable({ rows }: { rows: Array<{ path: string; count: number; total: number; max: number }> }) {
   return (
-    <Table>
-      <TableHeader><TableRow><TableHead className="w-16">序号</TableHead><TableHead>路径</TableHead><TableHead>请求数</TableHead><TableHead>总耗时</TableHead><TableHead>最长单次</TableHead></TableRow></TableHeader>
-      <TableBody>
-        {rows.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center text-clay-ink/60">暂无请求</TableCell></TableRow> : rows.map((row, index) => (
-          <TableRow key={row.path}><TableCell>{index + 1}</TableCell><TableCell className="max-w-[420px] truncate" title={row.path}>{row.path}</TableCell><TableCell>{row.count}</TableCell><TableCell>{formatDuration(row.total)}</TableCell><TableCell>{formatDuration(row.max)}</TableCell></TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="route-log-table-scroll">
+      <Table className="min-w-[760px]">
+        <TableHeader><TableRow><TableHead className="w-16">序号</TableHead><TableHead>路径</TableHead><TableHead>请求数</TableHead><TableHead>总耗时</TableHead><TableHead>最长单次</TableHead></TableRow></TableHeader>
+        <TableBody>
+          {rows.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center text-clay-ink/60">暂无请求</TableCell></TableRow> : rows.map((row, index) => (
+            <TableRow key={row.path}><TableCell>{index + 1}</TableCell><TableCell className="max-w-[420px] truncate" title={row.path}>{row.path}</TableCell><TableCell>{row.count}</TableCell><TableCell>{formatDuration(row.total)}</TableCell><TableCell>{formatDuration(row.max)}</TableCell></TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
 function LogTable({ logs, emptyText, durationLabel = '耗时', analyzeLabel = '拷贝分析', onDetail, onAnalyze }: { logs: ProxyRequestLogEntry[]; emptyText: string; durationLabel?: string; analyzeLabel?: string; onDetail: (entry: ProxyRequestLogEntry) => void; onAnalyze: (entry: ProxyRequestLogEntry) => void }) {
   return (
-    <Table>
-      <TableHeader><TableRow><TableHead className="w-16">序号</TableHead><TableHead>时间</TableHead><TableHead>方法</TableHead><TableHead>实际访问</TableHead><TableHead>路径</TableHead><TableHead>状态</TableHead><TableHead>{durationLabel}</TableHead><TableHead>操作</TableHead></TableRow></TableHeader>
-      <TableBody>
-        {logs.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-clay-ink/60">{emptyText}</TableCell></TableRow> : logs.map((entry, index) => (
-          <TableRow key={diagnosticKey(entry) + index}>
-            <TableCell>{index + 1}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatTime(logTimestamp(entry))}</TableCell>
-            <TableCell><Badge variant="indigo">{entry.method || '-'}</Badge></TableCell>
-            <TableCell className="max-w-[190px] truncate" title={entry.accessAddress || '-'}>{entry.accessAddress || '-'}</TableCell>
-            <TableCell className="max-w-[320px] truncate" title={normalizedLogPath(entry.path)}>{normalizedLogPath(entry.path)}</TableCell>
-            <TableCell><Badge variant={Number(entry.status || 0) >= 400 ? 'pink' : 'mint'}>{entry.status || '-'}</Badge></TableCell>
-            <TableCell>{formatDuration(entry.durationMs)}</TableCell>
-            <TableCell><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => onDetail(entry)}><Eye className="h-4 w-4" />详情</Button><Button size="sm" variant="outline" onClick={() => onAnalyze(entry)}>{analyzeLabel}</Button></div></TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function LogDetail({ entry, onClose }: { entry: ProxyRequestLogEntry; onClose: () => void }) {
-  return (
-    <div className="rounded-[24px] border border-clay-border bg-clay-glass p-4 shadow-clay-sm backdrop-blur-[16px]">
-      <div className="mb-3 flex items-center justify-between"><h3 className="text-xl font-black">请求详情</h3><Button size="sm" variant="ghost" onClick={onClose}><X className="h-4 w-4" />关闭</Button></div>
-      <div className="grid gap-3 md:grid-cols-5">
-        <Detail label="时间" value={formatTime(logTimestamp(entry))} />
-        <Detail label="方法" value={entry.method || '-'} />
-        <Detail label="状态" value={String(entry.status || '-')} />
-        <Detail label="耗时" value={formatDuration(entry.durationMs)} />
-        <Detail label="实际访问" value={entry.accessAddress || '-'} />
-      </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <Pre label="路径" value={normalizedLogPath(entry.path)} />
-        <Pre label="请求参数" value={pretty(entry.requestParams)} />
-        <Pre label="请求体" value={pretty(entry.requestBody)} />
-        <Pre label="返回预览" value={pretty(entry.responseBody)} />
-      </div>
+    <div className="route-log-table-scroll">
+      <Table className="min-w-[980px]">
+        <TableHeader><TableRow><TableHead className="w-16">序号</TableHead><TableHead>时间</TableHead><TableHead>方法</TableHead><TableHead>实际访问</TableHead><TableHead>路径</TableHead><TableHead>状态</TableHead><TableHead>{durationLabel}</TableHead><TableHead>操作</TableHead></TableRow></TableHeader>
+        <TableBody>
+          {logs.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center text-clay-ink/60">{emptyText}</TableCell></TableRow> : logs.map((entry, index) => (
+            <TableRow key={diagnosticKey(entry) + index}>
+              <TableCell>{index + 1}</TableCell>
+              <TableCell className="whitespace-nowrap">{formatTime(logTimestamp(entry))}</TableCell>
+              <TableCell><Badge variant={methodBadgeVariant(entry.method)}>{entry.method || '-'}</Badge></TableCell>
+              <TableCell className="max-w-[190px] truncate" title={entry.accessAddress || '-'}>{entry.accessAddress || '-'}</TableCell>
+              <TableCell className="max-w-[320px] truncate" title={normalizedLogPath(entry.path)}>{normalizedLogPath(entry.path)}</TableCell>
+              <TableCell><Badge variant={Number(entry.status || 0) >= 400 ? 'pink' : 'mint'}>{entry.status || '-'}</Badge></TableCell>
+              <TableCell>{formatDuration(entry.durationMs)}</TableCell>
+              <TableCell><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => onDetail(entry)}><Eye className="h-4 w-4" />详情</Button><Button size="sm" variant="outline" onClick={() => onAnalyze(entry)}>{analyzeLabel}</Button></div></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
 
+function LogDetailDrawer({ entry, onClose }: { entry: ProxyRequestLogEntry; onClose: () => void }) {
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+
+  React.useEffect(() => {
+    closeButtonRef.current?.focus({ preventScroll: true });
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <>
+      <button className="route-log-detail-scrim" type="button" aria-label="关闭请求详情" onClick={onClose} />
+      <aside className="route-log-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="route-log-detail-title">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <Badge variant="indigo" className="mb-2">REQUEST DETAIL</Badge>
+            <h3 id="route-log-detail-title" className="text-2xl font-black">请求详情</h3>
+          </div>
+          <Button ref={closeButtonRef} size="sm" variant="outline" onClick={onClose}><X className="h-4 w-4" />关闭</Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Detail label="时间" value={formatTime(logTimestamp(entry))} />
+          <Detail label="方法" value={entry.method || '-'} />
+          <Detail label="状态" value={String(entry.status || '-')} />
+          <Detail label="耗时" value={formatDuration(entry.durationMs)} />
+          <Detail label="实际访问" value={entry.accessAddress || '-'} />
+        </div>
+        <div className="mt-3 grid gap-3">
+          <Pre label="路径" value={normalizedLogPath(entry.path)} />
+          <Pre label="请求参数" value={pretty(entry.requestParams)} />
+          <Pre label="请求体" value={pretty(entry.requestBody)} />
+          <Pre label="返回预览" value={pretty(entry.responseBody)} />
+        </div>
+      </aside>
+    </>
+  );
+}
+
 function Detail({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border-2 border-clay-ink/30 bg-clay-cream p-3"><dt className="text-xs font-black text-clay-ink/60">{label}</dt><dd className="truncate font-black" title={value}>{value}</dd></div>;
+  return <div className="rounded-2xl border-[3px] border-clay-border bg-clay-cream p-3 shadow-clay-sm"><dt className="text-xs font-black text-clay-ink/60">{label}</dt><dd className="truncate font-black" title={value}>{value}</dd></div>;
 }
 
 function Pre({ label, value }: { label: string; value: string }) {
-  return <div><h4 className="mb-1 text-sm font-black">{label}</h4><pre className="max-h-36 overflow-auto rounded-2xl bg-clay-ink p-3 text-xs text-white">{value}</pre></div>;
+  return <div><h4 className="mb-1 text-sm font-black">{label}</h4><pre className="max-h-36 overflow-auto rounded-2xl border-[3px] border-clay-border bg-white p-3 text-xs font-bold text-clay-ink shadow-clay-sm">{value}</pre></div>;
 }
 
 function filterLogs(logs: ProxyRequestLogEntry[], keyword: string): ProxyRequestLogEntry[] {
@@ -333,6 +359,22 @@ function normalizeLimit(value: string): number {
 
 function diagnosticKey(entry: ProxyRequestLogEntry): string {
   return [logTimestamp(entry) || '', entry.method || '', normalizedLogPath(entry.path), entry.status || '', entry.durationMs || ''].join('|');
+}
+
+function methodBadgeVariant(method?: string | null): React.ComponentProps<typeof Badge>['variant'] {
+  switch ((method || '').toUpperCase()) {
+    case 'GET':
+      return 'mint';
+    case 'POST':
+      return 'indigo';
+    case 'PUT':
+    case 'PATCH':
+      return 'yellow';
+    case 'DELETE':
+      return 'pink';
+    default:
+      return 'muted';
+  }
 }
 
 function logTimestamp(entry: ProxyRequestLogEntry): string | null | undefined {
