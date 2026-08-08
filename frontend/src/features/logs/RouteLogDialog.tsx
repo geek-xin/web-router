@@ -172,7 +172,7 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
           <h3 className="text-2xl font-black text-clay-ink">路由日志</h3>
           <p className="text-sm font-bold text-clay-muted">{route?.name || '请选择路由'} · {status}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 lg:pr-12">
           <Button size="sm" variant="outline" onClick={() => setModeIndex((index) => (index + 1) % refreshModes.length)}>
             {refreshModes[modeIndex].intervalMs === -1 ? <Pause className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
             {refreshModes[modeIndex].label}

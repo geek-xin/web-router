@@ -22,6 +22,7 @@
   --color-text-subtle: #9B948C;
   --color-border: #111111;
   --color-shadow: #111111;
+  --app-scale: 1;
   --text: var(--color-text);
   color: var(--text);
   background: var(--color-bg);
@@ -88,6 +89,21 @@ h6,
 #root {
   min-height: 100vh;
   isolation: isolate;
+}
+
+@supports (zoom: 1) {
+  .app-scale-stage,
+  .dialog-scale-root,
+  [data-sonner-toaster] {
+    zoom: var(--app-scale);
+  }
+}
+
+@supports not (zoom: 1) {
+  .app-scale-stage {
+    transform: scale(var(--app-scale));
+    transform-origin: top center;
+  }
 }
 
 @layer components {
@@ -393,7 +409,7 @@ h6,
     }
   }
 
-  @media (min-width: 1280px) {
+  @media (min-width: 1000px) {
     .route-card-board {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -461,7 +477,7 @@ h6,
 
   .route-card-actions-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.35rem;
   }
 

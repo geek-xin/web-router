@@ -1,6 +1,6 @@
 # API 参考
 
-适用于 `web-router` `1.1.0`。所有管理 API 统一返回 `Result<T>`。
+适用于 `web-router` `1.2.0`。所有管理 API 统一返回 `Result<T>`。
 
 ## 响应结构
 

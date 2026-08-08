@@ -1,6 +1,6 @@
 # 快速开始
 
-当前版本：`1.1.0`。
+当前版本：`1.2.0`。
 
 ## 环境要求
 
@@ -118,8 +118,8 @@ scripts/build-dist.sh --with-tests
 输出：
 
 ```text
-target/web-router-1.1.0.tar.gz
-target/dist/web-router-1.1.0.tar.gz
+target/web-router-1.2.0.tar.gz
+target/dist/web-router-1.2.0.tar.gz
 ```
 
 发布包内包含 `run.sh`、`stop.sh`、`run.bat`、`stop.bat`、`config/application.yml` 和 `config/routes/`。Linux/macOS 可执行 `./run.sh` 后台启动并通过 `./stop.sh` 停止；Windows 可执行 `run.bat` 启动并通过 `stop.bat` 停止。

@@ -6,6 +6,7 @@ import com.geek.webrouter.common.enums.ErrorCodeEnum;
 import com.geek.webrouter.common.exception.BusinessException;
 import com.geek.webrouter.web.model.entity.RouteConfig;
 import com.geek.webrouter.web.service.RouteConfigService;
+import com.geek.webrouter.web.support.RouteTargetUrlNormalizer;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -96,6 +97,11 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     }
 
     @Override
+    public List<RouteConfig> exportRoutes() {
+        return listAll();
+    }
+
+    @Override
     public RouteConfig getByName(String name) {
         Path filePath = resolveFilePath(name);
         if (!Files.exists(filePath)) {
@@ -114,6 +120,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     @Override
     public RouteConfig create(RouteConfig config) {
         synchronized (fileMonitor) {
+            normalizeTargetUrls(config);
             validateDisplayName(config.getName());
             normalizeAndValidatePathPrefixes(config);
             normalizeAndValidateLocalBinding(config);
@@ -157,6 +164,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
                 throw new BusinessException(ErrorCodeEnum.CONFIG_IO_ERROR, e.getMessage());
             }
 
+            normalizeTargetUrls(config);
             validateDisplayName(config.getName());
             normalizeAndValidatePathPrefixes(config);
             normalizeAndValidateLocalBinding(config);
@@ -174,6 +182,36 @@ public class RouteConfigServiceImpl implements RouteConfigService {
                 log.info("路由配置已更新: {} ({})", config.getName(), name);
                 return config;
             } catch (IOException e) {
+                throw new BusinessException(ErrorCodeEnum.CONFIG_IO_ERROR, e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public List<RouteConfig> importRoutes(List<RouteConfig> configs) {
+        synchronized (fileMonitor) {
+            List<RouteConfig> importedConfigs = configs == null ? List.of() : configs;
+            List<RouteConfig> normalizedConfigs = importedConfigs.stream()
+                    .map(this::copyForImport)
+                    .toList();
+            validateImportBatch(normalizedConfigs);
+
+            List<Path> writtenFiles = new ArrayList<>();
+            List<RouteConfig> savedConfigs = new ArrayList<>();
+            try {
+                Files.createDirectories(configDir);
+                for (RouteConfig config : normalizedConfigs) {
+                    String id = nextRouteId();
+                    config.setId(id);
+                    Path filePath = resolveFilePath(id);
+                    objectMapper.writerWithDefaultPrettyPrinter().writeValue(filePath.toFile(), config);
+                    writtenFiles.add(filePath);
+                    savedConfigs.add(config);
+                    log.info("路由配置已导入: {} ({})", config.getName(), id);
+                }
+                return savedConfigs;
+            } catch (IOException e) {
+                rollbackImportedFiles(writtenFiles);
                 throw new BusinessException(ErrorCodeEnum.CONFIG_IO_ERROR, e.getMessage());
             }
         }
@@ -222,6 +260,58 @@ public class RouteConfigServiceImpl implements RouteConfigService {
                 .findFirst();
         if (conflict.isPresent()) {
             throw new BusinessException(ErrorCodeEnum.DUPLICATE_NAME, "路由名称已存在: " + name);
+        }
+    }
+
+    private void validateImportBatch(List<RouteConfig> configs) {
+        Set<String> names = new LinkedHashSet<>();
+        Set<String> localBindings = new LinkedHashSet<>();
+        for (RouteConfig config : configs) {
+            normalizeTargetUrls(config);
+            validateDisplayName(config.getName());
+            normalizeAndValidatePathPrefixes(config);
+            normalizeAndValidateLocalBinding(config);
+            normalizeAccessPage(config);
+            validateProxyAddressConfigured(config);
+            if (!names.add(config.getName())) {
+                throw new BusinessException(ErrorCodeEnum.DUPLICATE_NAME,
+                        "导入文件内路由名称重复: " + config.getName());
+            }
+            if (config.isEnabled() && config.hasLocalBinding()) {
+                String binding = localBinding(config);
+                if (!localBindings.add(binding)) {
+                    throw new BusinessException(ErrorCodeEnum.DUPLICATE_LOCAL_BINDING,
+                            "导入文件内本地监听地址重复: " + binding);
+                }
+            }
+        }
+        for (RouteConfig config : configs) {
+            checkNameConflict("", config.getName());
+            checkLocalBindingConflict("", config);
+        }
+    }
+
+    private RouteConfig copyForImport(RouteConfig source) {
+        RouteConfig config = RouteConfig.builder()
+                .name(source == null ? null : source.getName())
+                .targetUrl(source == null ? null : source.getTargetUrl())
+                .accessPageBaseUrl(source == null ? null : source.getAccessPageBaseUrl())
+                .accessPage(source == null ? null : source.getAccessPage())
+                .localIp(source == null ? null : source.getLocalIp())
+                .localPort(source == null ? null : source.getLocalPort())
+                .enabled(source != null && source.isEnabled())
+                .build();
+        config.setEffectivePathPrefixes(source == null ? List.of() : source.effectivePathPrefixes());
+        return config;
+    }
+
+    private void rollbackImportedFiles(List<Path> writtenFiles) {
+        for (Path file : writtenFiles) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException rollbackError) {
+                log.warn("回滚导入配置文件失败: {}", file, rollbackError);
+            }
         }
     }
 
@@ -313,6 +403,16 @@ public class RouteConfigServiceImpl implements RouteConfigService {
     private void validateProxyAddressConfigured(RouteConfig config) {
         if (!config.effectivePathPrefixes().isEmpty() && config.getAccessPageBaseUrl() == null) {
             throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, "配置路径前缀时代理地址不能为空");
+        }
+    }
+
+    private void normalizeTargetUrls(RouteConfig config) {
+        if (config.getTargetUrl() == null || config.getTargetUrl().trim().isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, "默认地址（兜底）不能为空");
+        }
+        config.setTargetUrl(RouteTargetUrlNormalizer.normalize(config.getTargetUrl()));
+        if (config.getAccessPageBaseUrl() != null && !config.getAccessPageBaseUrl().trim().isEmpty()) {
+            config.setAccessPageBaseUrl(RouteTargetUrlNormalizer.normalize(config.getAccessPageBaseUrl()));
         }
     }
 

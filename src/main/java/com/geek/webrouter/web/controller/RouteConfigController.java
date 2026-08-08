@@ -6,6 +6,9 @@ import com.geek.webrouter.common.exception.BusinessException;
 import com.geek.webrouter.common.result.Result;
 import com.geek.webrouter.config.DynamicRouteService;
 import com.geek.webrouter.web.model.dto.RouteConfigDto;
+import com.geek.webrouter.web.model.dto.RouteConfigExportResponse;
+import com.geek.webrouter.web.model.dto.RouteConfigImportRequest;
+import com.geek.webrouter.web.model.dto.RouteConfigImportResponse;
 import com.geek.webrouter.web.model.entity.RouteConfig;
 import com.geek.webrouter.web.service.RouteConfigService;
 import com.geek.webrouter.web.support.RouteTargetUrlNormalizer;
@@ -20,6 +23,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -50,6 +54,27 @@ public class RouteConfigController {
     @ResponseBody
     public Result<List<RouteConfig>> listAll() {
         return Result.success(routeConfigService.listAll());
+    }
+
+    @GetMapping("/api/routes/export")
+    @ResponseBody
+    public Result<RouteConfigExportResponse> exportRoutes() {
+        return Result.success(new RouteConfigExportResponse(
+                1,
+                Instant.now(),
+                routeConfigService.exportRoutes()
+        ));
+    }
+
+    @PostMapping("/api/routes/import")
+    @ResponseBody
+    public Mono<Result<RouteConfigImportResponse>> importRoutes(@Valid @RequestBody RouteConfigImportRequest request) {
+        List<RouteConfig> configs = request.getRoutes().stream()
+                .map(this::toEntity)
+                .toList();
+        List<RouteConfig> imported = routeConfigService.importRoutes(configs);
+        return dynamicRouteService.refreshAll()
+                .thenReturn(Result.success(new RouteConfigImportResponse(imported.size(), imported)));
     }
 
     @GetMapping("/api/routes/{name}")

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { RouteFormPanel } from './RouteFormDialog';
-import { RouteLogPanel } from '@/features/logs/RouteLogDialog';
 import type { RouteConfig, RouteConfigPayload, RouteFormValues } from './types';
 import { routeToFormValues } from './route-utils';
 import { buildRouteTopologyModel, routeStatusLabel, routeStatusTone } from './route-detail-utils';
@@ -103,7 +102,6 @@ export function RouteDetailDrawer({ open, route, fileName, content, loading, err
           <TabsList className="route-detail-tabs-list items-stretch">
             <TabsTrigger className="route-detail-tab-trigger" value="edit">配置编辑</TabsTrigger>
             <TabsTrigger className="route-detail-tab-trigger" value="json">JSON 配置</TabsTrigger>
-            <TabsTrigger className="route-detail-tab-trigger" value="logs">实时日志</TabsTrigger>
           </TabsList>
         </div>
 
@@ -168,11 +166,6 @@ export function RouteDetailDrawer({ open, route, fileName, content, loading, err
           </div>
         </TabsContent>
 
-        <TabsContent className="route-detail-tab-content" value="logs">
-          <section className="rounded-[24px] border-[3px] border-clay-border bg-white p-4 shadow-clay-sm">
-            <RouteLogPanel open={open} route={route} />
-          </section>
-        </TabsContent>
       </Tabs>
     </section>
   );

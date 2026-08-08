@@ -1,6 +1,6 @@
 # web-router 使用说明
 
-本文说明如何启动、配置和使用 `web-router` `1.1.0`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
+本文说明如何启动、配置和使用 `web-router` `1.2.0`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
 
 ## 环境要求
 
@@ -276,8 +276,8 @@ scripts/build-dist.sh --with-tests
 输出位置：
 
 ```text
-target/web-router-1.1.0.tar.gz
-target/dist/web-router-1.1.0.tar.gz
+target/web-router-1.2.0.tar.gz
+target/dist/web-router-1.2.0.tar.gz
 ```
 
 发布包包含：

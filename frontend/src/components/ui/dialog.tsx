@@ -18,7 +18,7 @@ export const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrim
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn('fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-[min(94vw,760px)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-auto rounded-[24px] border-[3px] border-clay-border bg-white p-6 shadow-clay outline-none', className)}
+      className={cn('dialog-scale-root fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-[min(94vw,760px)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-auto rounded-[24px] border-[3px] border-clay-border bg-white p-6 shadow-clay outline-none', className)}
       {...props}
     >
       {children}

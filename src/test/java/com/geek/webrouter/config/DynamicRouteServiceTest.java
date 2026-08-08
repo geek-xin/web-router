@@ -116,12 +116,22 @@ class DynamicRouteServiceTest {
         }
 
         @Override
+        public List<RouteConfig> exportRoutes() {
+            return configs;
+        }
+
+        @Override
         public RouteConfig getByName(String name) {
             throw new UnsupportedOperationException();
         }
 
         @Override
         public RouteConfig create(RouteConfig config) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<RouteConfig> importRoutes(List<RouteConfig> configs) {
             throw new UnsupportedOperationException();
         }
 

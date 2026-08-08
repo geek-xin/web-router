@@ -19,6 +19,13 @@ public interface RouteConfigService {
     List<RouteConfig> listAll();
 
     /**
+     * 导出全部路由配置。
+     *
+     * @return 路由配置列表
+     */
+    List<RouteConfig> exportRoutes();
+
+    /**
      * 根据名称获取路由配置。
      *
      * @param name 路由名称
@@ -33,6 +40,14 @@ public interface RouteConfigService {
      * @return 保存后的配置
      */
     RouteConfig create(RouteConfig config);
+
+    /**
+     * 批量导入路由配置。导入使用严格模式：任一配置校验或冲突失败时整批不写入。
+     *
+     * @param configs 待导入配置
+     * @return 保存后的配置列表
+     */
+    List<RouteConfig> importRoutes(List<RouteConfig> configs);
 
     /**
      * 更新路由配置。

@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://spring.io/projects/spring-boot"><img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-3.5.2-6DB33F?style=flat-square&logo=springboot&logoColor=white"></a>
   <a href="https://spring.io/projects/spring-cloud-gateway"><img alt="Spring Cloud Gateway" src="https://img.shields.io/badge/Spring%20Cloud%20Gateway-2024.0.1-6DB33F?style=flat-square&logo=spring&logoColor=white"></a>
-  <img alt="Release" src="https://img.shields.io/badge/Release-1.1.0-111827?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-1.2.0-111827?style=flat-square">
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white">
   <img alt="Maven" src="https://img.shields.io/badge/Maven-build-C71A36?style=flat-square&logo=apachemaven&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/UI-React%20%2B%20Vite-149ECA?style=flat-square&logo=react&logoColor=white">
@@ -23,7 +23,7 @@
 
 `web-router` 是一个面向本地开发、联调和测试环境的轻量 Web 路由代理。它把多组路径转发规则保存为本地 JSON 文件，并通过 Spring Cloud Gateway、Reactor Netty 和 React 管理后台实现“配置即改即生效”。
 
-当前版本：`1.1.0`。
+当前版本：`1.2.0`。
 
 ## 功能总览
 

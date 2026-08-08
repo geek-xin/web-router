@@ -9,16 +9,29 @@ import { stripProtocol } from '@/lib/utils';
 import type { RouteConfig, RouteConfigPayload } from '@/features/routes/types';
 import { activeLocalBinding, displayTargetUrl, effectivePathPrefixes, localBinding, routeAccessUrl } from '@/features/routes/route-utils';
 import { formatJsonContent } from '@/features/routes/route-detail-utils';
+import { parseRouteImportFile, routeExportFileName, type RouteImportPayload } from '@/features/routes/import-export-utils';
 import { RouteToolbar } from '@/features/routes/RouteToolbar';
 import { RouteCard } from '@/features/routes/RouteCard';
 import { RouteFormDialog } from '@/features/routes/RouteFormDialog';
 import { RouteDetailDrawer as RouteDetailPage } from '@/features/routes/RouteDetailDrawer';
 import { DeleteConfirmDialog } from '@/features/routes/DeleteConfirmDialog';
+import { RouteLogDialog } from '@/features/logs/RouteLogDialog';
 import './styles.css';
 
 interface RawConfigResponse {
   fileName: string;
   content: string;
+}
+
+interface RouteExportResponse {
+  version: number;
+  exportedAt: string;
+  routes: RouteConfig[];
+}
+
+interface RouteImportResponse {
+  importedCount: number;
+  routes: RouteConfig[];
 }
 
 interface DetailDrawerState {
@@ -38,9 +51,20 @@ interface FormState {
 
 type RouteFilter = 'enabled' | 'disabled' | 'all';
 
+// 与 web-sim 一致的等比缩放基准：1536×960 设计稿，100% 页面时整体再紧凑 10%。
+const DESIGN_WIDTH = 1536;
+const DESIGN_HEIGHT = 960;
+const COMPACT_SCALE = 0.9;
+// web-router 是流式 + 响应式布局，窄屏由 CSS 断点接管列布局，不再继续等比缩小，
+// 避免与断点双重压缩导致内容不可读。1280 及以上与 web-sim 的等比缩小完全一致。
+const MIN_SCALE = 0.75;
+
 export default function App() {
+  const appScale = useViewportScale();
   const [routes, setRoutes] = React.useState<RouteConfig[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [exporting, setExporting] = React.useState(false);
+  const [importing, setImporting] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [routeFilter, setRouteFilter] = React.useState<RouteFilter>('enabled');
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -48,6 +72,7 @@ export default function App() {
   const [form, setForm] = React.useState<FormState>({ open: false, mode: 'create', route: null });
   const [detailDrawer, setDetailDrawer] = React.useState<DetailDrawerState>({ open: false, route: null, fileName: '', content: '', loading: false, error: '' });
   const [deleteIds, setDeleteIds] = React.useState<string[]>([]);
+  const [logRoute, setLogRoute] = React.useState<RouteConfig | null>(null);
 
   const configPathFull = React.useMemo(() => readConfigPath(), []);
 
@@ -127,6 +152,33 @@ export default function App() {
     await reloadDetail(updated);
   }
 
+  async function exportRoutes() {
+    setExporting(true);
+    try {
+      const data = await fetchJson<RouteExportResponse>('/admin/api/routes/export');
+      downloadJson(data, routeExportFileName(data.exportedAt));
+      toast.success(`已导出 ${data.routes.length} 条路由`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '导出失败');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function importRoutes(file: File) {
+    setImporting(true);
+    try {
+      const payload = parseRouteImportFile(await file.text());
+      const data = await fetchJson<RouteImportResponse>('/admin/api/routes/import', jsonRequest<RouteImportPayload>(payload));
+      toast.success(`已导入 ${data.importedCount} 条路由`);
+      await loadRoutes();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function toggleRoute(route: RouteConfig) {
     if (!route.enabled && !route.localPort) {
       toast.error('请先编辑路由并填写监听端口后再启用');
@@ -166,7 +218,7 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen px-3 py-4 text-clay-ink sm:px-4 sm:py-5 lg:px-6">
+    <main className="app-scale-stage min-h-screen px-3 py-4 text-clay-ink sm:px-4 sm:py-5 lg:px-6" style={{ '--app-scale': appScale } as React.CSSProperties}>
       <div className="mx-auto grid max-w-[1536px] gap-5">
         {detailDrawer.open && detailDrawer.route ? (
           <RouteDetailPage
@@ -210,7 +262,18 @@ export default function App() {
         </section>
 
         <section className="route-workspace chunky-panel bg-white p-4 sm:p-5" aria-labelledby="route-config-heading">
-          <RouteToolbar headingId="route-config-heading" search={search} selectedCount={selectedIds.length} onSearchChange={setSearch} onAdd={() => setForm({ open: true, mode: 'create', route: null })} onBatchDelete={() => setDeleteIds(selectedIds)} />
+          <RouteToolbar
+            headingId="route-config-heading"
+            search={search}
+            selectedCount={selectedIds.length}
+            onSearchChange={setSearch}
+            onAdd={() => setForm({ open: true, mode: 'create', route: null })}
+            onExport={() => void exportRoutes()}
+            onImport={(file) => void importRoutes(file)}
+            onBatchDelete={() => setDeleteIds(selectedIds)}
+            exporting={exporting}
+            importing={importing}
+          />
 
           <div className="route-card-board mt-4 grid gap-4" aria-live="polite">
             {loading ? (
@@ -229,6 +292,7 @@ export default function App() {
                 onSelectedChange={(selected) => setSelectedIds((current) => selected ? Array.from(new Set([...current, route.id])) : current.filter((id) => id !== route.id))}
                 onView={() => void openDetail(route)}
                 onCopy={() => setForm({ open: true, mode: 'copy', route })}
+                onLogs={() => setLogRoute(route)}
                 onAccess={() => openAccess(route)}
                 onToggle={() => void toggleRoute(route)}
                 onDelete={() => setDeleteIds([route.id])}
@@ -242,9 +306,44 @@ export default function App() {
 
       <RouteFormDialog open={form.open} mode={form.mode} route={form.route} existingNames={existingNames} existingBindings={existingBindings} onOpenChange={(open) => setForm((current) => ({ ...current, open }))} onSubmit={handleSaveRoute} />
       <DeleteConfirmDialog open={deleteIds.length > 0} names={routes.filter((route) => deleteIds.includes(route.id)).map((route) => route.name)} onOpenChange={(open) => !open && setDeleteIds([])} onConfirm={() => void deleteRoutes(deleteIds)} />
+      <RouteLogDialog open={Boolean(logRoute)} route={logRoute} onOpenChange={(open) => !open && setLogRoute(null)} />
       <Toaster richColors position="top-right" />
     </main>
   );
+}
+
+function useViewportScale() {
+  const [scale, setScale] = React.useState(() => calculateViewportScale());
+
+  React.useEffect(() => {
+    const updateScale = () => {
+      setScale(calculateViewportScale());
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    window.visualViewport?.addEventListener('resize', updateScale);
+    return () => {
+      window.removeEventListener('resize', updateScale);
+      window.visualViewport?.removeEventListener('resize', updateScale);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--app-scale', String(scale));
+  }, [scale]);
+
+  return scale;
+}
+
+function calculateViewportScale() {
+  if (typeof window === 'undefined') {
+    return 1;
+  }
+  const viewport = window.visualViewport;
+  const width = viewport?.width ?? window.innerWidth;
+  const height = viewport?.height ?? window.innerHeight;
+  const nextScale = Math.min(1, width / DESIGN_WIDTH, height / DESIGN_HEIGHT) * COMPACT_SCALE;
+  return Math.max(MIN_SCALE, Number(nextScale.toFixed(4)));
 }
 
 function ChunkyHero() {
@@ -325,4 +424,16 @@ function routeToPayload(route: RouteConfig): RouteConfigPayload {
 
 function readConfigPath(): string {
   return document.querySelector<HTMLMetaElement>('meta[name="routes-config-dir"]')?.content.trim() || '';
+}
+
+function downloadJson(data: unknown, fileName: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

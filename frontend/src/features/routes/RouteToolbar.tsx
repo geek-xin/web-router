@@ -1,4 +1,5 @@
-import { Plus, Search, Trash2 } from 'lucide-react';
+import * as React from 'react';
+import { Download, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -8,10 +9,16 @@ interface RouteToolbarProps {
   selectedCount: number;
   onSearchChange: (value: string) => void;
   onAdd: () => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
   onBatchDelete: () => void;
+  exporting?: boolean;
+  importing?: boolean;
 }
 
-export function RouteToolbar({ headingId, search, selectedCount, onSearchChange, onAdd, onBatchDelete }: RouteToolbarProps) {
+export function RouteToolbar({ headingId, search, selectedCount, onSearchChange, onAdd, onExport, onImport, onBatchDelete, exporting = false, importing = false }: RouteToolbarProps) {
+  const importInputRef = useImportInput(onImport);
+
   return (
     <div className="route-toolbar flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="route-toolbar-heading">
@@ -28,6 +35,27 @@ export function RouteToolbar({ headingId, search, selectedCount, onSearchChange,
           <Trash2 className="h-4 w-4" />
           {selectedCount === 0 ? '选择删除' : `删除选中(${selectedCount})`}
         </Button>
+        <Button variant="outline" onClick={onExport} disabled={exporting}>
+          <Download className="h-4 w-4" />
+          {exporting ? '导出中' : '导出'}
+        </Button>
+        <input
+          ref={importInputRef}
+          className="hidden"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (file) {
+              onImport(file);
+            }
+          }}
+        />
+        <Button variant="outline" onClick={() => importInputRef.current?.click()} disabled={importing}>
+          <Upload className="h-4 w-4" />
+          {importing ? '导入中' : '导入'}
+        </Button>
         <Button variant="orange" onClick={onAdd}>
           <Plus className="h-4 w-4" />
           新增路由
@@ -35,4 +63,16 @@ export function RouteToolbar({ headingId, search, selectedCount, onSearchChange,
       </div>
     </div>
   );
+}
+
+function useImportInput(onImport: (file: File) => void) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    return () => {
+      if (ref.current) {
+        ref.current.value = '';
+      }
+    };
+  }, [onImport]);
+  return ref;
 }

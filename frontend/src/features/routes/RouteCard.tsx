@@ -13,13 +13,14 @@ interface RouteCardProps {
   selected: boolean;
   onSelectedChange: (selected: boolean) => void;
   onView: () => void;
+  onLogs: () => void;
   onCopy: () => void;
   onAccess: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }
 
-export function RouteCard({ route, index, selected, onSelectedChange, onView, onCopy, onAccess, onToggle, onDelete }: RouteCardProps) {
+export function RouteCard({ route, index, selected, onSelectedChange, onView, onLogs, onCopy, onAccess, onToggle, onDelete }: RouteCardProps) {
   const prefixes = effectivePathPrefixes(route);
   const activeBinding = activeLocalBinding(route);
   const configuredBinding = localBinding(route.localIp, route.localPort);
@@ -60,6 +61,7 @@ export function RouteCard({ route, index, selected, onSelectedChange, onView, on
 
       <div className="route-card-actions-grid relative mt-5">
         <Button className="route-action route-action-view" size="sm" variant="outline" onClick={onView}><Eye className="h-4 w-4" />查看</Button>
+        <Button className="route-action route-action-logs" size="sm" variant="outline" onClick={onLogs}><ScrollText className="h-4 w-4" />日志</Button>
         <Button className="route-action route-action-copy" size="sm" variant="outline" onClick={onCopy}><Copy className="h-4 w-4" />拷贝</Button>
         <Button className="route-action route-action-access" size="sm" variant="primary" onClick={onAccess} disabled={!canAccess} title={!canAccess ? '请先启用路由并填写监听端口和访问页' : '新标签页打开访问页'}>访问</Button>
         <Button className="route-action route-action-delete" size="sm" variant="danger" onClick={onDelete}><Trash2 className="h-4 w-4" />删除</Button>
