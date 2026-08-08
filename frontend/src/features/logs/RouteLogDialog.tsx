@@ -11,7 +11,7 @@ import { fetchJson } from '@/lib/api';
 import { copyText, formatDuration, formatTime } from '@/lib/utils';
 import type { RouteConfig } from '@/features/routes/types';
 import type { LogViewState, ProxyRequestLogEntry, ProxyRequestLogSnapshot } from './types';
-import { addLogEntry, buildDurationTopLogs, buildPathDurationStats, buildPathMaxDurationStats, buildPathStats, errorCount, normalizedLogPath, ROUTE_LOG_MAX_RECENT, slowCount, snapshotToState, successRate } from './log-utils';
+import { addLogEntry, buildDurationTopLogs, buildPathDurationStats, buildPathMaxDurationStats, buildPathStats, normalizedLogPath, ROUTE_LOG_MAX_RECENT, snapshotToState, successRate } from './log-utils';
 
 interface RouteLogDialogProps {
   open: boolean;
@@ -21,6 +21,8 @@ interface RouteLogDialogProps {
 
 const initialState: LogViewState = {
   totalRequests: 0,
+  failedRequests: 0,
+  slowRequests: 0,
   totalDurationMs: 0,
   requestsByIp: {},
   pathStats: {},
@@ -154,7 +156,7 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
   const recentLogs = filterLogs(state.recentLogs, pathSearch).slice(0, limit);
   const slowLogs = filterLogs(state.durationTopLogs.length > 0 ? state.durationTopLogs : buildDurationTopLogs(state.recentLogs), pathSearch).slice(0, limit);
   const pathRows = pathStatsRows(state, pathSearch).slice(0, limit);
-  const failures = errorCount(state.recentLogs);
+  const failures = state.failedRequests;
 
   function addDiagnostic(entry: ProxyRequestLogEntry) {
     const key = diagnosticKey(entry);
@@ -182,7 +184,7 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
       <div className="grid gap-3 md:grid-cols-4">
           <Metric label="请求数" value={state.totalRequests} tone="glass-card-gold" />
           <Metric label="失败请求" value={failures} tone="glass-card-blue" />
-          <Metric label="慢请求" value={slowCount(state.recentLogs)} tone="glass-card-purple" />
+          <Metric label="慢请求" value={state.slowRequests} tone="glass-card-purple" />
           <Metric label="成功率" value={successRate(state.totalRequests, failures)} tone="glass-card-green" />
         </div>
 

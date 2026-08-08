@@ -22,6 +22,8 @@ class ProxyRequestLogServiceTest {
         var snapshot = service.snapshot();
 
         assertThat(snapshot.totalRequests()).isEqualTo(3);
+        assertThat(snapshot.failedRequests()).isEqualTo(1);
+        assertThat(snapshot.slowRequests()).isZero();
         assertThat(snapshot.totalDurationMs()).isEqualTo(40);
         assertThat(snapshot.uniqueIpCount()).isEqualTo(2);
         assertThat(snapshot.requestsByIp())
@@ -63,6 +65,45 @@ class ProxyRequestLogServiceTest {
         assertThat(snapshot.pathStats()).containsEntry("/same", 3L);
         assertThat(snapshot.pathDurationStats()).containsEntry("/same", 62L);
         assertThat(snapshot.pathMaxDurationStats()).containsEntry("/same", 42L);
+    }
+
+    @Test
+    void countsSlowRequestsAboveThreshold() {
+        ProxyRequestLogService service = new ProxyRequestLogService();
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/fast", "127.0.0.1", 200, 999));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/slow", "127.0.0.1", 200, 1000));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/slower", "127.0.0.1", 200, 2500));
+
+        var snapshot = service.snapshot("route-a");
+
+        assertThat(snapshot.failedRequests()).isZero();
+        assertThat(snapshot.slowRequests()).isEqualTo(2);
+        assertThat(snapshot.totalRequests()).isEqualTo(3);
+    }
+
+    @Test
+    void failedAndSlowCountsAreFullScopeBeyondRecentLogWindow() {
+        ProxyRequestLogService service = new ProxyRequestLogService();
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/old-failure", "127.0.0.1", 500, 2000));
+        for (int index = 0; index < 100; index += 1) {
+            service.record(new ProxyRequestLogEntry(
+                    null, "route-a", "GET", "/recent-" + index, "127.0.0.1", 200, 100 + index));
+        }
+
+        var snapshot = service.snapshot("route-a");
+
+        assertThat(snapshot.recentLogs())
+                .extracting(ProxyRequestLogEntry::path)
+                .doesNotContain("/old-failure");
+        assertThat(snapshot.failedRequests()).isEqualTo(1);
+        assertThat(snapshot.slowRequests()).isEqualTo(1);
+        assertThat(snapshot.totalRequests()).isEqualTo(101);
     }
 
     @Test

@@ -61,6 +61,8 @@ export function snapshotToState(snapshot: ProxyRequestLogSnapshot): LogViewState
   const recentLogs = snapshot.recentLogs || [];
   return {
     totalRequests: snapshot.totalRequests || recentLogs.length,
+    failedRequests: snapshot.failedRequests ?? errorCount(recentLogs),
+    slowRequests: snapshot.slowRequests ?? slowCount(recentLogs),
     totalDurationMs: snapshot.totalDurationMs || recentLogs.reduce((total, entry) => total + duration(entry), 0),
     requestsByIp: snapshot.requestsByIp || {},
     pathStats: snapshot.pathStats || buildPathStats(recentLogs),
@@ -76,6 +78,8 @@ export function addLogEntry(state: LogViewState, entry: ProxyRequestLogEntry): L
   const entryDuration = duration(entry);
   return {
     totalRequests: state.totalRequests + 1,
+    failedRequests: state.failedRequests + (Number(entry.status || 0) >= 400 ? 1 : 0),
+    slowRequests: state.slowRequests + (entryDuration >= ROUTE_LOG_SLOW_THRESHOLD_MS ? 1 : 0),
     totalDurationMs: state.totalDurationMs + entryDuration,
     requestsByIp: state.requestsByIp,
     pathStats: { ...state.pathStats, [path]: (state.pathStats[path] || 0) + 1 },

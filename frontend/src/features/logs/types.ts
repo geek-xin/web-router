@@ -15,6 +15,8 @@ export interface ProxyRequestLogEntry {
 
 export interface ProxyRequestLogSnapshot {
   totalRequests: number;
+  failedRequests?: number | null;
+  slowRequests?: number | null;
   totalDurationMs?: number | null;
   requestsByIp?: Record<string, number> | null;
   pathStats?: Record<string, number> | null;
@@ -26,6 +28,8 @@ export interface ProxyRequestLogSnapshot {
 
 export interface LogViewState {
   totalRequests: number;
+  failedRequests: number;
+  slowRequests: number;
   totalDurationMs: number;
   requestsByIp: Record<string, number>;
   pathStats: Record<string, number>;

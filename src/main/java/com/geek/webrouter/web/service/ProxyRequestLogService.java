@@ -21,14 +21,19 @@ public class ProxyRequestLogService {
 
     private static final int MAX_RECENT_LOGS = 100;
     private static final int MAX_DURATION_TOP_LOGS = 100;
+    private static final long SLOW_REQUEST_THRESHOLD_MS = 1000;
 
     private final AtomicLong totalRequests = new AtomicLong();
+    private final AtomicLong failedRequests = new AtomicLong();
+    private final AtomicLong slowRequests = new AtomicLong();
     private final AtomicLong totalDurationMs = new AtomicLong();
     private final Map<String, AtomicLong> requestsByIp = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> requestsByPath = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> durationByPath = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> maxDurationByPath = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> totalRequestsByRoute = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> failedRequestsByRoute = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> slowRequestsByRoute = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> totalDurationMsByRoute = new ConcurrentHashMap<>();
     private final Map<String, Map<String, AtomicLong>> requestsByRouteAndIp = new ConcurrentHashMap<>();
     private final Map<String, Map<String, AtomicLong>> requestsByRouteAndPath = new ConcurrentHashMap<>();
@@ -53,6 +58,14 @@ public class ProxyRequestLogService {
 
         totalRequests.incrementAndGet();
         long durationMs = Math.max(0, timestamped.durationMs());
+        if (isFailure(timestamped.status())) {
+            failedRequests.incrementAndGet();
+            failedRequestsByRoute.computeIfAbsent(routeId, ignored -> new AtomicLong()).incrementAndGet();
+        }
+        if (durationMs >= SLOW_REQUEST_THRESHOLD_MS) {
+            slowRequests.incrementAndGet();
+            slowRequestsByRoute.computeIfAbsent(routeId, ignored -> new AtomicLong()).incrementAndGet();
+        }
         totalDurationMs.addAndGet(durationMs);
         requestsByIp.computeIfAbsent(clientIp, ignored -> new AtomicLong()).incrementAndGet();
         requestsByPath.computeIfAbsent(path, ignored -> new AtomicLong()).incrementAndGet();
@@ -111,6 +124,8 @@ public class ProxyRequestLogService {
         }
         return new ProxyRequestLogSnapshot(
                 totalRequests.get(),
+                failedRequests.get(),
+                slowRequests.get(),
                 totalDurationMs.get(),
                 ipStats.size(),
                 ipStats,
@@ -143,9 +158,13 @@ public class ProxyRequestLogService {
             }
         }
         long routeTotal = totalRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+        long routeFailed = failedRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+        long routeSlow = slowRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
         long routeDurationMs = totalDurationMsByRoute.getOrDefault(routeId, new AtomicLong()).get();
         return new ProxyRequestLogSnapshot(
                 routeTotal,
+                routeFailed,
+                routeSlow,
                 routeDurationMs,
                 ipStats.size(),
                 ipStats,
@@ -176,6 +195,10 @@ public class ProxyRequestLogService {
         }
         String suffix = routeId.substring(derivedSeparator + 2);
         return suffix.matches("\\d+") ? routeId.substring(0, derivedSeparator) : routeId;
+    }
+
+    private boolean isFailure(int status) {
+        return status >= 400;
     }
 
     private Map<String, Long> toSortedStats(Map<String, AtomicLong> stats) {

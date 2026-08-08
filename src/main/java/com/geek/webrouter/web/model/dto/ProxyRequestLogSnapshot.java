@@ -5,6 +5,8 @@ import java.util.Map;
 
 public record ProxyRequestLogSnapshot(
         long totalRequests,
+        long failedRequests,
+        long slowRequests,
         long totalDurationMs,
         int uniqueIpCount,
         Map<String, Long> requestsByIp,
