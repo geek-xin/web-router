@@ -16,10 +16,12 @@ while [ "$#" -gt 0 ]; do
       cat <<'USAGE'
 Usage: scripts/build-dist.sh [--with-tests]
 
-Compile the Maven project, package the Spring Boot jar, and create tar.gz
-archives at both:
+Compile the Maven project, package the Spring Boot jar, and create tar.gz and
+zip archives at both:
   - target/web-router-<version>.tar.gz
   - target/dist/web-router-<version>.tar.gz
+  - target/web-router-<version>.zip
+  - target/dist/web-router-<version>.zip
 
 Tests are skipped by default so the script can be used as a packaging command;
 pass --with-tests to run the full Maven test phase.
@@ -86,6 +88,8 @@ DIST_ROOT="${PROJECT_ROOT}/target/dist"
 STAGING_DIR="${DIST_ROOT}/${APP_NAME}"
 DIST_ARCHIVE_PATH="${DIST_ROOT}/${APP_NAME}.tar.gz"
 TARGET_ARCHIVE_PATH="${PROJECT_ROOT}/target/${APP_NAME}.tar.gz"
+DIST_ZIP_PATH="${DIST_ROOT}/${APP_NAME}.zip"
+TARGET_ZIP_PATH="${PROJECT_ROOT}/target/${APP_NAME}.zip"
 JAR_PATH="${PROJECT_ROOT}/target/${APP_NAME}.jar"
 APPLICATION_CONFIG="${PROJECT_ROOT}/src/main/resources/application.yml"
 ROUTES_CONFIG_DIR="${PROJECT_ROOT}/config/routes"
@@ -351,11 +355,22 @@ STOPBATEOF
 convert_to_crlf "${STAGING_DIR}/run.bat"
 convert_to_crlf "${STAGING_DIR}/stop.bat"
 
-rm -f "${DIST_ARCHIVE_PATH}" "${TARGET_ARCHIVE_PATH}"
+rm -f "${DIST_ARCHIVE_PATH}" "${TARGET_ARCHIVE_PATH}" "${DIST_ZIP_PATH}" "${TARGET_ZIP_PATH}"
 tar -C "${DIST_ROOT}" -czf "${DIST_ARCHIVE_PATH}" "${APP_NAME}"
 cp "${DIST_ARCHIVE_PATH}" "${TARGET_ARCHIVE_PATH}"
 
+if ! command -v zip >/dev/null 2>&1; then
+  echo "zip is required but was not found in PATH; skipping zip archive." >&2
+else
+  (cd "${DIST_ROOT}" && zip -qry "${DIST_ZIP_PATH}" "${APP_NAME}")
+  cp "${DIST_ZIP_PATH}" "${TARGET_ZIP_PATH}"
+fi
+
 echo "==> Archive created: ${TARGET_ARCHIVE_PATH}"
 echo "==> Archive also copied to: ${DIST_ARCHIVE_PATH}"
+if [ -f "${TARGET_ZIP_PATH}" ]; then
+  echo "==> Zip archive created: ${TARGET_ZIP_PATH}"
+  echo "==> Zip archive also copied to: ${DIST_ZIP_PATH}"
+fi
 echo "==> Included external config: ${APP_NAME}/config/application.yml"
 echo "==> Included route config directory: ${APP_NAME}/config/routes"

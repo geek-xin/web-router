@@ -278,6 +278,8 @@ scripts/build-dist.sh --with-tests
 ```text
 target/web-router-1.2.0.tar.gz
 target/dist/web-router-1.2.0.tar.gz
+target/web-router-1.2.0.zip
+target/dist/web-router-1.2.0.zip
 ```
 
 发布包包含：
