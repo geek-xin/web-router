@@ -160,7 +160,7 @@ macOS 的 `wrouter.app/Contents/MacOS/wrouter`、或 Linux/Windows 的 `wrouter/
 | runner | platform | 构建类型 |
 | --- | --- | --- |
 | `macos-14` | `macos-arm64` | `jar,app-image,installer` |
-| `macos-13` | `macos-x64` | `app-image,installer` |
+| `macos-15-intel` | `macos-x64` | `app-image,installer` |
 | `ubuntu-latest` | `linux-x64` | `app-image,installer` |
 | `windows-latest` | `windows-x64` | `app-image,installer` |
 
@@ -248,6 +248,8 @@ cd wrouter-<version>
 | `asset name violates the update contract` | 资产名不符合 `ReleaseAssets` 规则 | 检查版本号是否含非法字符；改动命名需同步 `ReleaseAssets.java` |
 | `missing expected asset: wrouter-<version>-jar.zip` | `build-dist.sh` 未产出 zip | 确认 `zip` / `tar` 命令在 PATH 中 |
 | `required command not found: jpackage` | 未装 JDK 21 | 安装带 jpackage 的 JDK 21 |
+| `Option [--linux-package-name] is not valid with type [app-image]` 或 `Option [--win-menu] is not valid with type [app-image]` | 把安装包专用参数传给了 `--type app-image` | 已修复：安装包专用参数由 `installer_only_args()` 单独维护，只传给 `build_installer` |
+| `missing expected asset: wrouter-<version>-<platform>-app.tar.gz` | `--only` 只选了部分类型，但契约校验按所选类型逐项要求 | 补齐 `--only` 中的类型，或确认该平台确实能产出该资产 |
 | 检查更新报「当前安装形态不支持自动更新」 | `installMode` 非 `jar`/`app-image`，或平台标识无法识别 | 用契约命名的产物；`platform` 必须是五个受支持标识之一 |
 | 检查更新报「没有匹配当前平台的更新包」 | Release 缺少该形态该平台的资产 | 补齐资产或改用其他形态下载 |
 | 检查更新报「无法连接 GitHub」 | 网络不可达或 API 限流 | 检查网络；设置 `WROUTER_GITHUB_TOKEN` |

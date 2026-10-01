@@ -56,7 +56,9 @@ jobs:
           - os: macos-14
             platform: macos-arm64
             types: jar,app-image,installer
-          - os: macos-13
+          # macos-13 was retired (December 2025); macos-15-intel is the
+          # supported Intel runner and is what builds the macos-x64 assets.
+          - os: macos-15-intel
             platform: macos-x64
             types: app-image,installer
           - os: ubuntu-latest

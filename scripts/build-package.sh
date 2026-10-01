@@ -343,12 +343,25 @@ jpackage_base_args() {
     macos)
       JPACKAGE_ARGS+=(--mac-package-identifier "com.geek.webrouter")
       ;;
+  esac
+  return 0
+}
+
+# jpackage rejects several options when --type app-image is used: they only make
+# sense for a native installer. Passing them to an app-image build aborts it with
+# "Option [--linux-package-name] is not valid with type [app-image]" (Linux) or
+# "Option [--win-menu] is not valid with type [app-image]" (Windows), which is
+# exactly how the Linux and Windows app-images failed in CI. Keep them in a
+# separate list that only build_installer consumes.
+installer_only_args() {
+  INSTALLER_ARGS=()
+  case "${OS_FAMILY}" in
     linux)
-      JPACKAGE_ARGS+=(--linux-package-name "wrouter")
+      INSTALLER_ARGS+=(--linux-package-name "wrouter")
       ;;
     windows)
-      JPACKAGE_ARGS+=(--win-menu --win-shortcut --win-dir-chooser)
-      JPACKAGE_ARGS+=(--win-upgrade-uuid "${WROUTER_WIN_UPGRADE_UUID:-${DEFAULT_WIN_UPGRADE_UUID}}")
+      INSTALLER_ARGS+=(--win-menu --win-shortcut --win-dir-chooser)
+      INSTALLER_ARGS+=(--win-upgrade-uuid "${WROUTER_WIN_UPGRADE_UUID:-${DEFAULT_WIN_UPGRADE_UUID}}")
       ;;
   esac
   return 0
@@ -489,6 +502,7 @@ build_installer() {
   rm -rf "${JPACKAGE_WORK_DIR}"
   mkdir -p "${JPACKAGE_WORK_DIR}"
   jpackage_base_args
+  installer_only_args
 
   case "${OS_FAMILY}" in
     macos)   installer_types="dmg" ;;
@@ -501,6 +515,7 @@ build_installer() {
     log_step "Building ${installer_type} installer (jpackage --type ${installer_type})"
     set +e
     jpackage "${JPACKAGE_ARGS[@]+"${JPACKAGE_ARGS[@]}"}" \
+      "${INSTALLER_ARGS[@]+"${INSTALLER_ARGS[@]}"}" \
       --type "${installer_type}" \
       --dest "${JPACKAGE_WORK_DIR}" > "${JPACKAGE_WORK_DIR}/installer-${installer_type}.log" 2>&1
     jp_status=$?
