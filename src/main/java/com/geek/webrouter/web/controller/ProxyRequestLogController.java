@@ -3,6 +3,7 @@ package com.geek.webrouter.web.controller;
 import com.geek.webrouter.common.result.Result;
 import com.geek.webrouter.web.model.dto.ProxyRequestLogEntry;
 import com.geek.webrouter.web.model.dto.ProxyRequestLogSnapshot;
+import com.geek.webrouter.web.model.dto.RouteTrafficMetrics;
 import com.geek.webrouter.web.service.ProxyRequestLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import reactor.core.publisher.Flux;
+
+import java.util.Map;
 
 @Controller
 @RequestMapping("/admin/api/proxy-logs")
@@ -25,6 +28,12 @@ public class ProxyRequestLogController {
     @ResponseBody
     public Result<ProxyRequestLogSnapshot> snapshot() {
         return Result.success(logService.snapshot());
+    }
+
+    @GetMapping("/metrics")
+    @ResponseBody
+    public Result<Map<String, RouteTrafficMetrics>> metrics() {
+        return Result.success(logService.routeTrafficMetrics());
     }
 
     @GetMapping("/routes/{routeId}")

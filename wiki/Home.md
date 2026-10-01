@@ -1,59 +1,63 @@
-# web-router Wiki
+# wrouter Wiki
 
-`web-router` 是一个轻量 Web 路由代理，用于在本机维护多组路径转发规则，并在不重启应用的情况下动态刷新代理配置。它适合开发、联调和测试环境中统一管理多个后端服务入口。
+`wrouter` 是一个轻量 Web 路由代理：把「路径前缀 → 后端服务」的转发规则存成本地 JSON 文件，改完立即生效，无需重启。
 
-当前版本：`1.2.0`。
-
-## 项目定位
-
-- 用本地 JSON 文件维护路由配置，无需数据库。
-- 用 Spring Cloud Gateway 提供主端口路径前缀转发。
-- 用 Reactor Netty 为单条路由提供可选独立本地端口代理。
-- 用 React 管理后台完成配置管理、日志查看和实时刷新，并由 Thymeleaf 挂载页面入口。
-
-## 当前能力
-
-| 能力 | 说明 |
-| --- | --- |
-| 多路径前缀 | 一条路由可配置多个 `pathPrefixes`，旧字段 `pathPrefix` 继续兼容。 |
-| 动态 Gateway | 写操作后即时刷新 Gateway 路由；多前缀会生成派生 routeId。 |
-| 本地端口代理 | 启用且配置 `localPort` 的路由启动独立监听，命中前缀走代理地址，未命中走默认地址。 |
-| 配置校验 | 校验名称、前缀、默认地址、代理地址、本地 IP/端口和绑定冲突。 |
-| 请求日志 | 记录 Gateway 与本地端口代理请求，提供快照、Top 路径、慢请求、最近日志和 SSE。 |
-| 管理后台 | 支持路由 CRUD、详情抽屉、JSON 预览、访问页打开、配置目录显示和单路由日志弹窗。 |
-| 发布脚本 | `scripts/build-dist.sh` 生成包含 Linux/macOS 与 Windows 启停脚本的可分发 tar.gz 包到 `target/`，并同步复制到 `target/dist/`。 |
-
-## 架构概览
-
-```mermaid
-flowchart LR
-    Client["浏览器 / curl / 调用方"] --> Gateway["Spring Cloud Gateway\n:8090"]
-    Gateway --> DynamicRoutes["DynamicRouteService\n动态路由注册"]
-    DynamicRoutes --> Target["目标服务"]
-
-    Admin["管理后台 / API"] --> RouteService["RouteConfigServiceImpl\n配置读写与校验"]
-    RouteService --> JsonFiles["config/routes/*.json"]
-    Admin --> DynamicRoutes
-
-    Client --> LocalProxy["LocalPortProxyService\n可选本地端口代理"]
-    LocalProxy --> Target
-
-    Gateway --> Logs["ProxyRequestLogService"]
-    LocalProxy --> Logs
-    Logs --> Admin
-```
+当前版本：`1.3.0`。Java 包名仍为 `com.geek.webrouter`（历史保留）。
 
 ## 快速入口
 
-- 管理后台：`http://localhost:8090/admin`
-- 健康检查：`http://localhost:8090/actuator/health`
-- 应用信息：`http://localhost:8090/actuator/info`
+| 入口 | 地址 |
+| --- | --- |
+| 管理后台 | <http://localhost:9999/admin> |
+| 健康检查 | <http://localhost:9999/actuator/health> |
+| 应用信息 | <http://localhost:9999/actuator/info> |
 
-## 推荐阅读顺序
+默认监听 `127.0.0.1:9999`，配置见 `src/main/resources/application.yml`。
+
+## 三种交付形态
+
+| 形态 | 说明 |
+| --- | --- |
+| 安装包 | macOS `dmg` / Windows `exe` / Linux `deb`、`rpm` |
+| 免安装 app-image | 解压即用，内置运行时（`-app.zip` / Linux `-app.tar.gz`） |
+| 传统 JAR | `java -jar wrouter-<version>.jar`，需自带 JDK 21 |
+
+三种形态都支持管理后台的**自动更新**，并在版本抽屉展示当前版本号。
+
+构建命令、产物命名与目录结构详见 [打包与发布](../docs/PACKAGING.md)，本文不重复。
+
+## 核心机制
+
+- **本地 JSON 配置**：一条路由一个文件 `config/routes/<id>.json`，无数据库。
+- **Gateway 动态转发**：写操作后差量刷新路由；多前缀派生 routeId `<id>__<n>` 并执行 `StripPrefix`。
+- **每路由本地端口代理**：可选 `localPort`，独立入口，保留原始 URI。
+- **请求观测**：日志快照、SSE 实时流、最近 60 秒滚动请求/失败数与最近 30 分钟序列。
+
+```mermaid
+flowchart LR
+    C["客户端"] -->|":9999 主端口"| G["Spring Cloud Gateway"]
+    C -->|":localPort 独立端口"| L["LocalPortProxyService"]
+    G --> T["目标服务"]
+    G --> L
+    L --> T
+    G --> R["ProxyRequestLogService"]
+    L --> R
+    R --> A["管理后台"]
+```
+
+## 阅读顺序
 
 1. [快速开始](Getting-Started)
 2. [用户指南](User-Guide)
 3. [架构与机制](Architecture)
 4. [API 参考](API-Reference)
 5. [常见问题](Troubleshooting)
-6. [开发指南](Development-Guide)
+
+## 权威文档
+
+wiki 只做速查，细节以仓库文档为准：
+
+- [核心功能说明](../docs/CORE-FEATURES.md)：数据模型、转发语义、观测口径、校验规则、关键不变量、已知边界。
+- [UI 设计系统](../docs/UI-DESIGN-SYSTEM.md)：管理后台视觉与交互规范。
+- [UI 实现映射](../docs/UI-IMPLEMENTATION.md)：规范到文件与数据契约的映射。
+- [打包与发布](../docs/PACKAGING.md)：交付形态、构建、自动更新与 CI 发布。

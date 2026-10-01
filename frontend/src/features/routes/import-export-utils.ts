@@ -16,7 +16,7 @@ export function routeExportFileName(exportedAt: string): string {
     pad(date.getUTCMinutes()),
     pad(date.getUTCSeconds()),
   ].join('');
-  return `web-router-routes-${stamp}.json`;
+  return `wrouter-routes-${stamp}.json`;
 }
 
 export function parseRouteImportFile(content: string): RouteImportPayload {

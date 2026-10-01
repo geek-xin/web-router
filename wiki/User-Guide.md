@@ -1,108 +1,76 @@
 # 用户指南
 
-当前版本：`1.2.0`。
-
 ## 管理后台
 
-启动应用后打开：
+<http://localhost:9999/admin> 是一套深色开发者控制台，主要能力：
 
-```text
-http://localhost:8090/admin
-```
+- **KPI 行**：路由总数 / 运行中 / 已停用 / 请求数·分钟 / 平均延迟；前三项点击即筛选。
+- **工具栏**：搜索（名称 / Path / Target / 监听地址 / id）、状态筛选、排序、导出、导入、新增。
+- **路由卡片**：状态点、Path 标签、Target、本地端口、请求数·分钟、平均延迟与 30 分钟流量曲线。
+- **详情抽屉**：路由拓扑、基本信息、运行状态、最近日志，另有配置 / 日志 / 指标标签页。
+- **日志视图**：实时流、Top 路径、单耗时 Top、诊断分析。
 
-管理后台支持：
+保存、启停或删除路由后，Gateway 与本地端口代理会立即刷新。
 
-- 新增、编辑、删除路由。
-- 启用或禁用路由。
-- 为一条路由维护多个路径前缀。
-- 配置本地监听 IP/端口、默认地址（兜底）、代理地址和访问页。
-- 查看原始 JSON 配置和配置目录。
-- 复制 Gateway 或本地端口访问地址。
-- 查看全部/单路由请求统计、Top 路径、慢请求和最近请求日志。
-- 通过日志弹窗实时刷新请求记录。
+视觉与交互规范见 [UI 设计系统](../docs/UI-DESIGN-SYSTEM.md)，文件映射见 [UI 实现映射](../docs/UI-IMPLEMENTATION.md)。
 
-保存路由后，应用会立即刷新 Gateway 路由和本地端口代理。
+## 路由字段
 
-## 路由配置示例
-
-```json
-{
-  "id": "route-20260603234846-4d2deb",
-  "name": "测试服务",
-  "pathPrefix": "/test",
-  "pathPrefixes": ["/test", "/api/test"],
-  "targetUrl": "http://localhost:8081",
-  "accessPageBaseUrl": "http://localhost:8082",
-  "accessPage": "/test/hello",
-  "localIp": "127.0.0.1",
-  "localPort": 18081,
-  "enabled": true
-}
-```
-
-## 字段说明
-
-| 字段 | 说明 |
-| --- | --- |
-| `id` | 内部路由 ID；创建时自动生成，并作为配置文件名和 Gateway routeId 基础值。 |
-| `name` | 展示名称，不能为空，不能与其他路由重复。 |
-| `pathPrefixes` | 路径前缀列表；同一路由内不能重复，不同路由可复用相同前缀。为空时本地监听请求走默认地址。 |
-| `pathPrefix` | 兼容旧配置的单路径字段，写回时与 `pathPrefixes[0]` 同步。 |
-| `targetUrl` | 默认地址（兜底）；API 入参可省略协议，保存时默认补 `http://`。 |
-| `accessPageBaseUrl` | 代理地址；本地监听请求命中 `pathPrefixes` 时转发到此地址。配置路径前缀时必填。 |
-| `accessPage` | 可选访问页；管理后台“访问”按钮优先打开该路径或绝对 URL。 |
-| `localIp` | 本地监听 IP；空值且配置本地端口时默认 `127.0.0.1`。 |
-| `localPort` | 本地监听端口；当前管理 API/后台表单要求填写 `1-65535`。 |
-| `enabled` | 是否启用；禁用后保留配置文件，但不注册 Gateway 路由，也不启动本地端口代理。 |
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `id` | 系统生成 | 内部 ID，同时是配置文件名与 Gateway routeId 基础值，格式 `route-yyyyMMddHHmmss-xxxxxx`。 |
+| `name` | 是 | 展示名称，≤50 字，全局唯一。 |
+| `pathPrefixes` | 否 | 路径前缀列表，每项以 `/` 开头；同路由内不重复，不同路由可复用。 |
+| `pathPrefix` | 否 | 旧字段，写回时始终与 `pathPrefixes[0]` 同步。 |
+| `targetUrl` | 是 | 默认地址（兜底），保存前归一化为带协议 URL。 |
+| `accessPageBaseUrl` | 配置前缀时必填 | 代理地址，**只被本地端口代理使用**。 |
+| `accessPage` | 否 | 访问页，后台「访问」按钮优先打开它。 |
+| `localIp` | 否 | 本地监听 IP，为空时默认 `127.0.0.1`。 |
+| `localPort` | 管理 API 必填 | 本地监听端口，`1-65535`。 |
+| `enabled` | 否 | 禁用后保留配置文件，但不注册 Gateway 路由、不启动本地代理。 |
 
 ## 校验规则
 
-- `id` 只允许英文、数字、下划线和连字符。
-- `name` 不能为空，不能与其他路由重复。
-- `pathPrefixes` 可以为空；为空时本地监听请求走默认地址。配置路径前缀时代理地址必填。
-- 每个路径前缀必须以 `/` 开头，只允许英文、数字、下划线、连字符和 `/`。
-- 非根路径末尾 `/` 会被规范化移除，例如 `/api/` -> `/api`。
-- 同一路由内路径前缀不能重复；不同路由可复用相同前缀。
-- `targetUrl` 入参格式为 `host:port` 或 `http(s)://host:port`，保存前会归一化为带协议 URL；可与其他路由重复。
-- `accessPageBaseUrl` 入参格式为 `host:port` 或 `http(s)://host:port`。
-- `localPort` 当前管理 API/后台表单必填，范围为 `1-65535`。
-- `localIp` 允许空值、`localhost` 或有效 IPv4；非空时会被校验。
-- `localIp:localPort` 不能与其他启用本地绑定的路由重复。
+| 规则 | 违反时 |
+| --- | --- |
+| `id` 匹配 `^[a-zA-Z0-9_-]+$` | `BAD_REQUEST` |
+| `name` 非空、≤50 字、全局唯一 | `BAD_REQUEST` / `DUPLICATE_NAME` |
+| 前缀匹配 `^/[-a-zA-Z0-9_/]*$`，同路由内不重复；末尾 `/` 会被移除 | `BAD_REQUEST` / `DUPLICATE_PREFIX` |
+| `targetUrl` 匹配 `^(https?://)?[-a-zA-Z0-9.]+:\d{1,5}$` | `BAD_REQUEST` |
+| `accessPageBaseUrl` 同上，且配置前缀时必填 | `BAD_REQUEST` |
+| `localIp` 为空 / `localhost` / 合法 IPv4 | `BAD_REQUEST` |
+| `localPort` 范围 `1-65535` | `BAD_REQUEST` |
+| 启用路由之间 `localIp:localPort` 不重复 | `DUPLICATE_LOCAL_BINDING` |
 
-## Gateway 转发与本地端口代理区别
+前缀冲突只判断「完全相同」，不做父子包含判断。
+
+## 两条入口的转发语义差异
 
 | 项目 | Gateway 转发 | 本地端口代理 |
 | --- | --- | --- |
-| 入口 | 应用主端口，例如 `8090` | 每条路由自己的 `localIp:localPort` |
-| 匹配方式 | 按每个 `pathPrefixes` 注册 Gateway Path 谓词 | 根据是否命中当前路由 `pathPrefixes` 选择上游地址 |
-| 前缀处理 | 会按路径层级 `StripPrefix` | 不剥离前缀 |
-| 转发路径 | 剥离前缀后的路径 | 原始请求 URI |
-| 未命中路径 | 不命中该 Gateway 路由 | 转发到 `targetUrl` 默认地址 |
+| 入口 | 主端口 `:9999` | 该路由的 `localIp:localPort` |
+| 前缀处理 | 按层级 `StripPrefix` | **不剥离**，保留原始 URI（含 query） |
+| 上游选择 | 配置 `localPort` 时交给本地代理，否则走 `targetUrl` | 命中 `pathPrefixes` 走 `accessPageBaseUrl`，否则走 `targetUrl` |
+| 未命中路径 | 不命中该 Gateway 路由 | 转发到 `targetUrl` |
 
-例如配置：
+> 要点：**`accessPageBaseUrl` 只影响本地端口代理**。配置了 `localPort` 的路由会改写 Gateway 目标并把剥离层级降为 0，由本地代理统一决定最终上游。
 
-```json
-{
-  "pathPrefixes": ["/test"],
-  "targetUrl": "http://localhost:8081",
-  "accessPageBaseUrl": "http://localhost:8082"
-}
-```
+## 导入与导出
 
-请求 `/test/hello` 时：
+- 导出 `GET /admin/api/routes/export`，下载为 `wrouter-routes-yyyyMMdd-HHmmss.json`。
+- 导入 `POST /admin/api/routes/import` 总是**新增**（重新生成 ID），不覆盖同名路由；批次内冲突会整体回滚。
 
-- Gateway 转发到默认地址 `/hello`。
-- 本地端口代理命中前缀时转发到代理地址 `/test/hello`。
+## 请求观测
 
-## 请求日志
+| 指标 | 口径 |
+| --- | --- |
+| `totalRequests` / `failedRequests` | 累计请求数与 `status >= 400` 累计 |
+| `slowRequests` | 耗时 ≥ 1000ms 累计 |
+| `requestsLastMinute` / `failedLastMinute` | 最近 60 秒滚动值（1 秒桶 × 60） |
+| `trafficBuckets` | 最近 30 分钟每分钟请求数，由旧到新，长度恒为 30 |
+| `recentLogs` / `durationTopLogs` | 最近 **100** 条与单次耗时 Top **100** |
+| `uniqueIpCount` | 去重 IP 数 |
 
-请求日志统计包括：
+派生 routeId `<id>__<n>` 在日志、SSE 与指标中统一归并到基础 ID。统计全部在内存中，应用重启后清空。
 
-- 总请求数。
-- 去重 IP 数。
-- 按 IP 聚合的请求次数。
-- Top 路径统计。
-- 慢请求 Top。
-- 最近 100 条请求日志。
-
-日志统计保存在内存中，应用重启后会清空。多路径派生 routeId 会归并到基础路由 ID。
+观测口径的完整定义见 [核心功能说明](../docs/CORE-FEATURES.md)。

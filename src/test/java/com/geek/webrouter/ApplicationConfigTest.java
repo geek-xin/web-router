@@ -22,8 +22,8 @@ class ApplicationConfigTest {
 
         assertThat(logback).contains("name=\"OUT_FILE\"");
         assertThat(logback).contains("name=\"ERR_FILE\"");
-        assertThat(logback).contains("${LOG_PATH}/web-router.out.%d{yyyy-MM-dd}.%i.log");
-        assertThat(logback).contains("${LOG_PATH}/web-router.err.%d{yyyy-MM-dd}.%i.log");
+        assertThat(logback).contains("${LOG_PATH}/wrouter.out.%d{yyyy-MM-dd}.%i.log");
+        assertThat(logback).contains("${LOG_PATH}/wrouter.err.%d{yyyy-MM-dd}.%i.log");
         assertThat(logback).contains("<maxFileSize>10MB</maxFileSize>");
         assertThat(logback).contains("<maxHistory>7</maxHistory>");
         assertThat(logback).contains("<level>ERROR</level>");

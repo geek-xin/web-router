@@ -1,6 +1,6 @@
 {
-  "name": "web-router-admin-frontend",
-  "version": "1.2.0",
+  "name": "wrouter-admin-frontend",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "scripts": {

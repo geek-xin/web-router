@@ -6,22 +6,57 @@ PROJECT_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
 cd "${PROJECT_ROOT}"
 
 RUN_TESTS=false
+SKIP_BUILD=false
+BUILD_PLATFORM=""
+BUILD_INSTALL_MODE=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --with-tests)
       RUN_TESTS=true
       shift
       ;;
+    --skip-tests)
+      RUN_TESTS=false
+      shift
+      ;;
+    --skip-build)
+      SKIP_BUILD=true
+      shift
+      ;;
+    --platform)
+      [ "$#" -ge 2 ] || { echo "--platform requires a value" >&2; exit 2; }
+      BUILD_PLATFORM=$2
+      shift 2
+      ;;
+    --platform=*)
+      BUILD_PLATFORM=${1#--platform=}
+      shift
+      ;;
+    --install-mode)
+      [ "$#" -ge 2 ] || { echo "--install-mode requires a value" >&2; exit 2; }
+      BUILD_INSTALL_MODE=$2
+      shift 2
+      ;;
+    --install-mode=*)
+      BUILD_INSTALL_MODE=${1#--install-mode=}
+      shift
+      ;;
     -h|--help)
       cat <<'USAGE'
-Usage: scripts/build-dist.sh [--with-tests]
+Usage: scripts/build-dist.sh [--with-tests] [--skip-tests] [--skip-build]
+                             [--platform <name>] [--install-mode <mode>]
 
 Compile the Maven project, package the Spring Boot jar, and create tar.gz and
 zip archives at both:
-  - target/web-router-<version>.tar.gz
-  - target/dist/web-router-<version>.tar.gz
-  - target/web-router-<version>.zip
-  - target/dist/web-router-<version>.zip
+  - target/wrouter-<version>.tar.gz
+  - target/dist/wrouter-<version>.tar.gz
+  - target/wrouter-<version>.zip
+  - target/dist/wrouter-<version>.zip
+
+The same zip content is also published under the release contract name used by
+scripts/build-release.sh and the automatic updater:
+  - target/dist/wrouter-<version>-jar.zip
+  - target/wrouter-<version>-jar.zip
 
 Tests are skipped by default so the script can be used as a packaging command;
 pass --with-tests to run the full Maven test phase.
@@ -35,8 +70,13 @@ The release archive contains:
   - README/USAGE/CHANGELOG docs when present
 
 Options:
-  --with-tests   Run tests during Maven package
-  -h, --help     Show this help
+  --with-tests              Run tests during Maven package
+  --skip-tests              Skip tests (default; kept for explicit CLI parity)
+  --skip-build              Reuse the existing target/wrouter-<version>.jar
+                            instead of running Maven again
+  --platform <name>         Recorded in version.properties as the build platform
+  --install-mode <mode>     Recorded in version.properties (jar|app-image)
+  -h, --help                Show this help
 USAGE
       exit 0
       ;;
@@ -73,16 +113,40 @@ convert_to_crlf() {
   mv "${tmp_path}" "${file_path}"
 }
 
-if [ "${RUN_TESTS}" = "true" ]; then
-  echo "==> Building project: mvn clean package"
-  mvn clean package
-else
-  echo "==> Building project: mvn clean package -DskipTests"
-  mvn clean package -DskipTests
+BUILD_METADATA_FLAGS=""
+if [ -n "${BUILD_PLATFORM}" ]; then
+  BUILD_METADATA_FLAGS="${BUILD_METADATA_FLAGS} -Dwrouter.platform=${BUILD_PLATFORM}"
+fi
+if [ -n "${BUILD_INSTALL_MODE}" ]; then
+  BUILD_METADATA_FLAGS="${BUILD_METADATA_FLAGS} -Dwrouter.installMode=${BUILD_INSTALL_MODE}"
 fi
 
+if [ "${SKIP_BUILD}" = "true" ]; then
+  echo "==> Reusing existing build output (--skip-build)"
+elif [ "${RUN_TESTS}" = "true" ]; then
+  echo "==> Building project: mvn clean package${BUILD_METADATA_FLAGS}"
+  # shellcheck disable=SC2086
+  mvn clean package ${BUILD_METADATA_FLAGS}
+else
+  echo "==> Building project: mvn clean package -DskipTests${BUILD_METADATA_FLAGS}"
+  # shellcheck disable=SC2086
+  mvn clean package -DskipTests ${BUILD_METADATA_FLAGS}
+fi
+
+resolve_version() {
+  props_file="${PROJECT_ROOT}/target/classes/version.properties"
+  if [ -f "${props_file}" ]; then
+    resolved=$(sed -n 's/^app\.version=//p' "${props_file}" | head -n 1)
+    case "${resolved}" in
+      ""|*'@'*) ;;
+      *) printf '%s\n' "${resolved}"; return 0 ;;
+    esac
+  fi
+  mvn help:evaluate -Dexpression=project.version -q -DforceStdout | tr -d '\r' | tail -n 1
+}
+
 ARTIFACT_ID=$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
-VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+VERSION=$(resolve_version)
 APP_NAME="${ARTIFACT_ID}-${VERSION}"
 DIST_ROOT="${PROJECT_ROOT}/target/dist"
 STAGING_DIR="${DIST_ROOT}/${APP_NAME}"
@@ -124,13 +188,13 @@ APP_DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
 cd "\${APP_DIR}"
 
 JAR_FILE="\${APP_DIR}/${APP_NAME}.jar"
-PID_FILE="\${APP_DIR}/web-router.pid"
+PID_FILE="\${APP_DIR}/wrouter.pid"
 LOG_DIR="\${APP_DIR}/logs"
-LOG_OUT_FILE="\${LOG_DIR}/web-router.out"
-LOG_ERR_FILE="\${LOG_DIR}/web-router.err"
-BOOTSTRAP_OUT_FILE="\${LOG_DIR}/web-router.bootstrap.out"
-BOOTSTRAP_ERR_FILE="\${LOG_DIR}/web-router.bootstrap.err"
-START_WAIT_SECONDS="\${WEB_ROUTER_START_WAIT_SECONDS:-5}"
+LOG_OUT_FILE="\${LOG_DIR}/wrouter.out"
+LOG_ERR_FILE="\${LOG_DIR}/wrouter.err"
+BOOTSTRAP_OUT_FILE="\${LOG_DIR}/wrouter.bootstrap.out"
+BOOTSTRAP_ERR_FILE="\${LOG_DIR}/wrouter.bootstrap.err"
+START_WAIT_SECONDS="\${WROUTER_START_WAIT_SECONDS:-5}"
 
 pid_matches_app() {
   pid=\$1
@@ -150,7 +214,7 @@ fi
 if [ -f "\${PID_FILE}" ]; then
   OLD_PID=\$(cat "\${PID_FILE}" 2>/dev/null || true)
   if [ -n "\${OLD_PID}" ] && kill -0 "\${OLD_PID}" 2>/dev/null && pid_matches_app "\${OLD_PID}"; then
-    echo "web-router is already running, pid=\${OLD_PID}"
+    echo "wrouter is already running, pid=\${OLD_PID}"
     exit 0
   fi
   rm -f "\${PID_FILE}"
@@ -164,7 +228,7 @@ echo "\${APP_PID}" > "\${PID_FILE}"
 sleep "\${START_WAIT_SECONDS}"
 if ! kill -0 "\${APP_PID}" 2>/dev/null; then
   rm -f "\${PID_FILE}"
-  echo "web-router failed to start. Recent log output:" >&2
+  echo "wrouter failed to start. Recent log output:" >&2
   tail -n 80 "\${LOG_ERR_FILE}" >&2 || true
   tail -n 80 "\${LOG_OUT_FILE}" >&2 || true
   tail -n 80 "\${BOOTSTRAP_ERR_FILE}" >&2 || true
@@ -172,7 +236,7 @@ if ! kill -0 "\${APP_PID}" 2>/dev/null; then
   exit 1
 fi
 
-echo "web-router started, pid=\${APP_PID}"
+echo "wrouter started, pid=\${APP_PID}"
 echo "Log file: \${LOG_OUT_FILE}"
 echo "Error log file: \${LOG_ERR_FILE}"
 RUNEOF
@@ -186,7 +250,7 @@ cd "\${APP_DIR}"
 
 APP_NAME="${APP_NAME}"
 JAR_FILE="\${APP_DIR}/\${APP_NAME}.jar"
-PID_FILE="\${APP_DIR}/web-router.pid"
+PID_FILE="\${APP_DIR}/wrouter.pid"
 
 is_running() {
   pid=\$1
@@ -210,7 +274,7 @@ stop_pid() {
     return 0
   fi
 
-  echo "Stopping web-router, pid=\${pid}"
+  echo "Stopping wrouter, pid=\${pid}"
   kill "\${pid}" 2>/dev/null || true
 
   count=0
@@ -249,9 +313,9 @@ done
 rm -f "\${PID_FILE}"
 
 if [ "\${STOPPED}" = "true" ]; then
-  echo "web-router stopped"
+  echo "wrouter stopped"
 else
-  echo "web-router is not running"
+  echo "wrouter is not running"
 fi
 STOPEOF
 chmod +x "${STAGING_DIR}/stop.sh"
@@ -264,14 +328,14 @@ cd /d "%~dp0"
 set "APP_NAME=${APP_NAME}"
 set "APP_DIR=%CD%"
 set "JAR_FILE=%CD%\\%APP_NAME%.jar"
-set "PID_FILE=%CD%\\web-router.pid"
+set "PID_FILE=%CD%\\wrouter.pid"
 set "LOG_DIR=%CD%\\logs"
-set "LOG_OUT_FILE=%LOG_DIR%\\web-router.out"
-set "LOG_ERR_FILE=%LOG_DIR%\\web-router.err"
-set "BOOTSTRAP_OUT_FILE=%LOG_DIR%\\web-router.bootstrap.out"
-set "BOOTSTRAP_ERR_FILE=%LOG_DIR%\\web-router.bootstrap.err"
+set "LOG_OUT_FILE=%LOG_DIR%\\wrouter.out"
+set "LOG_ERR_FILE=%LOG_DIR%\\wrouter.err"
+set "BOOTSTRAP_OUT_FILE=%LOG_DIR%\\wrouter.bootstrap.out"
+set "BOOTSTRAP_ERR_FILE=%LOG_DIR%\\wrouter.bootstrap.err"
 set "APP_ARGS=%*"
-if "%WEB_ROUTER_START_WAIT_SECONDS%"=="" set "WEB_ROUTER_START_WAIT_SECONDS=5"
+if "%WROUTER_START_WAIT_SECONDS%"=="" set "WROUTER_START_WAIT_SECONDS=5"
 
 if not exist "%JAR_FILE%" (
   echo Jar file not found: "%JAR_FILE%"
@@ -284,7 +348,7 @@ if exist "%PID_FILE%" (
     set "APP_PID=!OLD_PID!"
     powershell -NoProfile -ExecutionPolicy Bypass -Command "\$pidValue = [int]\$env:APP_PID; \$jar = \$env:JAR_FILE; \$process = Get-CimInstance Win32_Process | Where-Object { \$_.ProcessId -eq \$pidValue }; if (\$process -and ((-not \$process.CommandLine) -or (\$process.CommandLine -like ('*' + \$jar + '*')))) { exit 0 } else { exit 1 }" >nul 2>nul
     if !ERRORLEVEL! EQU 0 (
-      echo web-router is already running, pid=!OLD_PID!
+      echo wrouter is already running, pid=!OLD_PID!
       exit /b 0
     )
   )
@@ -298,21 +362,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$jar = \$env:JAR_FILE; 
 
 if errorlevel 1 (
   del /f /q "%PID_FILE%" >nul 2>nul
-  echo web-router failed to start.
+  echo wrouter failed to start.
   exit /b 1
 )
 
 set /p APP_PID=<"%PID_FILE%"
-timeout /t %WEB_ROUTER_START_WAIT_SECONDS% /nobreak >nul
+timeout /t %WROUTER_START_WAIT_SECONDS% /nobreak >nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Get-Process -Id %APP_PID% -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
 if errorlevel 1 (
   del /f /q "%PID_FILE%" >nul 2>nul
-  echo web-router failed to start. Recent log output:
+  echo wrouter failed to start. Recent log output:
   powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path \$env:LOG_ERR_FILE) { Get-Content \$env:LOG_ERR_FILE -Tail 80 }; if (Test-Path \$env:LOG_OUT_FILE) { Get-Content \$env:LOG_OUT_FILE -Tail 80 }; if (Test-Path \$env:BOOTSTRAP_ERR_FILE) { Get-Content \$env:BOOTSTRAP_ERR_FILE -Tail 80 }; if (Test-Path \$env:BOOTSTRAP_OUT_FILE) { Get-Content \$env:BOOTSTRAP_OUT_FILE -Tail 80 }"
   exit /b 1
 )
 
-echo web-router started, pid=%APP_PID%
+echo wrouter started, pid=%APP_PID%
 echo Log file: %LOG_OUT_FILE%
 echo Error log file: %LOG_ERR_FILE%
 RUNBATEOF
@@ -324,7 +388,7 @@ cd /d "%~dp0"
 
 set "APP_NAME=${APP_NAME}"
 set "JAR_FILE=%CD%\\%APP_NAME%.jar"
-set "PID_FILE=%CD%\\web-router.pid"
+set "PID_FILE=%CD%\\wrouter.pid"
 set "STOPPED=false"
 
 if exist "%PID_FILE%" (
@@ -332,7 +396,7 @@ if exist "%PID_FILE%" (
   if not "!APP_PID!"=="" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "\$pidValue = [int]\$env:APP_PID; \$jar = \$env:JAR_FILE; \$process = Get-CimInstance Win32_Process | Where-Object { \$_.ProcessId -eq \$pidValue }; if (\$process -and ((-not \$process.CommandLine) -or (\$process.CommandLine -like ('*' + \$jar + '*')))) { Stop-Process -Id \$pidValue -Force; exit 0 } else { exit 1 }" >nul 2>nul
     if !ERRORLEVEL! EQU 0 (
-      echo web-router stopped, pid=!APP_PID!
+      echo wrouter stopped, pid=!APP_PID!
       set "STOPPED=true"
     )
   )
@@ -342,13 +406,13 @@ if exist "%PID_FILE%" (
 if "%STOPPED%"=="false" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "\$jar = '%JAR_FILE%'; \$processes = Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like ('*' + \$jar + '*') }; if (\$processes) { \$processes | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }; exit 0 } else { exit 1 }" >nul 2>nul
   if !ERRORLEVEL! EQU 0 (
-    echo web-router stopped
+    echo wrouter stopped
     set "STOPPED=true"
   )
 )
 
 if "%STOPPED%"=="false" (
-  echo web-router is not running
+  echo wrouter is not running
 )
 STOPBATEOF
 
@@ -372,5 +436,18 @@ if [ -f "${TARGET_ZIP_PATH}" ]; then
   echo "==> Zip archive created: ${TARGET_ZIP_PATH}"
   echo "==> Zip archive also copied to: ${DIST_ZIP_PATH}"
 fi
+
+# Release contract name consumed by scripts/build-release.sh and the automatic
+# updater. Same content as the zip above, published under the contract name.
+if [ -f "${DIST_ZIP_PATH}" ]; then
+  CONTRACT_ZIP_PATH="${DIST_ROOT}/${ARTIFACT_ID}-${VERSION}-jar.zip"
+  CONTRACT_ZIP_TARGET_PATH="${PROJECT_ROOT}/target/${ARTIFACT_ID}-${VERSION}-jar.zip"
+  rm -f "${CONTRACT_ZIP_PATH}" "${CONTRACT_ZIP_TARGET_PATH}"
+  cp "${DIST_ZIP_PATH}" "${CONTRACT_ZIP_PATH}"
+  cp "${DIST_ZIP_PATH}" "${CONTRACT_ZIP_TARGET_PATH}"
+  echo "==> Contract zip created: ${CONTRACT_ZIP_TARGET_PATH}"
+  echo "==> Contract zip also copied to: ${CONTRACT_ZIP_PATH}"
+fi
+
 echo "==> Included external config: ${APP_NAME}/config/application.yml"
 echo "==> Included route config directory: ${APP_NAME}/config/routes"

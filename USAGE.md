@@ -1,6 +1,6 @@
-# web-router 使用说明
+# wrouter 使用说明
 
-本文说明如何启动、配置和使用 `web-router` `1.2.0`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
+本文说明如何启动、配置和使用 `wrouter` `1.3.0`，并解释 Gateway 转发、本地端口代理、请求日志和管理 API 的当前行为。
 
 ## 环境要求
 
@@ -15,7 +15,7 @@ mvn test
 mvn spring-boot:run
 ```
 
-默认地址：`http://127.0.0.1:8090`。
+默认地址：`http://127.0.0.1:9999`。
 
 常用入口：
 
@@ -66,17 +66,23 @@ config/routes/<id>.json
 
 ## 管理后台
 
-打开 <http://localhost:8090/admin> 后可以：
+打开 <http://localhost:9999/admin> 后可以：
 
-- 新增、编辑、删除路由。
-- 启用或禁用路由。
+- 在**卡片式路由列表**中浏览所有路由，每张卡片显示 Path 前缀、Target、本地端口、状态、每分钟请求数、平均延迟和最近 30 分钟流量曲线。
+- 通过 KPI 行（路由总数 / 运行中 / 已停用 / 请求数·分钟 / 平均延迟）一键筛选状态。
+- 用搜索、状态筛选和排序（最近创建 / 名称 / 流量 / 延迟）定位路由。
+- 新增、编辑、拷贝、删除路由，启用或禁用路由。
 - 为一条路由配置多个路径前缀。
 - 配置本地监听 IP/端口、默认地址（兜底）、代理地址和访问页。
+- 打开右侧详情抽屉：概览（请求链路拓扑 + 基本信息 + 运行状态 + 最近日志）、配置（表单 + JSON 实时同步）、日志、指标。
+- 在「日志」视图中查看单路由实时流、Top 路径、单耗时 Top、诊断分析。
 - 查看原始 JSON 配置和配置目录。
-- 复制 Gateway 或本地端口访问地址。
-- 查看全部/单路由请求统计、Top 路径、慢请求、最近请求日志和实时刷新状态。
+- 通过侧边栏导出 / 导入配置，或复制 Gateway / 本地端口访问地址。
 
 保存路由后，后台会立即刷新 Gateway 路由和本地端口代理。
+
+界面视觉与交互规范见 [docs/UI-DESIGN-SYSTEM.md](./docs/UI-DESIGN-SYSTEM.md)，实现映射见 [docs/UI-IMPLEMENTATION.md](./docs/UI-IMPLEMENTATION.md)，
+后端核心能力（配置模型、动态转发、本地端口代理、请求观测、API 与校验规则）见 [docs/CORE-FEATURES.md](./docs/CORE-FEATURES.md)。
 
 ## Gateway 转发规则
 
@@ -105,7 +111,7 @@ config/routes/<id>.json
 请求：
 
 ```bash
-curl http://localhost:8090/test/hello
+curl http://localhost:9999/test/hello
 ```
 
 上游请求地址：
@@ -185,7 +191,7 @@ http://localhost:8082/test/hello
 创建示例：
 
 ```bash
-curl -X POST http://localhost:8090/admin/api/routes \
+curl -X POST http://localhost:9999/admin/api/routes \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "测试服务",
@@ -202,7 +208,7 @@ curl -X POST http://localhost:8090/admin/api/routes \
 更新示例：
 
 ```bash
-curl -X PUT http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb \
+curl -X PUT http://localhost:9999/admin/api/routes/route-20260603234846-4d2deb \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "测试服务",
@@ -219,7 +225,7 @@ curl -X PUT http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb \
 删除示例：
 
 ```bash
-curl -X DELETE http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb
+curl -X DELETE http://localhost:9999/admin/api/routes/route-20260603234846-4d2deb
 ```
 
 ### 请求日志 API
@@ -243,7 +249,7 @@ curl -X DELETE http://localhost:8090/admin/api/routes/route-20260603234846-4d2de
 订阅 SSE：
 
 ```bash
-curl -N http://localhost:8090/admin/api/proxy-logs/stream
+curl -N http://localhost:9999/admin/api/proxy-logs/stream
 ```
 
 ## 校验规则
@@ -276,22 +282,48 @@ scripts/build-dist.sh --with-tests
 输出位置：
 
 ```text
-target/web-router-1.2.0.tar.gz
-target/dist/web-router-1.2.0.tar.gz
-target/web-router-1.2.0.zip
-target/dist/web-router-1.2.0.zip
+target/wrouter-1.3.0-jar.tar.gz
+target/dist/wrouter-1.3.0-jar.tar.gz
+target/wrouter-1.3.0-jar.zip
+target/dist/wrouter-1.3.0-jar.zip
 ```
 
 发布包包含：
 
 - Spring Boot 可执行 JAR。
-- Linux/macOS：`run.sh` 一键后台启动脚本，启动后写入 `web-router.pid`，日志输出到 `logs/web-router.out`。
-- Linux/macOS：`stop.sh` 一键停止脚本，优先按 `web-router.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
-- Windows：`run.bat` 一键后台启动脚本，启动后写入 `web-router.pid`，日志输出到 `logs\web-router.out` 和 `logs\web-router.err`。
-- Windows：`stop.bat` 一键停止脚本，优先按 `web-router.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
+- Linux/macOS：`run.sh` 一键后台启动脚本，启动后写入 `wrouter.pid`，日志输出到 `logs/wrouter.out`。
+- Linux/macOS：`stop.sh` 一键停止脚本，优先按 `wrouter.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
+- Windows：`run.bat` 一键后台启动脚本，启动后写入 `wrouter.pid`，日志输出到 `logs\wrouter.out` 和 `logs\wrouter.err`。
+- Windows：`stop.bat` 一键停止脚本，优先按 `wrouter.pid` 停止，必要时按当前包目录内 JAR 进程兜底停止。
 - `config/application.yml` 后台配置文件。
 - `config/routes` 路由配置目录；如果本地已有 `config/routes/*.json`，会一并打入发布包。
 - `README.md`、`USAGE.md`、`CHANGELOG.md`。
+
+需要 Windows / macOS / Linux 的**安装包**或**免安装 app-image**（内置运行时，目标机无需 JDK）：
+
+```bash
+scripts/build-package.sh --type app-image --skip-tests   # 免安装镜像（当前平台）
+scripts/build-package.sh --type installer --skip-tests   # 安装包：dmg / deb+rpm / exe
+scripts/build-release.sh --only jar,app-image,installer  # 一次产出全部契约资产
+```
+
+jpackage 不能交叉构建，一个平台一台匹配的机器；产物落在 `target/release/`，并附带 `SHA256SUMS.txt`。
+完整说明（资产命名契约、CI 发布、未签名提示）见[打包与发布](./docs/PACKAGING.md)。
+
+### 版本号与自动更新
+
+管理后台侧边栏与顶栏常驻显示当前版本；点击打开「版本与更新」抽屉，可查看版本号、构建时间、运行平台、
+安装方式与更新通道，并检查/执行更新。
+
+| 接口 | 作用 |
+| --- | --- |
+| `GET /admin/api/version` | 当前版本、构建时间、平台、安装方式、更新通道 |
+| `GET /admin/api/update/check` | 比对 GitHub Release 并选出匹配当前平台的更新包 |
+| `POST /admin/api/update/apply` | 下载校验后生成更新脚本，应用退出并重启完成升级 |
+
+更新过程：下载 → 校验 SHA-256 → 生成脚本到 `<home>/updates/` → 应用退出 → 脚本备份并替换 → 重启。
+失败会自动回滚，过程写入 `<home>/updates/update.log`，旧版本备份在 `<home>/updates/backup-<旧版本>/`。
+仅 `jar` 与 `app-image` 两种形态支持自动更新；可选设置 `WROUTER_GITHUB_TOKEN` 提升 GitHub API 速率限制。
 
 Linux/macOS 解压后启动和停止：
 

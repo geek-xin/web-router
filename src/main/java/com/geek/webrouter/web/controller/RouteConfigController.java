@@ -11,6 +11,7 @@ import com.geek.webrouter.web.model.dto.RouteConfigImportRequest;
 import com.geek.webrouter.web.model.dto.RouteConfigImportResponse;
 import com.geek.webrouter.web.model.entity.RouteConfig;
 import com.geek.webrouter.web.service.RouteConfigService;
+import com.geek.webrouter.web.support.AppHomeResolver;
 import com.geek.webrouter.web.support.RouteTargetUrlNormalizer;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,6 @@ import reactor.core.publisher.Mono;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +43,7 @@ public class RouteConfigController {
 
     @GetMapping
     public String index(Model model) {
-        model.addAttribute("routesConfigDir", Paths.get(CommonConstants.ROUTES_CONFIG_DIR)
+        model.addAttribute("routesConfigDir", AppHomeResolver.resolveRoutesConfigDir()
                 .toAbsolutePath()
                 .normalize()
                 .toString());
@@ -88,8 +88,8 @@ public class RouteConfigController {
     @ResponseBody
     public Result<Map<String, Object>> getRaw(@PathVariable String name) {
         RouteConfig config = routeConfigService.getByName(name);
-        Path filePath = Paths.get(CommonConstants.ROUTES_CONFIG_DIR,
-                config.getId() + CommonConstants.CONFIG_FILE_EXTENSION);
+        Path filePath = AppHomeResolver.resolveRoutesConfigDir()
+                .resolve(config.getId() + CommonConstants.CONFIG_FILE_EXTENSION);
         try {
             String content = Files.readString(filePath);
             String fileName = filePath.toString();

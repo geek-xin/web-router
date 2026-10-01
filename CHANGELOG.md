@@ -1,6 +1,59 @@
 # 变更说明
 
-本文记录 `web-router` 正式发布版本的主要能力和行为变化。
+本文记录 `wrouter` 正式发布版本的主要能力和行为变化。
+
+## [未发布] - 2026-09-30
+
+### 版本定位
+
+- 按新的 wrouter 视觉语言重写管理后台：从浅色 chunky 风格切换为深色开发者网络控制台，并沉淀为可执行的 UI 规范文档与契约测试。
+
+### 管理后台
+
+- 全新应用外壳：208px 侧边栏（导航 / 运行状态 / 系统设置 / 网关运行卡）、56px 顶栏（Gateway 状态胶囊 + 工具入口）、KPI 行（路由总数 / 运行中 / 已停用 / 请求数·分钟 / 平均延迟）。
+- 路由列表保持卡片式：每卡包含状态、Path 前缀（超过 3 个折叠为 +N）、Target、本地端口、每分钟请求数、平均延迟与 30 分钟流量 Sparkline；按序号分配强调色，停用卡片降权。
+- 详情抽屉改为 Topology-first：① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，并保留配置 / 日志 / 指标标签页与常驻操作栏。
+- 路由拓扑固定表达 `Client → wrouter → 本地端口 → 目标服务`，含流动连线与未命中虚线分支。
+- 新增日志视图（侧边栏进入）：按路由查看实时流、Top 路径、单耗时 Top 与诊断分析。
+- 新增品牌符号（节点 + 连线）、极淡网络背景装饰、状态点呼吸与抽屉滑入动效，并遵循 `prefers-reduced-motion`。
+- 工具栏改为搜索 + 状态筛选 + 排序（最近创建 / 名称 / 流量 / 延迟）+ 导出 / 导入 / 新增。
+
+### 流量指标
+
+- `ProxyRequestLogService` 新增滚动时间窗：最近 60 秒请求数、最近 60 秒失败数、最近 30 分钟每分钟请求数序列，以及累计平均延迟。
+- `ProxyRequestLogSnapshot` 与新增 `RouteTrafficMetrics` 暴露 `requestsLastMinute`、`failedLastMinute`、`averageDurationMs`、`trafficBuckets`。
+- 新增 `GET /admin/api/proxy-logs/metrics`，一次返回全部路由的紧凑指标，避免列表页逐条拉取日志明细。
+- 路由状态按最近一分钟失败率派生：≤5% 运行中，>5% 异常，≥20% 错误；停用路由始终为已停用。
+
+### 文档与测试
+
+- 新增 `docs/CORE-FEATURES.md`：核心功能的权威说明，覆盖数据模型、路由配置管理、Gateway 动态转发、本地端口代理、请求观测与流量指标、管理 API、校验规则、关键不变量与已知边界。
+- 新增 `docs/UI-DESIGN-SYSTEM.md`（色彩、排版、布局、组件、动效、拓扑、验收清单）与 `docs/UI-IMPLEMENTATION.md`（规范到文件、类名与数据契约的映射）。
+- 新增 `CoreFeaturesDocContractTest`，校验核心功能文档中的阈值、接口路径、错误码与实现保持一致，并强制文档互链。
+- 清理 `docs/` 下旧设计稿与旧截图，README 更新为新控制台截图与视觉语言说明。
+- 新增 `AdminUiContractTest`，把设计系统与实现映射中的关键契约固化为断言，替换原 chunky 风格断言测试。
+- 前端新增 `route-metrics` 模块与单测，覆盖指标格式化、Sparkline 几何与日志兜底序列。
+
+### 多平台打包与交付
+
+- 新增 `scripts/build-package.sh`：按类型产出单平台产物——`jar`（JAR 分发包）、`app-image`（jpackage 免安装镜像）、`installer`（macOS `dmg` / Linux `deb`+`rpm` / Windows `exe`），内置运行时无需目标机安装 JDK。
+- 新增 `scripts/build-release.sh`：编排全部类型并按契约命名发布到 `target/release/`，同时产出 `SHA256SUMS.txt` 与 `release-manifest.txt`；任一资产名不符合契约即失败退出。
+- 新增 `.github/workflows/release.yml`：tag `v*` 或手动触发后，在 macos-14 / macos-13 / ubuntu-latest / windows-latest 矩阵上并行构建，汇总为 GitHub Release。
+- 资产命名契约由 `ReleaseAssets` 统一实现，打包脚本与 CI 必须与之一致：`wrouter-<version>-jar.zip`、`wrouter-<version>-<platform>-app.zip`（Linux 为 `-app.tar.gz`）、`wrouter-<version>-<platform>.dmg|deb|rpm|exe`。
+- 应用根目录改由 `AppHomeResolver` 解析（`wrouter.home` → `WROUTER_HOME` → `user.dir`），app-image 启动参数固定 `-Dwrouter.home=$APPDIR`；传统 JAR 形态仍默认取启动工作目录，原有部署方式不变。
+
+### 版本号与自动更新
+
+- 新增 `GET /admin/api/version`：返回版本、构建时间、运行平台、安装方式、更新通道与仓库；构建元信息由 `pom.xml` 资源过滤注入 `version.properties`。
+- 新增 `GET /admin/api/update/check`：查询 GitHub Release，按更新通道过滤草稿/预发布，按命名契约选包；任何异常都写进 `message`，接口本身始终 `success=true`。
+- 新增 `POST /admin/api/update/apply`：下载 → 校验 SHA-256 → 生成平台更新脚本到 `updates/` → 约 2 秒后退出；不可更新时抛 `BusinessException`，摘要不一致时删除已下载文件。
+- 新增 `UpdateScriptGenerator`：生成 `updates/apply-update.sh`（类 Unix）与 `apply-update.bat`（Windows），等待旧进程退出 → 备份到 `updates/backup-<旧版本>/` → 解压替换 → 重启，任一步失败自动回滚并写 `updates/update.log`。
+- 管理后台新增「版本与更新」抽屉：侧边栏与顶栏常驻显示版本号，抽屉展示构建时间/平台/安装方式/更新通道，支持检查更新与一键更新。
+
+### 文档与测试（打包）
+
+- 新增 `docs/PACKAGING.md`：交付形态对照、资产命名契约、本地构建、应用根目录、自动更新流程与 CI 发布。
+- 新增 `AppVersionServiceTest`、`UpdateServiceTest`、`ReleaseAssetsTest`、`ReleaseVersionComparatorTest`、`UpdateScriptGeneratorTest`、`AppHomeResolverTest`、`AppVersionControllerTest` 覆盖版本与更新链路。
 
 ## [1.2.0] - 2026-08-08
 
@@ -58,7 +111,7 @@
 ### 核心功能
 
 - 基于 Spring Boot 3.5.2、Spring Cloud Gateway 2024.0.1、Reactor Netty 和 Thymeleaf 构建轻量 Web 路由代理。
-- 默认服务绑定 `127.0.0.1:8090`，`GET /` 重定向到 `/admin`。
+- 默认服务绑定 `127.0.0.1:9999`，`GET /` 重定向到 `/admin`。
 - 提供 Thymeleaf 管理后台和统一 `Result<T>` 管理 API。
 - 路由配置以本地 JSON 文件持久化到 `config/routes/<id>.json`，无需数据库。
 - 创建路由时自动生成 `route-yyyyMMddHHmmss-xxxxxx` 格式 ID。

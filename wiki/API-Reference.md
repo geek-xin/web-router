@@ -1,10 +1,8 @@
 # API 参考
 
-适用于 `web-router` `1.2.0`。所有管理 API 统一返回 `Result<T>`。
+所有管理 API 统一返回 `Result<T>`。URL 中的 `{routeId}` 是配置文件 ID，如 `route-20260603234846-4d2deb`。
 
 ## 响应结构
-
-成功响应：
 
 ```json
 {
@@ -16,98 +14,103 @@
 }
 ```
 
-业务错误通常返回 HTTP 200，但响应体中 `success=false`。参数校验错误响应体 `code=400`。
+| 场景 | HTTP 状态 | 响应体 |
+| --- | --- | --- |
+| 成功 | 200 | `success=true, code=200` |
+| 业务异常 | **200** | `success=false, code=<业务码>` |
+| 参数校验失败 | **200** | `success=false, code=400` |
+| 未捕获异常 | 500 | `success=false, code=500` |
+| 本地端口代理上游失败 | 502 | 文本 `Proxy request failed`（非 `Result` 结构） |
 
-## 页面入口
+前端 `fetchJson()` 依赖「业务错误 HTTP 200 + `success=false`」这一约定。
+
+## 页面
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/` | 重定向到 `/admin` |
-| `GET` | `/admin` | 渲染 Thymeleaf 管理后台 |
+| `GET` | `/admin` | 管理后台页面 |
 
-## 路由配置 API
-
-> URL 路径中的路由标识使用配置文件 ID，例如 `route-20260603234846-4d2deb`。控制器内部变量名仍为 `{name}`，对外语义按 routeId 使用。
+## 路由配置
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/admin/api/routes` | 查询全部路由，按配置文件最后修改时间倒序 |
-| `GET` | `/admin/api/routes/{routeId}` | 查询单条路由 |
-| `GET` | `/admin/api/routes/{routeId}/raw` | 查看原始 JSON 文件内容 |
-| `POST` | `/admin/api/routes` | 创建路由并刷新代理 |
-| `PUT` | `/admin/api/routes/{routeId}` | 更新路由并刷新代理 |
-| `DELETE` | `/admin/api/routes/{routeId}` | 删除路由并刷新代理 |
+| `GET` | `/admin/api/routes` | 全部路由，按文件 mtime 倒序 |
+| `GET` | `/admin/api/routes/{routeId}` | 单条路由 |
+| `GET` | `/admin/api/routes/{routeId}/raw` | 原始 JSON 文件内容 |
+| `GET` | `/admin/api/routes/export` | 导出全部路由 |
+| `POST` | `/admin/api/routes/import` | 批量导入（总是新增） |
+| `POST` | `/admin/api/routes` | 创建，成功后刷新代理 |
+| `PUT` | `/admin/api/routes/{routeId}` | 更新，成功后刷新代理 |
+| `DELETE` | `/admin/api/routes/{routeId}` | 删除，成功后刷新代理 |
 
 ### 创建路由
 
 ```bash
-curl -X POST http://localhost:8090/admin/api/routes \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "测试服务",
-    "pathPrefixes": ["/test"],
-    "targetUrl": "localhost:8081",
-    "accessPageBaseUrl": "localhost:8082",
-    "accessPage": "/test/hello",
-    "localIp": "127.0.0.1",
-    "localPort": 18081,
-    "enabled": true
-  }'
-```
-
-### 更新路由
-
-```bash
-curl -X PUT http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb \
+curl -X POST http://localhost:9999/admin/api/routes \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "测试服务",
     "pathPrefixes": ["/test", "/api/test"],
-    "targetUrl": "http://localhost:8081",
-    "accessPageBaseUrl": "http://localhost:8082",
-    "accessPage": "/test/hello",
+    "targetUrl": "localhost:8081",
+    "accessPageBaseUrl": "localhost:8082",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
   }'
 ```
 
-### 删除路由
+### 更新与删除
 
 ```bash
-curl -X DELETE http://localhost:8090/admin/api/routes/route-20260603234846-4d2deb
+curl -X PUT http://localhost:9999/admin/api/routes/route-20260603234846-4d2deb \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "测试服务", "pathPrefixes": ["/test"], "targetUrl": "http://localhost:8081",
+        "accessPageBaseUrl": "http://localhost:8082", "localIp": "127.0.0.1", "localPort": 18081, "enabled": true }'
+
+curl -X DELETE http://localhost:9999/admin/api/routes/route-20260603234846-4d2deb
 ```
 
-## 请求日志 API
+## 日志与指标
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/admin/api/proxy-logs` | 全部路由日志快照 |
-| `GET` | `/admin/api/proxy-logs/routes/{routeId}` | 指定路由日志快照 |
-| `GET` | `/admin/api/proxy-logs/stream` | 全部路由实时日志 SSE |
-| `GET` | `/admin/api/proxy-logs/routes/{routeId}/stream` | 指定路由实时日志 SSE |
+| `GET` | `/admin/api/proxy-logs/metrics` | 全部路由紧凑指标，供卡片 / KPI 使用 |
+| `GET` | `/admin/api/proxy-logs/routes/{routeId}` | 指定路由快照 |
+| `GET` | `/admin/api/proxy-logs/stream` | 全部路由 SSE，事件名 `proxy-request` |
+| `GET` | `/admin/api/proxy-logs/routes/{routeId}/stream` | 指定路由 SSE |
 
-### 查看日志快照
-
-```bash
-curl http://localhost:8090/admin/api/proxy-logs
-curl http://localhost:8090/admin/api/proxy-logs/routes/route-20260603234846-4d2deb
-```
-
-### 订阅 SSE 日志
+`/metrics` 返回 `Map<routeId, RouteTrafficMetrics>`：`routeId`、`totalRequests`、`failedRequests`、`slowRequests`、`totalDurationMs`、`requestsLastMinute`、`failedLastMinute`、`averageDurationMs`、`trafficBuckets`（由旧到新，长度 30）。未产生过请求的路由不会出现在结果中。
 
 ```bash
-curl -N http://localhost:8090/admin/api/proxy-logs/stream
-curl -N http://localhost:8090/admin/api/proxy-logs/routes/route-20260603234846-4d2deb/stream
+curl http://localhost:9999/admin/api/proxy-logs/metrics
+curl -N http://localhost:9999/admin/api/proxy-logs/routes/route-20260603234846-4d2deb/stream
 ```
 
-## 异常语义
+## 版本与更新
 
-| 类型 | HTTP 状态 | 响应体 |
+| 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| 成功 | `200` | `success=true` |
-| 业务异常 | `200` | `success=false` |
-| 参数校验异常 | `200` | `success=false, code=400` |
-| 未捕获异常 | `500` | `success=false` |
+| `GET` | `/admin/api/version` | 当前版本信息（version / buildTime / platform / installMode / updateSupported） |
+| `GET` | `/admin/api/update/check` | 检查更新；**始终 `success=true`**，失败原因写在 `message` |
+| `POST` | `/admin/api/update/apply` | 下载更新包并生成更新脚本；不可更新时抛 `BusinessException` |
 
-前端 `fetchJson()` 依赖“业务错误 HTTP 200 + 响应体 `success=false`”的约定。
+## 运维端点
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/actuator/health` | 健康检查 |
+| `GET` | `/actuator/info` | 应用信息 |
+
+## 错误码
+
+| 错误码 | 值 | 含义 |
+| --- | --- | --- |
+| `BAD_REQUEST` | 400 | 请求参数错误 |
+| `NOT_FOUND` | 404 | 资源不存在 |
+| `DUPLICATE_NAME` | 409 | 路由名称已存在 |
+| `DUPLICATE_PREFIX` | 409 | 路径前缀重复 |
+| `DUPLICATE_LOCAL_BINDING` | 409 | 本地监听地址已存在 |
+| `INTERNAL_ERROR` | 500 | 服务器内部错误 |
+| `CONFIG_IO_ERROR` | 500 | 配置文件读写失败 |

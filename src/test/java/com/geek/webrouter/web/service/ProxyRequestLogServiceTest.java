@@ -3,6 +3,9 @@ package com.geek.webrouter.web.service;
 import com.geek.webrouter.web.model.dto.ProxyRequestLogEntry;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProxyRequestLogServiceTest {
@@ -200,4 +203,163 @@ class ProxyRequestLogServiceTest {
         assertThat(snapshot.durationTopLogs().getFirst().path()).isEqualTo("/old-slowest");
     }
 
+    // ===== 新增：滑动窗口 / 时间序列指标 =====
+
+    @Test
+    void requestsLastMinuteDropsRequestsOlderThanSixtySeconds() {
+        AtomicLong now = new AtomicLong(1_700_000_000_000L);
+        ProxyRequestLogService service = new ProxyRequestLogService(now::get);
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/a", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/b", "127.0.0.1", 200, 20));
+
+        assertThat(service.snapshot().requestsLastMinute()).isEqualTo(2);
+        assertThat(service.snapshot("route-a").requestsLastMinute()).isEqualTo(2);
+
+        // 推进 59 秒仍在窗口内
+        now.addAndGet(59_000L);
+        assertThat(service.snapshot().requestsLastMinute()).isEqualTo(2);
+
+        // 推进到第 61 秒，旧请求滚出窗口
+        now.addAndGet(2_000L);
+        assertThat(service.snapshot().requestsLastMinute()).isZero();
+        assertThat(service.snapshot("route-a").requestsLastMinute()).isZero();
+        // 全量口径不受影响
+        assertThat(service.snapshot().totalRequests()).isEqualTo(2);
+    }
+
+    @Test
+    void trafficBucketsHaveThirtyPointsOldestToNewest() {
+        AtomicLong now = new AtomicLong(1_700_000_000_000L);
+        ProxyRequestLogService service = new ProxyRequestLogService(now::get);
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/first", "127.0.0.1", 200, 10));
+
+        now.addAndGet(120_000L);
+        for (int index = 0; index < 3; index += 1) {
+            service.record(new ProxyRequestLogEntry(
+                    null, "route-a", "GET", "/later-" + index, "127.0.0.1", 200, 5));
+        }
+
+        List<Long> buckets = service.snapshot().trafficBuckets();
+
+        assertThat(buckets).hasSize(30);
+        // 旧到新：2 分钟前的桶是 1，上一分钟为空，最新桶是刚记录的 3
+        assertThat(buckets.get(27)).isEqualTo(1L);
+        assertThat(buckets.get(28)).isZero();
+        assertThat(buckets.get(29)).isEqualTo(3L);
+        // 路由维度同样为 30 个点
+        assertThat(service.snapshot("route-a").trafficBuckets()).hasSize(30);
+        assertThat(service.snapshot("route-a").trafficBuckets().get(29)).isEqualTo(3L);
+    }
+
+    @Test
+    void routeAndGlobalBucketsAreIndependent() {
+        AtomicLong now = new AtomicLong(1_700_000_000_000L);
+        ProxyRequestLogService service = new ProxyRequestLogService(now::get);
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/a/one", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/a/two", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-b", "GET", "/b/one", "127.0.0.1", 200, 10));
+
+        assertThat(service.snapshot("route-a").requestsLastMinute()).isEqualTo(2);
+        assertThat(service.snapshot("route-b").requestsLastMinute()).isEqualTo(1);
+        assertThat(service.snapshot().requestsLastMinute()).isEqualTo(3);
+
+        // route-a 的最新桶不含 route-b 的请求
+        assertThat(service.snapshot("route-a").trafficBuckets().get(29)).isEqualTo(2L);
+        assertThat(service.snapshot("route-b").trafficBuckets().get(29)).isEqualTo(1L);
+        assertThat(service.snapshot().trafficBuckets().get(29)).isEqualTo(3L);
+    }
+
+    @Test
+    void derivedRouteIdCountsIntoBaseRouteBuckets() {
+        AtomicLong now = new AtomicLong(1_700_000_000_000L);
+        ProxyRequestLogService service = new ProxyRequestLogService(now::get);
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/api/one", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a__1", "GET", "/admin/two", "127.0.0.1", 200, 20));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-b", "GET", "/other", "127.0.0.1", 200, 30));
+
+        var snapshot = service.snapshot("route-a");
+
+        assertThat(snapshot.requestsLastMinute()).isEqualTo(2);
+        assertThat(snapshot.trafficBuckets().get(29)).isEqualTo(2L);
+        assertThat(service.snapshot().requestsLastMinute()).isEqualTo(3);
+    }
+
+    @Test
+    void averageDurationUsesIntegerDivisionAndUnknownRouteIsEmpty() {
+        AtomicLong now = new AtomicLong(1_700_000_000_000L);
+        ProxyRequestLogService service = new ProxyRequestLogService(now::get);
+
+        assertThat(service.snapshot().averageDurationMs()).isZero();
+        var missing = service.snapshot("route-missing");
+        assertThat(missing.requestsLastMinute()).isZero();
+        assertThat(missing.averageDurationMs()).isZero();
+        assertThat(missing.trafficBuckets()).hasSize(30).containsOnly(0L);
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/a", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/b", "127.0.0.1", 200, 11));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/c", "127.0.0.1", 200, 12));
+
+        // 33 / 3 = 11
+        assertThat(service.snapshot().averageDurationMs()).isEqualTo(11);
+        assertThat(service.snapshot("route-a").averageDurationMs()).isEqualTo(11);
+    }
+
+    @Test
+    void routeTrafficMetricsAggregatesPerRouteWithoutLogDetails() {
+        AtomicLong now = new AtomicLong(1_700_000_000_000L);
+        ProxyRequestLogService service = new ProxyRequestLogService(now::get);
+
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/a/one", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a__1", "GET", "/a/two", "127.0.0.1", 500, 20));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-b", "POST", "/b/one", "10.0.0.2", 201, 30));
+
+        var metrics = service.routeTrafficMetrics();
+
+        assertThat(metrics).containsOnlyKeys("route-a", "route-b");
+        var routeA = metrics.get("route-a");
+        assertThat(routeA.routeId()).isEqualTo("route-a");
+        assertThat(routeA.totalRequests()).isEqualTo(2);
+        assertThat(routeA.failedRequests()).isEqualTo(1);
+        assertThat(routeA.requestsLastMinute()).isEqualTo(2);
+        assertThat(routeA.averageDurationMs()).isEqualTo(15);
+        assertThat(routeA.trafficBuckets()).hasSize(30);
+        assertThat(routeA.trafficBuckets().get(29)).isEqualTo(2L);
+
+        var routeB = metrics.get("route-b");
+        assertThat(routeB.totalRequests()).isEqualTo(1);
+        assertThat(routeB.requestsLastMinute()).isEqualTo(1);
+        assertThat(routeB.trafficBuckets()).hasSize(30);
+        assertThat(routeB.trafficBuckets().get(29)).isEqualTo(1L);
+
+        // 最近一分钟失败数只统计窗口内的失败请求
+        assertThat(routeA.failedLastMinute()).isEqualTo(1);
+        assertThat(routeB.failedLastMinute()).isZero();
+        assertThat(service.snapshot().failedLastMinute()).isEqualTo(1);
+        assertThat(service.snapshot("route-a").failedLastMinute()).isEqualTo(1);
+
+        now.addAndGet(61_000L);
+        assertThat(service.routeTrafficMetrics().get("route-a").failedLastMinute()).isZero();
+        // 累计失败数不受滚动窗口影响
+        assertThat(service.routeTrafficMetrics().get("route-a").failedRequests()).isEqualTo(1);
+    }
 }
+

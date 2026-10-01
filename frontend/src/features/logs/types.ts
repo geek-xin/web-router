@@ -18,12 +18,16 @@ export interface ProxyRequestLogSnapshot {
   failedRequests?: number | null;
   slowRequests?: number | null;
   totalDurationMs?: number | null;
+  uniqueIpCount?: number | null;
   requestsByIp?: Record<string, number> | null;
   pathStats?: Record<string, number> | null;
   pathDurationStats?: Record<string, number> | null;
   pathMaxDurationStats?: Record<string, number> | null;
   durationTopLogs?: ProxyRequestLogEntry[] | null;
   recentLogs?: ProxyRequestLogEntry[] | null;
+  requestsLastMinute?: number | null;
+  averageDurationMs?: number | null;
+  trafficBuckets?: number[] | null;
 }
 
 export interface LogViewState {

@@ -6,6 +6,7 @@ import com.geek.webrouter.common.enums.ErrorCodeEnum;
 import com.geek.webrouter.common.exception.BusinessException;
 import com.geek.webrouter.web.model.entity.RouteConfig;
 import com.geek.webrouter.web.service.RouteConfigService;
+import com.geek.webrouter.web.support.AppHomeResolver;
 import com.geek.webrouter.web.support.RouteTargetUrlNormalizer;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +16,6 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -51,7 +51,7 @@ public class RouteConfigServiceImpl implements RouteConfigService {
 
     @Autowired
     public RouteConfigServiceImpl(ObjectMapper objectMapper) {
-        this(objectMapper, Paths.get(CommonConstants.ROUTES_CONFIG_DIR));
+        this(objectMapper, AppHomeResolver.resolveRoutesConfigDir());
     }
 
     RouteConfigServiceImpl(ObjectMapper objectMapper, Path configDir) {

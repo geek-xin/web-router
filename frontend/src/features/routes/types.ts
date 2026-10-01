@@ -38,3 +38,9 @@ export interface RouteValidationResult {
   errors: string[];
   payload?: RouteConfigPayload;
 }
+
+export type RouteStatus = 'running' | 'stopped' | 'warning' | 'error';
+
+export type RouteSortKey = 'recent' | 'name' | 'traffic' | 'latency';
+
+export type RouteStatusFilter = 'all' | 'enabled' | 'disabled';

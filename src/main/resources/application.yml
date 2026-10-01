@@ -1,10 +1,10 @@
 # =====================================================
-# Web Router — 主配置
+# wrouter — 主配置
 # =====================================================
 
 spring:
   application:
-    name: web-router
+    name: wrouter
   thymeleaf:
     cache: false
     prefix: classpath:/templates/

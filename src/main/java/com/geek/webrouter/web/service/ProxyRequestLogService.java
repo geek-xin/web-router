@@ -2,6 +2,7 @@ package com.geek.webrouter.web.service;
 
 import com.geek.webrouter.web.model.dto.ProxyRequestLogEntry;
 import com.geek.webrouter.web.model.dto.ProxyRequestLogSnapshot;
+import com.geek.webrouter.web.model.dto.RouteTrafficMetrics;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
@@ -9,11 +10,15 @@ import reactor.core.publisher.Sinks;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,6 +27,12 @@ public class ProxyRequestLogService {
     private static final int MAX_RECENT_LOGS = 100;
     private static final int MAX_DURATION_TOP_LOGS = 100;
     private static final long SLOW_REQUEST_THRESHOLD_MS = 1000;
+    private static final int MINUTE_BUCKET_SECONDS = 1;
+    private static final int MINUTE_BUCKET_COUNT = 60;
+    private static final int TRAFFIC_BUCKET_SECONDS = 60;
+    private static final int TRAFFIC_BUCKET_COUNT = 30;
+    private static final List<Long> EMPTY_TRAFFIC_BUCKETS =
+            Collections.nCopies(TRAFFIC_BUCKET_COUNT, 0L);
 
     private final AtomicLong totalRequests = new AtomicLong();
     private final AtomicLong failedRequests = new AtomicLong();
@@ -43,12 +54,34 @@ public class ProxyRequestLogService {
     private final ArrayList<ProxyRequestLogEntry> durationTopLogs = new ArrayList<>();
     private final Map<String, ArrayList<ProxyRequestLogEntry>> durationTopLogsByRoute = new ConcurrentHashMap<>();
     private final Sinks.Many<ProxyRequestLogEntry> sink = Sinks.many().multicast().directBestEffort();
+    private final LongSupplier clock;
+    private final TimeBucketRing globalMinute;
+    private final TimeBucketRing globalTraffic;
+    private final TimeBucketRing globalFailedMinute;
+    private final Map<String, TimeBucketRing> routeMinute = new ConcurrentHashMap<>();
+    private final Map<String, TimeBucketRing> routeTraffic = new ConcurrentHashMap<>();
+    private final Map<String, TimeBucketRing> routeFailedMinute = new ConcurrentHashMap<>();
+
+    public ProxyRequestLogService() {
+        this(System::currentTimeMillis);
+    }
+
+    ProxyRequestLogService(LongSupplier clock) {
+        this.clock = clock == null ? System::currentTimeMillis : clock;
+        this.globalMinute = new TimeBucketRing(MINUTE_BUCKET_SECONDS, MINUTE_BUCKET_COUNT, this.clock);
+        this.globalTraffic = new TimeBucketRing(TRAFFIC_BUCKET_SECONDS, TRAFFIC_BUCKET_COUNT, this.clock);
+        this.globalFailedMinute = new TimeBucketRing(MINUTE_BUCKET_SECONDS, MINUTE_BUCKET_COUNT, this.clock);
+    }
 
     public void record(ProxyRequestLogEntry entry) {
         ProxyRequestLogEntry timestamped = entry.timestamp() == null
                 ? entry.withTimestamp(Instant.now())
                 : entry;
         String routeId = baseRouteId(timestamped.routeId());
+        globalMinute.add();
+        globalTraffic.add();
+        routeMinuteRing(routeId).add();
+        routeTrafficRing(routeId).add();
         String clientIp = timestamped.clientIp() == null || timestamped.clientIp().isBlank()
                 ? "-"
                 : timestamped.clientIp();
@@ -61,6 +94,8 @@ public class ProxyRequestLogService {
         if (isFailure(timestamped.status())) {
             failedRequests.incrementAndGet();
             failedRequestsByRoute.computeIfAbsent(routeId, ignored -> new AtomicLong()).incrementAndGet();
+            globalFailedMinute.add();
+            routeFailedMinuteRing(routeId).add();
         }
         if (durationMs >= SLOW_REQUEST_THRESHOLD_MS) {
             slowRequests.incrementAndGet();
@@ -122,18 +157,24 @@ public class ProxyRequestLogService {
         synchronized (durationTopLogs) {
             topLogs = new ArrayList<>(durationTopLogs);
         }
+        long total = totalRequests.get();
+        long durationMs = totalDurationMs.get();
         return new ProxyRequestLogSnapshot(
-                totalRequests.get(),
+                total,
                 failedRequests.get(),
                 slowRequests.get(),
-                totalDurationMs.get(),
+                durationMs,
                 ipStats.size(),
                 ipStats,
                 pathStats,
                 pathDurationStats,
                 pathMaxDurationStats,
                 topLogs,
-                logs
+                logs,
+                globalMinute.total(),
+                globalFailedMinute.total(),
+                averageDurationMs(total, durationMs),
+                globalTraffic.series()
         );
     }
 
@@ -161,6 +202,9 @@ public class ProxyRequestLogService {
         long routeFailed = failedRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
         long routeSlow = slowRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
         long routeDurationMs = totalDurationMsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+        TimeBucketRing minuteRing = routeMinute.get(routeId);
+        TimeBucketRing trafficRing = routeTraffic.get(routeId);
+        TimeBucketRing failedMinuteRing = routeFailedMinute.get(routeId);
         return new ProxyRequestLogSnapshot(
                 routeTotal,
                 routeFailed,
@@ -172,8 +216,40 @@ public class ProxyRequestLogService {
                 pathDurationStats,
                 pathMaxDurationStats,
                 topLogs,
-                logs
+                logs,
+                minuteRing == null ? 0L : minuteRing.total(),
+                failedMinuteRing == null ? 0L : failedMinuteRing.total(),
+                averageDurationMs(routeTotal, routeDurationMs),
+                trafficRing == null ? EMPTY_TRAFFIC_BUCKETS : trafficRing.series()
         );
+    }
+
+    /**
+     * 所有出现过请求的路由的紧凑指标，用于管理后台路由卡片。
+     */
+    public Map<String, RouteTrafficMetrics> routeTrafficMetrics() {
+        Map<String, RouteTrafficMetrics> metrics = new LinkedHashMap<>();
+        for (String routeId : totalRequestsByRoute.keySet()) {
+            long total = totalRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+            long failed = failedRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+            long slow = slowRequestsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+            long durationMs = totalDurationMsByRoute.getOrDefault(routeId, new AtomicLong()).get();
+            TimeBucketRing minuteRing = routeMinute.get(routeId);
+            TimeBucketRing trafficRing = routeTraffic.get(routeId);
+            TimeBucketRing failedMinuteRing = routeFailedMinute.get(routeId);
+            metrics.put(routeId, new RouteTrafficMetrics(
+                    routeId,
+                    total,
+                    failed,
+                    slow,
+                    durationMs,
+                    minuteRing == null ? 0L : minuteRing.total(),
+                    failedMinuteRing == null ? 0L : failedMinuteRing.total(),
+                    averageDurationMs(total, durationMs),
+                    trafficRing == null ? EMPTY_TRAFFIC_BUCKETS : trafficRing.series()
+            ));
+        }
+        return metrics;
     }
 
     public Flux<ProxyRequestLogEntry> stream() {
@@ -255,5 +331,96 @@ public class ProxyRequestLogService {
 
     private String normalizedPath(String path) {
         return path == null || path.isBlank() ? "/" : path;
+    }
+
+    private TimeBucketRing routeMinuteRing(String routeId) {
+        return routeMinute.computeIfAbsent(
+                routeId,
+                ignored -> new TimeBucketRing(MINUTE_BUCKET_SECONDS, MINUTE_BUCKET_COUNT, clock)
+        );
+    }
+
+    private TimeBucketRing routeTrafficRing(String routeId) {
+        return routeTraffic.computeIfAbsent(
+                routeId,
+                ignored -> new TimeBucketRing(TRAFFIC_BUCKET_SECONDS, TRAFFIC_BUCKET_COUNT, clock)
+        );
+    }
+
+    private TimeBucketRing routeFailedMinuteRing(String routeId) {
+        return routeFailedMinute.computeIfAbsent(
+                routeId,
+                ignored -> new TimeBucketRing(MINUTE_BUCKET_SECONDS, MINUTE_BUCKET_COUNT, clock)
+        );
+    }
+
+    private long averageDurationMs(long requests, long durationMs) {
+        return requests == 0 ? 0L : durationMs / requests;
+    }
+
+    /**
+     * 固定桶数的时间环，用于滑动窗口计数。
+     * 每个槽位记录它所属的绝对桶序号，读取时惰性清零过期槽位。
+     */
+    private static final class TimeBucketRing {
+
+        private final int bucketSeconds;
+        private final int bucketCount;
+        private final LongSupplier clock;
+        private final long[] counts;
+        private final long[] stamps;
+
+        private TimeBucketRing(int bucketSeconds, int bucketCount) {
+            this(bucketSeconds, bucketCount, System::currentTimeMillis);
+        }
+
+        private TimeBucketRing(int bucketSeconds, int bucketCount, LongSupplier clock) {
+            this.bucketSeconds = bucketSeconds;
+            this.bucketCount = bucketCount;
+            this.clock = clock;
+            this.counts = new long[bucketCount];
+            this.stamps = new long[bucketCount];
+            Arrays.fill(this.stamps, Long.MIN_VALUE);
+        }
+
+        private synchronized void add() {
+            long absoluteBucket = currentBucket();
+            int index = indexOf(absoluteBucket);
+            if (stamps[index] != absoluteBucket) {
+                stamps[index] = absoluteBucket;
+                counts[index] = 0L;
+            }
+            counts[index] += 1L;
+        }
+
+        private synchronized long total() {
+            long absoluteBucket = currentBucket();
+            long sum = 0L;
+            for (int index = 0; index < bucketCount; index += 1) {
+                if (stamps[index] > absoluteBucket - bucketCount) {
+                    sum += counts[index];
+                }
+            }
+            return sum;
+        }
+
+        private synchronized List<Long> series() {
+            long absoluteBucket = currentBucket();
+            List<Long> values = new ArrayList<>(bucketCount);
+            for (int offset = bucketCount - 1; offset >= 0; offset -= 1) {
+                long bucket = absoluteBucket - offset;
+                int index = indexOf(bucket);
+                values.add(stamps[index] == bucket ? counts[index] : 0L);
+            }
+            return values;
+        }
+
+        private long currentBucket() {
+            return (clock.getAsLong() / 1000L) / bucketSeconds;
+        }
+
+        private int indexOf(long absoluteBucket) {
+            return (int) (absoluteBucket % bucketCount);
+        }
     }
 }

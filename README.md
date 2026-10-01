@@ -1,13 +1,13 @@
-# web-router
+# wrouter
 
 <p align="center">
-  <img src="docs/assets/web-router-admin-current.png" alt="web-router 管理后台截图" width="860">
+  <img src="docs/assets/wrouter-console.png" alt="wrouter 管理后台：卡片式路由管理控制台" width="900">
 </p>
 
 <p align="center">
   <a href="https://spring.io/projects/spring-boot"><img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-3.5.2-6DB33F?style=flat-square&logo=springboot&logoColor=white"></a>
   <a href="https://spring.io/projects/spring-cloud-gateway"><img alt="Spring Cloud Gateway" src="https://img.shields.io/badge/Spring%20Cloud%20Gateway-2024.0.1-6DB33F?style=flat-square&logo=spring&logoColor=white"></a>
-  <img alt="Release" src="https://img.shields.io/badge/Release-1.2.0-111827?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-1.3.0-111827?style=flat-square">
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white">
   <img alt="Maven" src="https://img.shields.io/badge/Maven-build-C71A36?style=flat-square&logo=apachemaven&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/UI-React%20%2B%20Vite-149ECA?style=flat-square&logo=react&logoColor=white">
@@ -18,12 +18,13 @@
   <a href="#快速启动">快速启动</a> ·
   <a href="#功能总览">功能总览</a> ·
   <a href="./USAGE.md">使用说明</a> ·
+  <a href="./docs/UI-DESIGN-SYSTEM.md">UI 设计系统</a> ·
   <a href="./wiki/Home.md">Wiki 文档</a>
 </p>
 
-`web-router` 是一个面向本地开发、联调和测试环境的轻量 Web 路由代理。它把多组路径转发规则保存为本地 JSON 文件，并通过 Spring Cloud Gateway、Reactor Netty 和 React 管理后台实现“配置即改即生效”。
+`wrouter` 是一个面向本地开发、联调和测试环境的轻量 Web 路由代理。它把多组路径转发规则保存为本地 JSON 文件，并通过 Spring Cloud Gateway、Reactor Netty 和 React 管理后台实现“配置即改即生效”。
 
-当前版本：`1.2.0`。
+当前版本：`1.3.0`。
 
 ## 功能总览
 
@@ -38,8 +39,28 @@
 | 访问页 | 可配置 `accessPage`，管理后台“访问”按钮会打开本地监听地址下的访问页或绝对 URL。 |
 | 动态刷新 | 新增、更新、删除路由后即时刷新 Gateway 路由和本地端口代理，无需重启。 |
 | 请求观测 | Gateway 与本地端口代理都会记录请求统计、最近日志、慢请求 Top，并支持 SSE 实时推送。 |
+| 流量指标 | `GET /admin/api/proxy-logs/metrics` 提供每路由的滚动请求数、滚动失败数、平均延迟与最近 30 分钟流量序列，供路由卡片与 KPI 使用。 |
 | 统一响应 | 管理 API 统一返回 `Result<T>`；业务/校验错误通常为 HTTP 200 + `success=false`。 |
-| 打包发布 | `scripts/build-dist.sh` 可生成包含 JAR、Linux/macOS 与 Windows 启停脚本、后台配置文件、路由配置目录和文档的 `target/*.tar.gz`，并同步复制到 `target/dist/`。 |
+| 多平台打包 | `scripts/build-release.sh` 产出 Windows / macOS / Linux 的**安装包**（`exe` / `dmg` / `deb`+`rpm`）与**免安装 app-image**（内置运行时，无需 JDK）；`scripts/build-dist.sh` 继续产出传统 JAR 分发包（`run.sh` / `run.bat` 启停脚本），原有部署方式不受影响。 |
+| 自动更新 | 管理后台「版本与更新」抽屉调用 `/admin/api/update/check` 比对 GitHub Release，`POST /admin/api/update/apply` 下载并校验 SHA-256 后生成平台更新脚本，退出重启即完成升级，失败自动回滚。 |
+| 版本号展示 | `GET /admin/api/version` 返回版本、构建时间、运行平台、安装方式与更新通道；侧边栏与顶栏常驻显示当前版本，详情见[打包与发布](./docs/PACKAGING.md)。 |
+
+## 管理后台视觉语言
+
+管理后台是一套**开发者网络控制台**，不是通用 SaaS 后台。识别特征固定为：
+
+| 识别点 | 实现 |
+| --- | --- |
+| 主体 | **卡片式路由列表**（`.route-card-board`），不是表格 |
+| 视觉符号 | Network Node + Route Line（Logo、背景装饰、卡片图标） |
+| 核心数据 | Path → Target → Local Port → Status |
+| 动态图形 | 卡片底部 Traffic Sparkline（最近 30 分钟） |
+| 详情形式 | 右侧 Route Inspector 抽屉（概览 / 配置 / 日志 / 指标） |
+| 核心图形 | `Client → wrouter → 本地端口 → 目标服务` 拓扑 |
+| 每卡强调色 | 按列表序号分配的 Accent，只作用于图标、曲线、状态点 |
+
+完整规范见 [docs/UI-DESIGN-SYSTEM.md](./docs/UI-DESIGN-SYSTEM.md)，类名与数据契约见 [docs/UI-IMPLEMENTATION.md](./docs/UI-IMPLEMENTATION.md)。
+后台展示的数据来自 [核心功能说明](./docs/CORE-FEATURES.md) 中描述的配置管理、动态转发与请求观测能力。
 
 ## 技术栈
 
@@ -48,7 +69,7 @@
 | 运行框架 | Spring Boot 3.5.2 |
 | 路由代理 | Spring Cloud Gateway 2024.0.1 |
 | 本地代理 | Reactor Netty |
-| 管理后台 | React 19 + Vite |
+| 管理后台 | React 19 + Vite + Tailwind |
 | 页面挂载 | Thymeleaf |
 | 配置存储 | 本地 JSON 文件 |
 | 构建工具 | Maven |
@@ -58,7 +79,7 @@
 
 ```mermaid
 flowchart LR
-    Client["浏览器 / curl / 调用方"] --> Gateway["Spring Cloud Gateway\n127.0.0.1:8090"]
+    Client["浏览器 / curl / 调用方"] --> Gateway["Spring Cloud Gateway\n127.0.0.1:9999"]
     Gateway --> DynamicRoutes["DynamicRouteService\n动态 Gateway 路由"]
     DynamicRoutes --> Target["目标服务"]
 
@@ -69,7 +90,7 @@ flowchart LR
     Client --> LocalProxy["LocalPortProxyService\n可选每路由本地端口"]
     LocalProxy --> Target
 
-    Gateway --> Logs["ProxyRequestLogService\n统计 / 最近日志 / SSE"]
+    Gateway --> Logs["ProxyRequestLogService\n统计 / 最近日志 / SSE / 流量指标"]
     LocalProxy --> Logs
     Logs --> Admin
 ```
@@ -81,13 +102,13 @@ mvn test
 mvn spring-boot:run
 ```
 
-默认监听：`127.0.0.1:8090`。
+默认监听：`127.0.0.1:9999`（见 `src/main/resources/application.yml`）。
 
 启动后访问：
 
-- 管理后台：<http://localhost:8090/admin>
-- 健康检查：<http://localhost:8090/actuator/health>
-- 应用信息：<http://localhost:8090/actuator/info>
+- 管理后台：<http://localhost:9999/admin>
+- 健康检查：<http://localhost:9999/actuator/health>
+- 应用信息：<http://localhost:9999/actuator/info>
 
 ## 最小路由示例
 
@@ -106,7 +127,7 @@ mvn spring-boot:run
 
 保存后：
 
-- Gateway：`http://localhost:8090/test/hello` -> `http://localhost:8081/hello`
+- Gateway：`http://localhost:9999/test/hello` -> `http://localhost:8081/hello`
 - 本地端口代理命中前缀：`http://127.0.0.1:18081/test/hello` -> `http://localhost:8082/test/hello`
 - 本地端口代理未命中前缀：`http://127.0.0.1:18081/other` -> `http://localhost:8081/other`
 
@@ -114,19 +135,24 @@ mvn spring-boot:run
 
 ## 文档入口
 
+- [核心功能说明](./docs/CORE-FEATURES.md)：路由配置、Gateway 动态转发、本地端口代理、请求观测、管理 API、校验规则与关键不变量。
 - [使用说明](./USAGE.md)：启动、配置、API、打包和排障。
+- [UI 设计系统](./docs/UI-DESIGN-SYSTEM.md)：颜色、排版、布局、组件、动效、拓扑与验收清单。
+- [UI 实现映射](./docs/UI-IMPLEMENTATION.md)：设计规范到文件、类名与数据契约的对应关系。
 - [变更说明](./CHANGELOG.md)：当前版本能力清单。
 - [Wiki 首页](./wiki/Home.md)：适合发布到 GitHub Wiki 的分章节文档。
 
 ## 开发与验证
 
 ```bash
-mvn test
-mvn spring-boot:run
+mvn test                                  # 后端测试，含 AdminUiContractTest
+cd frontend && npm run typecheck && npm test && npm run build
 scripts/build-dist.sh --with-tests
 ```
 
-当前管理后台源码位于 `frontend/`，通过 `npm run build` 输出到 `src/main/resources/static/admin/`，再由 Spring Boot 提供页面入口。
+管理后台源码位于 `frontend/`，`npm run build` 输出到 `src/main/resources/static/admin/`，再由 Spring Boot 提供页面入口。
+
+> 改动 UI 时必须同时满足 `docs/UI-DESIGN-SYSTEM.md`，并运行 `mvn test`（`AdminUiContractTest` 会把规范中的关键契约当作断言校验）。
 
 ## 许可证
 

@@ -2,12 +2,14 @@
 
 ## 项目定位
 
-`web-router` 是一个轻量 Web 路由代理，当前版本 `1.1.0`，基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty、Thymeleaf 挂载页和 React/Vite 管理后台。它通过本地 JSON 文件维护路由配置，支持：
+`wrouter` 是一个轻量 Web 路由代理，当前版本 `1.3.0`，基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty、Thymeleaf 挂载页和 React/Vite 管理后台。它通过本地 JSON 文件维护路由配置，支持：
 
 - 按一个或多个路径前缀转发到目标服务。
 - 为单条路由可选启动独立本地 IP/端口代理。
 - 在管理后台增删改查配置并即时刷新 Gateway，无需重启。
 - 记录代理请求统计、最近请求日志，并通过 SSE 推送路由请求日志。
+- 打包为 Windows / macOS / Linux 的安装包与免安装程序，也保留传统 JAR 部署方式。
+- 在管理后台展示版本号，并支持基于 GitHub Release 的自动更新。
 
 ## 核心机制
 
@@ -76,7 +78,7 @@
 - 本地端口代理使用 Reactor Netty `HttpServer` + `HttpClient`，会透传请求方法、请求体和大部分 Header，并把 `Host` 改为目标地址 Host。
 - 本地端口代理转发时不会按 `pathPrefixes` 剥离前缀，而是把原始请求 URI 追加到选中的上游地址后：命中当前路由 `pathPrefixes` 时使用 `accessPageBaseUrl`，未命中时使用 `targetUrl` 默认地址。
 - 本地端口代理响应会设置 `Connection: close` 和 `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`，避免浏览器在增删 `pathPrefixes` 后复用刷新前的旧连接或缓存旧页面/接口结果。
-- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）如果没有重新发起网络请求，web-router 无法主动改变页面内已有状态。可通过 `本地端口代理转发请求` 日志判断请求是否真正到达本地监听端口。
+- 增删 `pathPrefixes` 后，后台会刷新本地端口代理；刷新只影响后续 HTTP 请求，已经加载的目标系统页面（如 `/portal/login/loginPortal.html`）如果没有重新发起网络请求，wrouter 无法主动改变页面内已有状态。可通过 `本地端口代理转发请求` 日志判断请求是否真正到达本地监听端口。
 - 代理失败时返回 HTTP 502 和文本 `Proxy request failed`。
 
 ### 请求日志
@@ -155,8 +157,28 @@
 - `src/main/java/com/geek/webrouter/web/support/RouteTargetUrlNormalizer.java`：目标地址协议归一化。
 - `src/main/resources/templates/index.html`：管理后台 Thymeleaf 挂载页。
 - `frontend/src/App.tsx`、`frontend/src/features/**`、`frontend/src/styles.css`：React 管理后台源码。
+- `frontend/src/features/routes/RouteCard.tsx`、`RouteTopology.tsx`、`RouteSparkline.tsx`：卡片式路由列表、请求链路拓扑与流量曲线。
+- `frontend/src/features/routes/route-metrics.ts`：流量指标类型、格式化与 Sparkline 几何。
+- `frontend/src/lib/app-meta.ts`：版本号与 Gateway 地址常量。
+- `docs/CORE-FEATURES.md`：核心功能权威说明（数据模型、动态转发、本地端口代理、请求观测、API、校验规则、关键不变量、已知边界）。
+- `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-IMPLEMENTATION.md`：管理后台视觉规范与实现映射。
+- `src/test/java/com/geek/webrouter/AdminUiContractTest.java`：把 UI 规范固化为断言的契约测试。
+- `src/test/java/com/geek/webrouter/CoreFeaturesDocContractTest.java`：校验核心功能文档与实现（阈值、接口、错误码、文档互链）保持一致。
 - `src/main/resources/static/admin/assets/app.js`、`src/main/resources/static/admin/assets/app.css`：Vite 构建后的管理后台资源。
 - `src/main/resources/application.yml`：端口、Gateway、Thymeleaf、Actuator 配置。
+- `src/main/resources/version.properties`：构建时由 `pom.xml` 资源过滤注入的应用元信息。
+- `src/main/java/com/geek/webrouter/web/controller/AppVersionController.java`：版本信息与自动更新 API。
+- `src/main/java/com/geek/webrouter/web/service/impl/AppVersionServiceImpl.java`：读取 classpath 的 `version.properties` 并暴露版本/平台/安装形态。
+- `src/main/java/com/geek/webrouter/web/service/impl/UpdateServiceImpl.java`：检查更新、下载校验、生成更新脚本并退出。
+- `src/main/java/com/geek/webrouter/web/support/AppHomeResolver.java`：应用根目录解析（`wrouter.home` → `WROUTER_HOME` → `user.dir`）。
+- `src/main/java/com/geek/webrouter/web/support/ReleaseAssets.java`：发布资产命名契约，打包脚本与 CI 必须与之一致。
+- `src/main/java/com/geek/webrouter/web/support/UpdateScriptGenerator.java`：生成 `updates/apply-update.sh|.bat`，含备份、替换、回滚与重启。
+- `scripts/build-dist.sh`：传统 JAR 分发包（含 `run.sh`/`run.bat` 启停脚本）。
+- `scripts/build-package.sh`：单平台产物（`jar` / `app-image` / `installer`）。
+- `scripts/build-release.sh`：编排全部类型并按契约命名发布到 `target/release/`。
+- `.github/workflows/release.yml`：四平台矩阵构建并发布 GitHub Release。
+- `frontend/src/features/system/VersionDialog.tsx`：管理后台「版本与更新」抽屉。
+- `docs/PACKAGING.md`：交付形态、资产命名契约、自动更新与 CI 发布说明。
 
 ## 运行与验证
 
@@ -165,8 +187,18 @@ mvn test
 mvn spring-boot:run
 ```
 
-- 默认端口：`8090`。
-- 管理后台：`http://localhost:8090/admin`。
+打包（`scripts/build-release.sh --help` 查看全部参数）：
+
+```bash
+scripts/build-dist.sh --skip-tests                          # 传统 JAR 分发包
+scripts/build-package.sh --type app-image --skip-tests      # 免安装 app-image（当前平台）
+scripts/build-package.sh --type installer --skip-tests      # 安装包：dmg / deb+rpm / exe
+scripts/build-release.sh --only jar,app-image,installer     # 全量契约资产 + SHA256SUMS.txt
+```
+
+- jpackage 不能交叉构建：一个平台必须跑在匹配的机器上，跨平台会被脚本拒绝。
+- 默认端口：`9999`（见 `src/main/resources/application.yml`）。
+- 管理后台：`http://localhost:9999/admin`。
 - Actuator：`/actuator/health`、`/actuator/info`。
 
 ## 修改约定
@@ -178,7 +210,13 @@ mvn spring-boot:run
 - 新增路由字段需同步：`RouteConfig`、`RouteConfigDto`、`RouteConfigServiceImpl` 读写/校验、`frontend/src/features/routes/**` 表单/列表/复制/编辑/JSON 预览逻辑、构建后的 `src/main/resources/static/admin/assets/*`，并考虑旧 JSON 兼容。
 - 改前端时同步检查 `frontend/src/App.tsx`、`frontend/src/features/**`、`frontend/src/styles.css`、`src/main/resources/templates/index.html`，并运行 `npm run build` 更新静态资源。
 - 改请求日志时同时考虑 Gateway 路由和本地端口代理两条路径，避免统计口径不一致。
-- 改常量或配置值前先全局搜索引用；特别注意 `application.yml` 默认端口为 `8090`，而 `CommonConstants.DEFAULT_PORT` 当前为 `8080`。
+- 改常量或配置值前先全局搜索引用；`application.yml` 默认端口为 `9999`，前端顶栏展示的地址常量在 `frontend/src/lib/app-meta.ts`，两者必须一致。
+- 改管理后台 UI 前先读 `docs/UI-DESIGN-SYSTEM.md`；改完必须同步更新 `docs/UI-IMPLEMENTATION.md` 并运行 `mvn test`，`AdminUiContractTest` 会校验规范中的关键契约。
+- 改核心机制（路由配置、动态转发、本地端口代理、请求日志/指标、管理 API、校验规则、版本与更新）后，必须同步更新 `docs/CORE-FEATURES.md`；`CoreFeaturesDocContractTest` 会校验阈值常量、接口路径、错误码与文档互链是否一致。
+- 改打包脚本或资产命名时，必须同步 `ReleaseAssets`（命名契约的权威实现）与 `docs/PACKAGING.md`；`scripts/build-release.sh` 会在发布前逐项校验资产名。
+- 改版本与更新链路时，注意 `version.properties` 由 `pom.xml` 资源过滤注入；`/admin/api/update/check` 约定「任何异常都写进 message，接口本身始终成功」，不要改成抛异常。
+- 改应用根目录解析时统一走 `AppHomeResolver`，不要各处直接读 `user.dir`；app-image 依赖启动参数 `-Dwrouter.home=$APPDIR`。
+- 新增打包产物后，需同步 `.github/workflows/release.yml` 矩阵、`docs/PACKAGING.md` 与 `wiki/` 中的交付形态说明。
 
 ## 其他注意
 

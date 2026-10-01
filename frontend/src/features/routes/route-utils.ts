@@ -1,19 +1,29 @@
-import type { RouteConfig, RouteFormValues, RouteValidationResult } from './types';
+import type { RouteConfig, RouteFormValues, RouteSortKey, RouteStatus, RouteStatusFilter, RouteValidationResult } from './types';
+import type { RouteTrafficMetrics } from './route-metrics';
+import { failureRatePercent } from './route-metrics';
 import { normalizedOptionalText } from '@/lib/utils';
 
-const PREFIX_TONE_CLASSES = ['route-prefix-chip-blue', 'route-prefix-chip-mint', 'route-prefix-chip-yellow', 'route-prefix-chip-pink'] as const;
+/** 设计系统 §2.2：按路由在列表中的稳定序号分配 Accent。 */
+export const ROUTE_ACCENT_CLASSES = ['accent-blue', 'accent-cyan', 'accent-purple', 'accent-orange', 'accent-green', 'accent-slate'] as const;
+
+export const ROUTE_PREFIX_CHIP_LIMIT = 3;
+
+export function routeAccentClass(index: number): string {
+  const normalized = Number.isFinite(index) ? Math.abs(Math.trunc(index)) : 0;
+  return ROUTE_ACCENT_CLASSES[normalized % ROUTE_ACCENT_CLASSES.length];
+}
 
 export function effectivePathPrefixes(route: Pick<RouteConfig, 'pathPrefixes' | 'pathPrefix'>): string[] {
   const prefixes = route.pathPrefixes && route.pathPrefixes.length > 0 ? route.pathPrefixes : route.pathPrefix ? [route.pathPrefix] : [];
   return uniquePathPrefixes(prefixes.map(normalizePathPrefix).filter(Boolean));
 }
 
-export function prefixToneClass(index: number): string {
-  return PREFIX_TONE_CLASSES[Math.abs(index) % PREFIX_TONE_CLASSES.length];
-}
-
-export function routeCardToneClass(_route: Pick<RouteConfig, 'enabled'>, _index: number): string {
-  return 'route-card-tone-pink';
+/** 卡片上最多展示 3 个路径标签，其余折叠为 +N。 */
+export function visiblePathPrefixes(prefixes: string[]): { chips: string[]; more: number } {
+  if (prefixes.length <= ROUTE_PREFIX_CHIP_LIMIT) {
+    return { chips: prefixes, more: 0 };
+  }
+  return { chips: prefixes.slice(0, ROUTE_PREFIX_CHIP_LIMIT), more: prefixes.length - ROUTE_PREFIX_CHIP_LIMIT };
 }
 
 export function normalizePathPrefix(value: string): string {
@@ -63,6 +73,127 @@ export function activeLocalBinding(route: RouteConfig): string {
 
 export function hasLocalPort(route: RouteConfig): boolean {
   return route.localPort !== null && route.localPort !== undefined;
+}
+
+/**
+ * 状态语义见设计系统实现映射 §4.3。
+ * 优先使用最近 1 分钟的失败率（能反映当前健康状况），
+ * 窗口内没有请求时退回累计失败率。
+ */
+export function deriveRouteStatus(route: RouteConfig, metrics?: RouteTrafficMetrics | null): RouteStatus {
+  if (!route.enabled) {
+    return 'stopped';
+  }
+  if (!metrics || metrics.totalRequests <= 0) {
+    return 'running';
+  }
+  const failureRate = metrics.requestsLastMinute > 0
+    ? failureRatePercent(metrics.requestsLastMinute, metrics.failedLastMinute)
+    : failureRatePercent(metrics.totalRequests, metrics.failedRequests);
+  if (failureRate >= 20) {
+    return 'error';
+  }
+  if (failureRate > 5) {
+    return 'warning';
+  }
+  return 'running';
+}
+
+export function routeStatusText(status: RouteStatus): string {
+  switch (status) {
+    case 'running':
+      return '运行中';
+    case 'stopped':
+      return '已停用';
+    case 'warning':
+      return '异常';
+    default:
+      return '错误';
+  }
+}
+
+export function routeStatusDotClass(status: RouteStatus): string {
+  switch (status) {
+    case 'running':
+      return 'status-running';
+    case 'warning':
+      return 'status-warning';
+    case 'error':
+      return 'status-error';
+    default:
+      return 'status-stopped';
+  }
+}
+
+/** 卡片副标题：直接说明这条路由的转发语义，而不是装饰性文案。 */
+export function routeBehaviorSummary(route: RouteConfig): string {
+  if (!route.enabled) {
+    return '已停用 · 仅保留配置，不注册 Gateway 路由';
+  }
+  const prefixes = effectivePathPrefixes(route);
+  if (prefixes.length === 0) {
+    return '无路径前缀 · 全部请求走默认地址';
+  }
+  if (route.accessPageBaseUrl) {
+    return '命中前缀走代理地址，其余走默认地址';
+  }
+  return '仅配置了默认地址，命中前缀后仍转发到默认地址';
+}
+
+export interface RouteFilterInput {
+  keyword: string;
+  status: RouteStatusFilter;
+}
+
+export function filterRoutes(routes: RouteConfig[], filter: RouteFilterInput): RouteConfig[] {
+  const keyword = filter.keyword.trim().toLowerCase();
+  return routes
+    .filter((route) => {
+      if (filter.status === 'enabled') {
+        return route.enabled;
+      }
+      if (filter.status === 'disabled') {
+        return !route.enabled;
+      }
+      return true;
+    })
+    .filter((route) => {
+      if (!keyword) {
+        return true;
+      }
+      const haystack = [
+        route.name,
+        displayTargetUrl(route.targetUrl),
+        displayTargetUrl(route.accessPageBaseUrl),
+        localBinding(route.localIp, route.localPort),
+        route.accessPage || '',
+        route.id,
+        ...effectivePathPrefixes(route),
+      ];
+      return haystack.some((value) => value.toLowerCase().includes(keyword));
+    });
+}
+
+export function sortRoutes(routes: RouteConfig[], key: RouteSortKey, metricsById: Record<string, RouteTrafficMetrics | undefined> = {}): RouteConfig[] {
+  const sorted = [...routes];
+  switch (key) {
+    case 'name':
+      return sorted.sort((left, right) => left.name.localeCompare(right.name, 'zh-Hans-CN'));
+    case 'traffic':
+      return sorted.sort((left, right) => trafficOf(right, metricsById) - trafficOf(left, metricsById));
+    case 'latency':
+      return sorted.sort((left, right) => latencyOf(right, metricsById) - latencyOf(left, metricsById));
+    default:
+      return sorted;
+  }
+}
+
+function trafficOf(route: RouteConfig, metricsById: Record<string, RouteTrafficMetrics | undefined>): number {
+  return metricsById[route.id]?.requestsLastMinute ?? 0;
+}
+
+function latencyOf(route: RouteConfig, metricsById: Record<string, RouteTrafficMetrics | undefined>): number {
+  return metricsById[route.id]?.averageDurationMs ?? 0;
 }
 
 export function isValidTargetUrl(targetUrl: string): boolean {

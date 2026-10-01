@@ -12,16 +12,22 @@
     </parent>
 
     <groupId>com.geek</groupId>
-    <artifactId>web-router</artifactId>
-    <version>1.2.0</version>
+    <artifactId>wrouter</artifactId>
+    <version>1.3.0</version>
     <packaging>jar</packaging>
-    <name>web-router</name>
+    <name>wrouter</name>
     <description>Web 路由代理 — 支持路径前缀匹配转发到多个后端服务</description>
 
     <properties>
         <java.version>21</java.version>
         <spring-cloud.version>2024.0.1</spring-cloud.version>
         <lombok.version>1.18.38</lombok.version>
+        <!-- 构建元信息：打包脚本可通过 -D 覆盖，默认取 Maven 构建时间戳 -->
+        <wrouter.buildTime>${maven.build.timestamp}</wrouter.buildTime>
+        <wrouter.platform>unknown</wrouter.platform>
+        <wrouter.installMode>jar</wrouter.installMode>
+        <wrouter.updateChannel>stable</wrouter.updateChannel>
+        <wrouter.repository>geek-xin/web-router</wrouter.repository>
     </properties>
 
     <dependencyManagement>
@@ -111,11 +117,28 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>version.properties</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>version.properties</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <mainClass>com.geek.webrouter.Application</mainClass>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

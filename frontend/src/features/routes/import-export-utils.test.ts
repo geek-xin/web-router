@@ -3,7 +3,7 @@ import { parseRouteImportFile, routeExportFileName } from './import-export-utils
 
 describe('route import/export utils', () => {
   it('builds a stable export file name from the export timestamp', () => {
-    expect(routeExportFileName('2026-07-26T14:03:22.000Z')).toBe('web-router-routes-20260726-140322.json');
+    expect(routeExportFileName('2026-07-26T14:03:22.000Z')).toBe('wrouter-routes-20260726-140322.json');
   });
 
   it('parses a versioned route export payload for import', () => {

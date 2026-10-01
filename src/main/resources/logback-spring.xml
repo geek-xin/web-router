@@ -6,7 +6,7 @@
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>
 
     <appender name="OUT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/web-router.out</file>
+        <file>${LOG_PATH}/wrouter.out</file>
         <append>true</append>
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
@@ -18,14 +18,14 @@
             <onMismatch>NEUTRAL</onMismatch>
         </filter>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/web-router.out.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/wrouter.out.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
         </rollingPolicy>
     </appender>
 
     <appender name="ERR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/web-router.err</file>
+        <file>${LOG_PATH}/wrouter.err</file>
         <append>true</append>
         <encoder>
             <pattern>${LOG_PATTERN}</pattern>
@@ -35,7 +35,7 @@
             <level>ERROR</level>
         </filter>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/web-router.err.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${LOG_PATH}/wrouter.err.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
         </rollingPolicy>

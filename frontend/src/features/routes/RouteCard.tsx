@@ -1,16 +1,29 @@
-import { Copy, Eye, FileJson, Globe2, MousePointer2, ScrollText, Trash2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Check, Copy, Eye, Globe2, ScrollText, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { RouteConfig } from './types';
-import { activeLocalBinding, displayTargetUrl, effectivePathPrefixes, hasLocalPort, localBinding, prefixToneClass, routeAccessUrl, routeCardToneClass } from './route-utils';
+import type { RouteTrafficMetrics } from './route-metrics';
+import { formatCompactNumber, formatLatency } from './route-metrics';
+import {
+  activeLocalBinding,
+  deriveRouteStatus,
+  displayTargetUrl,
+  effectivePathPrefixes,
+  hasLocalPort,
+  routeAccessUrl,
+  routeAccentClass,
+  routeBehaviorSummary,
+  routeStatusDotClass,
+  routeStatusText,
+  visiblePathPrefixes,
+} from './route-utils';
+import { RouteSparkline } from './RouteSparkline';
 import { cn } from '@/lib/utils';
 
 interface RouteCardProps {
   route: RouteConfig;
   index: number;
   selected: boolean;
+  metrics?: RouteTrafficMetrics | null;
   onSelectedChange: (selected: boolean) => void;
   onView: () => void;
   onLogs: () => void;
@@ -20,62 +33,136 @@ interface RouteCardProps {
   onDelete: () => void;
 }
 
-export function RouteCard({ route, index, selected, onSelectedChange, onView, onLogs, onCopy, onAccess, onToggle, onDelete }: RouteCardProps) {
+export function RouteCard({ route, index, selected, metrics, onSelectedChange, onView, onLogs, onCopy, onAccess, onToggle, onDelete }: RouteCardProps) {
   const prefixes = effectivePathPrefixes(route);
+  const { chips, more } = visiblePathPrefixes(prefixes);
   const activeBinding = activeLocalBinding(route);
-  const configuredBinding = localBinding(route.localIp, route.localPort);
   const accessUrl = routeAccessUrl({ localBinding: activeBinding, accessPage: route.accessPage, pathPrefixes: prefixes });
   const canAccess = Boolean(accessUrl);
   const canToggle = route.enabled || hasLocalPort(route);
-  const theme = routeCardToneClass(route, index);
+  const status = deriveRouteStatus(route, metrics);
+  const summary = routeBehaviorSummary(route);
+  const hasTraffic = Boolean(metrics);
 
   return (
-    <Card className={cn('group relative overflow-hidden p-0 transition-all duration-200 hover:-translate-y-1 hover:shadow-clay-hover', theme, selected && 'ring-4 ring-clay-primary/40')}>
-      <div className="route-card-head flex min-h-[72px] items-center gap-3 border-b-[3px] border-clay-border px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <Checkbox className="h-5 w-5 rounded-lg bg-white shadow-none" checked={selected} onCheckedChange={(value) => onSelectedChange(value === true)} aria-label={`选择路由 ${route.name}`} />
-            <h3 className="route-card-title-text min-w-0 truncate text-xl font-black text-clay-ink" title={route.name}>{route.name}</h3>
-            <Badge className="shrink-0 px-2 py-0.5 text-[10px]" variant={route.enabled ? 'mint' : 'muted'}>{route.enabled ? '运行中' : '已停用'}</Badge>
+    <article
+      className={cn('route-card', routeAccentClass(index), selected && 'route-card-selected', !route.enabled && 'route-card-muted')}
+      aria-label={`路由 ${route.name}`}
+    >
+      <div className="route-card-head">
+        <Checkbox
+          className="mt-2"
+          checked={selected}
+          onCheckedChange={(value) => onSelectedChange(value === true)}
+          aria-label={`选择路由 ${route.name}`}
+        />
+        <span className="route-card-icon" aria-hidden="true">
+          <RouteGlyph enabled={route.enabled} />
+        </span>
+        <div className="route-card-title">
+          <h3 className="route-card-name" title={route.name}>{route.name}</h3>
+          <p className="route-card-desc" title={summary}>{summary}</p>
+        </div>
+        <span className="route-card-status">
+          <span className={cn('status-dot', routeStatusDotClass(status))} aria-hidden="true" />
+          {routeStatusText(status)}
+        </span>
+      </div>
+
+      <div className="route-card-body">
+        <div className="route-card-path" title={prefixes.join('  ') || '未配置路径前缀'}>
+          {chips.length === 0 ? (
+            <span className="route-prefix-chip">全部兜底</span>
+          ) : (
+            chips.map((prefix) => <span key={prefix} className="route-prefix-chip">{prefix}</span>)
+          )}
+          {more > 0 && <span className="route-prefix-chip route-prefix-chip-more">+{more}</span>}
+        </div>
+
+        <div className="route-card-meta">
+          <div className="min-w-0">
+            <span className="route-field-label">Target</span>
+            <span className="route-field-value" title={route.targetUrl}>{displayTargetUrl(route.targetUrl) || '未配置'}</span>
+          </div>
+          <div className="min-w-0">
+            <span className="route-field-label">本地端口</span>
+            <span className="route-field-value" title={activeBinding || '未监听'}>
+              {route.localPort == null ? '—' : route.enabled ? route.localPort : route.localPort + '（停用）'}
+            </span>
           </div>
         </div>
-        <Button className="route-toggle-button shrink-0" size="sm" variant={route.enabled ? 'danger' : 'primary'} onClick={onToggle} disabled={!canToggle} title={!canToggle ? '请先编辑路由并填写监听端口后再启用' : undefined}>
-          {route.enabled ? '停用' : '启用'}
-        </Button>
-      </div>
-      <div className="route-card-body relative p-4">
 
-      <div className="relative grid gap-2.5">
-        <Info label="监听地址" icon={<MousePointer2 className="h-4 w-4" />} value={route.localPort == null ? '未配置' : route.enabled ? configuredBinding : '停用中，不监听代理端口'} title={configuredBinding || '未配置'} />
-        <Info label="默认地址（兜底）" icon={<Globe2 className="h-4 w-4" />} value={displayTargetUrl(route.targetUrl)} title={route.targetUrl} />
-        <Info label="代理地址" icon={<ScrollText className="h-4 w-4" />} value={route.accessPageBaseUrl ? displayTargetUrl(route.accessPageBaseUrl) : '未配置'} title={route.accessPageBaseUrl || '未配置'} />
-        <Info label="配置文件" icon={<FileJson className="h-4 w-4" />} value={`${route.id}.json`} title={`config/routes/${route.id}.json`} />
-      </div>
+        <div className="route-card-metrics">
+          <div>
+            <span className="route-metric-value">{hasTraffic ? formatCompactNumber(metrics?.requestsLastMinute) : '—'}</span>
+            {hasTraffic && <span className="route-metric-unit">/ min</span>}
+          </div>
+          <div>
+            <span className="route-metric-value">{hasTraffic ? formatLatency(metrics?.averageDurationMs) : '—'}</span>
+          </div>
+        </div>
 
-      <div className="relative mt-4">
-        <span className="text-xs font-black uppercase tracking-wider text-clay-muted">路径前缀</span>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {prefixes.length === 0 ? <Badge variant="yellow">未配置路径前缀，请求走默认地址</Badge> : prefixes.map((prefix, index) => <Badge key={prefix} variant="default" className={cn('route-prefix-chip route-prefix-chip-interactive', prefixToneClass(index))}>{prefix}</Badge>)}
+        <div className="route-card-spark">
+          <RouteSparkline
+            values={metrics?.trafficBuckets}
+            idle={!route.enabled}
+            label={`${route.name} 最近 30 分钟请求数`}
+          />
         </div>
       </div>
 
-      <div className="route-card-actions-grid relative mt-5">
-        <Button className="route-action route-action-view" size="sm" variant="outline" onClick={onView}><Eye className="h-4 w-4" />查看</Button>
-        <Button className="route-action route-action-logs" size="sm" variant="outline" onClick={onLogs}><ScrollText className="h-4 w-4" />日志</Button>
-        <Button className="route-action route-action-copy" size="sm" variant="outline" onClick={onCopy}><Copy className="h-4 w-4" />拷贝</Button>
-        <Button className="route-action route-action-access" size="sm" variant="primary" onClick={onAccess} disabled={!canAccess} title={!canAccess ? '请先启用路由并填写监听端口和访问页' : '新标签页打开访问页'}>访问</Button>
-        <Button className="route-action route-action-delete" size="sm" variant="danger" onClick={onDelete}><Trash2 className="h-4 w-4" />删除</Button>
+      <div className="route-card-actions">
+        <button type="button" className="route-card-action" onClick={onView} title="打开路由详情" aria-label={`查看 ${route.name} 详情`}>
+          <Eye className="h-3.5 w-3.5" aria-hidden="true" /><span className="route-card-action-label">查看</span>
+        </button>
+        <button type="button" className="route-card-action" onClick={onLogs} title="查看请求日志" aria-label={`查看 ${route.name} 日志`}>
+          <ScrollText className="h-3.5 w-3.5" aria-hidden="true" /><span className="route-card-action-label">日志</span>
+        </button>
+        <button type="button" className="route-card-action" onClick={onCopy} title="拷贝为新路由" aria-label={`拷贝 ${route.name}`}>
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" /><span className="route-card-action-label">拷贝</span>
+        </button>
+        <button
+          type="button"
+          className="route-card-action"
+          onClick={onAccess}
+          disabled={!canAccess}
+          title={canAccess ? '新标签页打开访问页' : '请先启用路由并填写监听端口和访问页'}
+          aria-label={`访问 ${route.name}`}
+        >
+          <Globe2 className="h-3.5 w-3.5" aria-hidden="true" /><span className="route-card-action-label">访问</span>
+        </button>
+        <button
+          type="button"
+          className="route-card-action"
+          onClick={onToggle}
+          disabled={!canToggle}
+          title={canToggle ? (route.enabled ? '停用该路由' : '启用该路由') : '请先编辑路由并填写监听端口后再启用'}
+          aria-label={route.enabled ? `停用 ${route.name}` : `启用 ${route.name}`}
+        >
+          <PowerGlyph enabled={route.enabled} /><span className="route-card-action-label">{route.enabled ? '停用' : '启用'}</span>
+        </button>
+        <button type="button" className="route-card-action route-card-action-danger" onClick={onDelete} title="删除该路由" aria-label={`删除 ${route.name}`}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
-      </div>
-    </Card>
+    </article>
   );
 }
 
-function Info({ label, value, title, icon }: { label: string; value: string; title?: string; icon: React.ReactNode }) {
+/** 品牌符号：节点 + 连线，对应设计系统 §7.1。 */
+function RouteGlyph({ enabled }: { enabled: boolean }) {
   return (
-    <div className="route-info-card p-1">
-      <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-clay-muted">{icon}{label}</div>
-      <div className="mt-1 truncate text-sm font-black text-clay-ink" title={title || value}>{value}</div>
-    </div>
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 7h12" opacity={enabled ? 1 : 0.6} />
+      <path d="M6 7l6 10" opacity={enabled ? 1 : 0.6} />
+      <path d="M18 7l-6 10" opacity={enabled ? 1 : 0.6} />
+      <circle cx="6" cy="7" r="2.4" fill="var(--console-panel)" />
+      <circle cx="18" cy="7" r="2.4" fill="var(--console-panel)" />
+      <circle cx="12" cy="17" r="2.4" fill="var(--console-panel)" />
+    </svg>
   );
+}
+
+function PowerGlyph({ enabled }: { enabled: boolean }) {
+  return enabled ? <Check className="h-3.5 w-3.5" /> : <span className="h-3.5 w-3.5 rounded-full border border-current" aria-hidden="true" />;
 }

@@ -39,4 +39,29 @@ class ProxyRequestLogControllerTest {
                 .jsonPath("$.data.recentLogs[0].path").isEqualTo("/route-a/three")
                 .jsonPath("$.data.recentLogs[0].accessAddress").isEqualTo("127.0.0.1:9191");
     }
+
+    @Test
+    void metricsEndpointReturnsCompactPerRouteTrafficMetrics() {
+        ProxyRequestLogService service = new ProxyRequestLogService();
+        service.record(new ProxyRequestLogEntry(
+                null, "route-a", "GET", "/route-a/one", "127.0.0.1", 200, 10));
+        service.record(new ProxyRequestLogEntry(
+                null, "route-b", "POST", "/route-b/two", "10.0.0.2", 201, 18));
+
+        WebTestClient client = WebTestClient.bindToController(new ProxyRequestLogController(service)).build();
+
+        client.get()
+                .uri("/admin/api/proxy-logs/metrics")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.data['route-a'].routeId").isEqualTo("route-a")
+                .jsonPath("$.data['route-a'].totalRequests").isEqualTo(1)
+                .jsonPath("$.data['route-a'].requestsLastMinute").isEqualTo(1)
+                .jsonPath("$.data['route-a'].averageDurationMs").isEqualTo(10)
+                .jsonPath("$.data['route-a'].trafficBuckets.length()").isEqualTo(30)
+                .jsonPath("$.data['route-b'].totalRequests").isEqualTo(1)
+                .jsonPath("$.data['route-b'].averageDurationMs").isEqualTo(18);
+    }
 }

@@ -1,42 +1,90 @@
-import { displayTargetUrl, effectivePathPrefixes, localBinding, routeAccessPath } from './route-utils';
 import type { RouteConfig, RouteFormValues } from './types';
+import type { RouteTrafficMetrics } from './route-metrics';
+import { effectivePathPrefixes, localBinding, displayTargetUrl, routeAccessPath, visiblePathPrefixes } from './route-utils';
 
-export type RouteStatusTone = 'enabled' | 'disabled';
-export type RouteMetricTone = 'mint' | 'blue' | 'yellow' | 'pink';
+export interface TopologyNodeModel {
+  kicker: string;
+  value: string;
+  note: string;
+}
+
+/** 设计系统 §5.7：拓扑固定四段语义 Client → Gateway → Local Port → Target。 */
+export interface RouteTopologyModel {
+  client: TopologyNodeModel;
+  gateway: TopologyNodeModel;
+  localPort: TopologyNodeModel;
+  target: TopologyNodeModel;
+  fallback: TopologyNodeModel | null;
+  prefixChips: string[];
+  morePrefixes: number;
+  active: boolean;
+}
+
+export function buildRouteTopologyModel(values: RouteFormValues): RouteTopologyModel {
+  const prefixes = values.pathPrefixes || [];
+  const hasPrefixes = prefixes.length > 0;
+  const binding = localBinding(values.localIp, values.localPort);
+  const accessPath = routeAccessPath({ accessPage: values.accessPage, pathPrefixes: prefixes });
+  const { chips, more } = visiblePathPrefixes(prefixes);
+  const target = displayTargetUrl(values.accessPageBaseUrl) || displayTargetUrl(values.targetUrl);
+
+  return {
+    client: {
+      kicker: 'Client',
+      value: accessPath || '未配置访问页',
+      note: '浏览器 / curl / 调用方 · HTTP(S)',
+    },
+    gateway: {
+      kicker: 'wrouter',
+      value: hasPrefixes ? chips.join('  ') + (more > 0 ? '  +' + more : '') : '全部兜底',
+      note: hasPrefixes ? '命中前缀 → 代理地址' : '未配置前缀 → 直接兜底',
+    },
+    localPort: {
+      kicker: '本地端口',
+      value: binding || '未配置监听端口',
+      note: values.enabled ? '监听中' : '已停用，不监听',
+    },
+    target: {
+      kicker: hasPrefixes && values.accessPageBaseUrl ? '目标服务（代理地址）' : '目标服务（默认地址）',
+      value: target || '未配置目标地址',
+      note: hasPrefixes && values.accessPageBaseUrl ? '命中路径前缀后转发到这里' : '默认转发地址',
+    },
+    fallback: hasPrefixes && values.accessPageBaseUrl
+      ? {
+          kicker: '未命中',
+          value: displayTargetUrl(values.targetUrl) || '未配置默认地址',
+          note: '未命中任何前缀时转发到默认地址',
+        }
+      : null,
+    prefixChips: chips,
+    morePrefixes: more,
+    active: values.enabled === true,
+  };
+}
 
 export interface RouteDetailMetric {
   label: string;
   value: string;
-  tone: RouteMetricTone;
 }
 
-export interface RouteTopologyModel {
-  ingress: {
-    value: string;
-    note: string;
-  };
-  router: {
-    summary: string;
-    prefixChips: string[];
-  };
-  hit: {
-    active: boolean;
-    target: string;
-    note: string;
-  };
-  miss: {
-    target: string;
-    note: string;
-  };
-  statusText: string;
+export function routeDetailMetrics(route: RouteConfig, metrics?: RouteTrafficMetrics | null): RouteDetailMetric[] {
+  const prefixes = effectivePathPrefixes(route);
+  return [
+    { label: '请求数', value: metrics ? String(metrics.totalRequests) : '—' },
+    { label: '成功率', value: metrics ? successRate(metrics) : '—' },
+    { label: '平均延迟', value: metrics ? metrics.averageDurationMs + 'ms' : '—' },
+    { label: '路径前缀', value: String(prefixes.length) },
+    { label: '监听地址', value: localBinding(route.localIp, route.localPort) || '未配置' },
+    { label: '默认地址', value: displayTargetUrl(route.targetUrl) || '未配置' },
+  ];
 }
 
-export function routeStatusLabel(route: Pick<RouteConfig, 'enabled'>): string {
-  return route.enabled ? '运行中' : '已停用';
-}
-
-export function routeStatusTone(route: Pick<RouteConfig, 'enabled'>): RouteStatusTone {
-  return route.enabled ? 'enabled' : 'disabled';
+function successRate(metrics: RouteTrafficMetrics): string {
+  if (metrics.totalRequests <= 0) {
+    return '—';
+  }
+  const rate = ((metrics.totalRequests - Math.min(metrics.totalRequests, metrics.failedRequests)) / metrics.totalRequests) * 100;
+  return rate.toFixed(1) + '%';
 }
 
 export function formatJsonContent(content: string): string {
@@ -47,49 +95,6 @@ export function formatJsonContent(content: string): string {
   }
 }
 
-export function routeDetailMetrics(route: RouteConfig): RouteDetailMetric[] {
-  const binding = localBinding(route.localIp, route.localPort);
-  const prefixes = effectivePathPrefixes(route);
-  return [
-    { label: '监听地址', value: binding || '未配置', tone: 'mint' },
-    { label: '默认目标', value: displayTargetUrl(route.targetUrl) || '未配置', tone: 'blue' },
-    { label: '代理地址', value: displayTargetUrl(route.accessPageBaseUrl) || '未配置', tone: 'yellow' },
-    { label: '路径数量', value: String(prefixes.length), tone: 'pink' },
-  ];
-}
-
-export function buildRouteTopologyModel(values: RouteFormValues): RouteTopologyModel {
-  const prefixes = values.pathPrefixes || [];
-  const hasPrefixes = prefixes.length > 0;
-  const accessPath = routeAccessPath({ accessPage: values.accessPage, pathPrefixes: prefixes });
-  return {
-    ingress: {
-      value: localBinding(values.localIp, values.localPort) || '未配置监听端口',
-      note: accessPath ? `访问 ${accessPath}` : '访问页未配置',
-    },
-    router: {
-      summary: hasPrefixes ? `${prefixes.length} 个前缀` : '无前缀 · 全部兜底',
-      prefixChips: compactPrefixChips(prefixes),
-    },
-    hit: {
-      active: hasPrefixes,
-      target: displayTargetUrl(values.accessPageBaseUrl) || '未配置代理地址',
-      note: hasPrefixes ? '命中后转发到代理地址' : '未配置前缀，跳过代理分支',
-    },
-    miss: {
-      target: displayTargetUrl(values.targetUrl) || '未配置兜底地址',
-      note: '无前缀或未命中时转发',
-    },
-    statusText: values.enabled ? '启用：监听端口接收请求' : '停用：仅保留配置',
-  };
-}
-
-function compactPrefixChips(prefixes: string[]): string[] {
-  if (prefixes.length === 0) {
-    return ['无前缀'];
-  }
-  if (prefixes.length <= 2) {
-    return prefixes;
-  }
-  return [...prefixes.slice(0, 2), `+${prefixes.length - 2}`];
+export function formatJsonText(value: string): string {
+  return JSON.stringify(JSON.parse(value), null, 2);
 }

@@ -40,14 +40,18 @@ class RouteConfigTemplateTest {
     }
 
     @Test
-    void routeCardDisplaysListenerDefaultProxyPrefixesAndConfigFile() throws Exception {
+    void routeCardDisplaysTargetLocalPortAndPathPrefixesInFixedOrder() throws Exception {
         String card = Files.readString(Path.of("frontend/src/features/routes/RouteCard.tsx"));
 
-        assertThat(card.indexOf("监听地址")).isLessThan(card.indexOf("默认地址（兜底）"));
-        assertThat(card.indexOf("默认地址（兜底）")).isLessThan(card.indexOf("代理地址"));
-        assertThat(card).contains("路径前缀");
-        assertThat(card).contains("配置文件");
-        assertThat(card).contains("停用中，不监听代理端口");
+        // 设计系统 §5.4：Path 标签行 → Target/本地端口 → 流量指标 → Sparkline
+        assertThat(card.indexOf("route-card-path")).isLessThan(card.indexOf(">Target<"));
+        assertThat(card.indexOf(">Target<")).isLessThan(card.indexOf("本地端口"));
+        assertThat(card.indexOf("本地端口")).isLessThan(card.indexOf("route-card-metrics"));
+        assertThat(card.indexOf("route-card-metrics")).isLessThan(card.indexOf("route-card-spark"));
+        assertThat(card).contains("全部兜底");
+        assertThat(card).contains("route-prefix-chip-more");
+        assertThat(card).contains("RouteSparkline");
+        assertThat(card).contains("deriveRouteStatus");
     }
 
     @Test

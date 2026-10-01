@@ -1,131 +1,88 @@
 # 架构与机制
 
-## 配置模型
+## 运行时组成
 
-核心实体：`RouteConfig`。
-
-一条路由包含展示名称、路径前缀列表、默认地址（兜底）`targetUrl`、代理地址 `accessPageBaseUrl`、访问页 `accessPage`、本地监听地址/端口和启用状态。旧字段 `pathPrefix` 仍被读取，并在写回时与 `pathPrefixes[0]` 同步。
+| 组件 | 实现 | 职责 |
+| --- | --- | --- |
+| 主网关 | Spring Cloud Gateway（Reactor Netty） | 按 Path 谓词转发主端口流量 |
+| 本地端口代理 | Reactor Netty `HttpServer` + `HttpClient` | 为单条路由提供独立入口 |
+| 配置存储 | 本地 JSON 文件 | 唯一持久化介质，无数据库 |
+| 请求观测 | 内存统计 + SSE | 快照日志、实时流、滚动流量指标 |
+| 管理后台 | React 19 + Vite + Tailwind | 路由增删改查、拓扑、日志、指标 |
+| 页面挂载 | Thymeleaf | 输出 `#root`，注入配置目录 meta |
 
 ## 配置存储
 
-路由配置由 `RouteConfigServiceImpl` 读写，保存为本地 JSON 文件：
-
-```text
-config/routes/<id>.json
-```
-
-机制：
-
-- `config/routes` 是运行时目录，受应用启动工作目录影响。
-- 文件名来自路由 `id`，读取时文件名 ID 是权威值。
-- `resolveFilePath()` 会校验 ID，只允许英文、数字、下划线和连字符。
+- 一条路由 = 一个文件：`config/routes/<id>.json`，位于应用根目录下。
+- 应用根目录解析顺序：系统属性 `wrouter.home` → 环境变量 `WROUTER_HOME` → `user.dir`（启动工作目录）。
+- 写入使用 Jackson pretty printer，文件可读、可手工编辑、可进版本库。
 - `listAll()` 按文件最后修改时间倒序返回。
-- 写入前会校验展示名称、路径前缀、默认地址、代理地址、本地 IP/端口和本地绑定冲突。
+- **配置文件名 = 路由 ID**；任何外部传入的 routeId 都必须经 `resolveFilePath()` 校验（`^[a-zA-Z0-9_-]+$`），用于阻断路径穿越。
 
-## 动态 Gateway 路由
+运行时目录：
 
-动态路由由 `DynamicRouteService` 管理。
+| 路径 | 说明 |
+| --- | --- |
+| `config/routes/` | 路由配置文件目录 |
+| `updates/` | 自动更新工作目录（更新包、脚本、`backup-<版本>/`、`update.log`） |
+| `logs/` | 应用日志输出目录 |
 
-刷新流程：
+## Gateway 动态转发
 
-1. 读取全部路由配置。
-2. 筛选 `enabled=true` 的配置。
-3. 将每个 `pathPrefixes` 项转换为一条 Gateway 路由定义。
-4. 与当前 Gateway 路由快照做差异比较。
-5. 删除已变化或已移除的 routeId。
-6. 保存新增或变化的路由定义。
-7. 发布 `RefreshRoutesEvent`。
-8. 刷新本地端口代理。
+`DynamicRouteService.refreshAll()` 的流程：
 
-### 多路径前缀 routeId
+1. 取信号量，保证同一时刻只有一次刷新。
+2. 计算期望路由集：所有 `enabled` 配置 × 每个路径前缀 = 一条 Gateway 路由。
+3. 差量计算需删除与需保存的 routeId，顺序执行。
+4. 刷新本地端口代理，替换内存快照并发布 `RefreshRoutesEvent`。
 
-一条路由可以配置多个 `pathPrefixes`：
+差量更新而非全量重建，内容未变的 routeId 不会被删除重建，避免刷新期间的瞬时 404。所有写操作（创建 / 更新 / 删除 / 导入）持久化后都会触发刷新，**改完即生效**。
 
-- 第 1 条使用基础 `id`。
-- 后续前缀使用 `<id>__<index>`。
+注册规则：
 
-例如：
+| 项 | 规则 |
+| --- | --- |
+| routeId | 第 1 个前缀用基础 `id`，后续用 `<id>__<n>`，如 `route-xxx__1` |
+| Path 谓词 | `/` → `/**`；`/test` → `/test,/test/**` |
+| StripPrefix | 按前缀层级剥离：`/test` 剥 1 段，`/test/api` 剥 2 段，`/` 不剥离 |
+| order | 固定 0 |
 
-```text
-route-demo
-route-demo__1
-route-demo__2
-```
-
-请求日志展示和统计会归并到基础 routeId。
-
-### Path 与 StripPrefix
-
-| 配置前缀 | Gateway Path | StripPrefix |
-| --- | --- | --- |
-| `/` | `/**` | `0` |
-| `/test` | `/test/**` | `1` |
-| `/test/api` | `/test/api/**` | `2` |
+`pathPrefixes` 为空时不注册任何 Gateway 路由，该路由只能通过本地端口代理访问。
 
 ## 本地端口代理
 
-本地端口代理由 `LocalPortProxyService` 管理。
+启动条件：路由 `enabled=true` 且 `localPort` 非空，绑定 `effectiveLocalIp():localPort`。
 
-启动条件：
+| 时机 | 行为 |
+| --- | --- |
+| 配置变化但绑定不变 | 原地更新配置引用，不重启监听，避免连接中断 |
+| 绑定新增 | 启动新监听 |
+| 绑定消失 / 停用 / 删除 | 停止并释放监听 |
+| 应用关闭 | `@PreDestroy` 逐个释放 |
 
-- 路由 `enabled=true`。
-- 设置了 `localPort`。
+转发行为：透传方法与请求体，过滤 hop-by-hop 头（`connection`、`keep-alive`、`transfer-encoding`、`upgrade`、`te`、`trailer`、`proxy-*` 及 `Connection` 中列出的自定义头），把 `Host` 改写为目标地址。
 
-监听地址：
+响应强制 `Connection: close` 与 `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`，避免增删 `pathPrefixes` 后浏览器复用旧连接或缓存旧结果。上游失败返回 **HTTP 502** + 文本 `Proxy request failed`，并记录一条 502 日志。
 
-```text
-effectiveLocalIp():localPort
-```
+## 请求观测链路
 
-`localIp` 为空时默认 `127.0.0.1`。
+| 入口 | 采集者 |
+| --- | --- |
+| 主端口 Gateway | `ProxyRequestLogFilter`（`GlobalFilter`，`HIGHEST_PRECEDENCE`） |
+| 本地端口 | `LocalPortProxyService.proxy()` |
 
-转发行为：
-
-- 使用 Reactor Netty `HttpServer` + `HttpClient`。
-- 每个本地监听绑定到一条启用路由。
-- 请求路径命中该路由 `pathPrefixes` 时使用 `accessPageBaseUrl`，未命中时使用 `targetUrl` 默认地址。
-- 保留原始 URI，不剥离前缀。
-- 透传请求方法、请求体和大部分 Header。
-- 将 `Host` 改为目标地址 Host。
-- 响应设置 `Connection: close` 和禁用缓存头。
-- 代理失败时返回 `HTTP 502` + `Proxy request failed`。
-
-刷新行为：
-
-- 同一 `localIp:localPort` 绑定会更新内存路由快照，避免重启监听。
-- 移除、禁用或变更绑定时停止不再需要的监听。
-- 刷新只保证后续新请求使用新配置，已在途请求可能仍使用已捕获的旧快照。
-
-## 请求日志链路
-
-请求日志由 `ProxyRequestLogService` 维护。
-
-记录入口：
-
-- `ProxyRequestLogFilter`：记录 Gateway 代理请求。
-- `LocalPortProxyService`：记录本地端口代理请求。
-
-暴露入口：
-
-- `ProxyRequestLogController`：日志快照和 SSE API。
-- 管理后台日志面板和单路由日志弹窗。
-
-统计内容：
-
-- 总请求数。
-- 去重 IP 数。
-- 按 IP 请求次数排序。
-- Top 路径统计。
-- 慢请求 Top。
-- 最近 100 条请求日志。
+两条路径写入同一个 `ProxyRequestLogService`，统计口径一致。**同时配置 `localPort` 的路由，一次客户端请求可能产生两条日志**（Gateway 一条 + 本地代理一条）。
 
 ## 管理后台资源
 
-- `src/main/resources/templates/index.html`：Thymeleaf 挂载页和后端注入的元数据。
-- `frontend/src/App.tsx`：React 管理后台入口。
-- `frontend/src/features/*`：表单、列表、复制、日志、SSE 和详情抽屉交互。
-- `frontend/src/styles.css`：后台布局和组件样式入口。
-- `src/main/resources/static/admin/assets/app.js`：Vite 构建后的浏览器脚本。
-- `src/main/resources/static/admin/assets/app.css`：Vite 构建后的样式文件。
+| 文件 | 职责 |
+| --- | --- |
+| `frontend/src/App.tsx` | 应用外壳：侧边栏、顶栏、KPI 行、路由网格 |
+| `frontend/src/features/**` | 路由卡片、工具栏、表单、抽屉、拓扑、日志、指标 |
+| `frontend/src/styles.css` | CSS 变量与组件层样式入口 |
+| `src/main/resources/templates/index.html` | Thymeleaf 挂载页 |
+| `src/main/resources/static/admin/assets/app.js`、`app.css` | Vite 构建产物 |
 
-当前前端源码通过 `frontend/` 下的 npm/Vite 构建流程产出静态资源，最终由 Spring Boot 直接提供。
+改前端后需 `npm run build` 更新静态资源，再由 Spring Boot 直接提供。
+
+> 完整实现细节、关键不变量与已知边界见 [核心功能说明](../docs/CORE-FEATURES.md)。

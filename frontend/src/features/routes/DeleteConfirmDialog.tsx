@@ -15,7 +15,9 @@ export function DeleteConfirmDialog({ open, names, onOpenChange, onConfirm }: De
         <AlertDialogHeader>
           <AlertDialogTitle>{single ? '确定要删除这个路由吗？' : `确定要删除 ${names.length} 个路由吗？`}</AlertDialogTitle>
           <AlertDialogDescription>
-            {single ? <span className="block text-lg font-black text-clay-error">{names[0]}</span> : <span className="block text-clay-ink">{names.join('、')}</span>}
+            {single
+              ? <span className="console-mono mt-1 block text-[13px] text-console-ink">{names[0]}</span>
+              : <span className="mt-1 block text-[13px] text-console-ink">{names.join('、')}</span>}
             <span className="mt-2 block">删除后配置文件将被移除，此操作不可撤销。</span>
           </AlertDialogDescription>
         </AlertDialogHeader>
