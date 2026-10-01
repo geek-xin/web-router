@@ -126,8 +126,24 @@ make_archive() {
 
   case "${archive_kind}" in
     zip)
-      require_cmd zip "needed to create ${archive_out}"
-      ( cd "${archive_parent}" && zip -qry "${archive_out}" "${archive_entry}" )
+      if command -v zip >/dev/null 2>&1; then
+        ( cd "${archive_parent}" && zip -qry "${archive_out}" "${archive_entry}" )
+      else
+        # Git Bash on the Windows runners ships no zip binary, so fall back to
+        # Python (already required for icon rasterisation). Without this the
+        # windows-x64 app-image silently produced no -app.zip.
+        detect_python || die "neither zip nor python3 is available; cannot create ${archive_out}"
+        "${PYTHON_BIN}" - "${archive_parent}" "${archive_entry}" "${archive_out}" <<'PYEOF'
+import os, sys, zipfile
+parent, entry, out = sys.argv[1], sys.argv[2], sys.argv[3]
+root_dir = os.path.join(parent, entry)
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, _dirs, files in os.walk(root_dir):
+        for name in files:
+            full = os.path.join(root, name)
+            zf.write(full, os.path.relpath(full, parent))
+PYEOF
+      fi
       ;;
     tar.gz)
       require_cmd tar

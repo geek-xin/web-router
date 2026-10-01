@@ -371,11 +371,26 @@ write_app_payload_extras() {
   # $1 = app-image directory. Adds the user-maintainable config template and a
   # build metadata file next to the application jar.
   image_dir=$1
-  if [ -d "${image_dir}/Contents/app" ]; then
-    payload_dir="${image_dir}/Contents/app"
-  elif [ -d "${image_dir}/lib/app" ]; then
-    payload_dir="${image_dir}/lib/app"
-  else
+  # jpackage lays the payload out differently per platform:
+  #   macOS  <name>.app/Contents/app
+  #   Linux  <name>/lib/app
+  #   Windows <name>/app
+  # Check all three, then fall back to locating the main jar so an unexpected
+  # layout still gets the config template instead of a silent warning.
+  payload_dir=""
+  for candidate in "${image_dir}/Contents/app" "${image_dir}/lib/app" "${image_dir}/app"; do
+    if [ -d "${candidate}" ]; then
+      payload_dir="${candidate}"
+      break
+    fi
+  done
+  if [ -z "${payload_dir}" ]; then
+    payload_dir=$(find "${image_dir}" -name "${MAIN_JAR_NAME}" -type f -print 2>/dev/null | head -n 1 || true)
+    if [ -n "${payload_dir}" ]; then
+      payload_dir=$(dirname -- "${payload_dir}")
+    fi
+  fi
+  if [ -z "${payload_dir}" ]; then
     log_warn "could not locate the application payload directory inside ${image_dir}"
     return 0
   fi
