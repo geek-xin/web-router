@@ -5,6 +5,9 @@
 spring:
   application:
     name: wrouter
+  # 优雅关闭：自动更新重启前先让在途请求处理完，避免掐断代理
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   thymeleaf:
     cache: false
     prefix: classpath:/templates/
@@ -20,6 +23,21 @@ spring:
 server:
   address: 127.0.0.1
   port: 9999
+  shutdown: graceful
+
+# 自动更新：默认开启，客户无感
+wrouter:
+  update:
+    # 总开关；关闭后只保留手动「一键更新」
+    auto: true
+    # 首次检查延迟，避免与应用启动争抢资源
+    initial-delay-seconds: 120
+    # 检查间隔
+    check-interval-seconds: 3600
+    # 判定空闲所需的静默秒数：期间没有任何代理请求才允许重启
+    quiet-seconds: 30
+    # 是否自动应用；false 表示只预下载，等用户手动确认
+    auto-apply: true
 
 # 管理端点
 management:

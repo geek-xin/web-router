@@ -26,6 +26,18 @@ export interface UpdateCheckResult {
   message: string;
 }
 
+/** 与后端 AutoUpdateStatus 对应。 */
+export interface AutoUpdateStatus {
+  autoEnabled: boolean;
+  autoApply: boolean;
+  quietSeconds: number;
+  inFlightCount: number;
+  idleMillis: number;
+  idle: boolean;
+  pendingVersion: string;
+  pendingAsset: string;
+}
+
 /** 与后端 UpdateApplyResult 对应。 */
 export interface UpdateApplyResult {
   version: string;

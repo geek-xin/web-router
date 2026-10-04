@@ -2,6 +2,6 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(({ className, ...props }, ref) => (
-  <textarea ref={ref} className={cn('drawer-json-editor console-scroll', className)} {...props} />
+  <textarea ref={ref} className={cn('json-editor scroll-area', className)} {...props} />
 ));
 Textarea.displayName = 'Textarea';

@@ -133,23 +133,23 @@ export function RouteDetailDrawer({
 
   return (
     <>
-      <button className="route-drawer-scrim" type="button" aria-label="关闭路由详情" onClick={() => onOpenChange(false)} />
-      <aside className={cn('route-drawer console-scroll', routeAccentClass(index))} role="dialog" aria-modal="true" aria-labelledby="route-drawer-title">
-        <header className="route-drawer-head">
-          <div className="route-drawer-title-row">
+      <button className="drawer-scrim" type="button" aria-label="关闭路由详情" onClick={() => onOpenChange(false)} />
+      <aside className={cn('drawer scroll-area', routeAccentClass(index))} role="dialog" aria-modal="true" aria-labelledby="route-drawer-title">
+        <header className="drawer-head">
+          <div className="drawer-title-row">
             <div className="min-w-0 flex-1">
-              <h2 id="route-drawer-title" className="route-drawer-title" title={route.name}>{route.name}</h2>
-              <span className="route-card-status mt-1">
-                <span className={cn('status-dot', routeStatusDotClass(status))} aria-hidden="true" />
+              <h2 id="route-drawer-title" className="drawer-title" title={route.name}>{route.name}</h2>
+              <span className="route-card-status mt-1.5" style={{ maxWidth: '100%' }}>
+                <span className={cn('dot', routeStatusDotClass(status))} aria-hidden="true" />
                 {routeStatusText(status)}
-                <span className="console-mono text-console-ink-subtle">· {fileName || route.id + '.json'}</span>
+                <span className="drawer-file font-mono" title={fileName || route.id + '.json'}>· {fileName || route.id + '.json'}</span>
               </span>
             </div>
             <button type="button" className="icon-button" onClick={() => onOpenChange(false)} aria-label="关闭详情">
-              <X className="h-3.5 w-3.5" />
+              <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="route-drawer-paths">
+          <div className="drawer-paths">
             {chips.length === 0
               ? <span className="route-prefix-chip">全部兜底</span>
               : chips.map((prefix) => <span key={prefix} className="route-prefix-chip">{prefix}</span>)}
@@ -157,9 +157,9 @@ export function RouteDetailDrawer({
           </div>
         </header>
 
-        {error && <div className="console-error-box m-3" role="alert">{error}</div>}
+        {error && <div className="alert-error m-3" role="alert">{error}</div>}
 
-        <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+        <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 min-w-0 flex-1 flex-col">
           <TabsList>
             <TabsTrigger value="overview">概览</TabsTrigger>
             <TabsTrigger value="config">配置</TabsTrigger>
@@ -167,22 +167,22 @@ export function RouteDetailDrawer({
             <TabsTrigger value="metrics">指标</TabsTrigger>
           </TabsList>
 
-          <div className="route-drawer-body console-scroll">
+          <div className="drawer-body scroll-area">
             <TabsContent value="overview" className="grid gap-4">
-              <section className="drawer-section">
-                <div className="drawer-section-head">
-                  <span className="drawer-section-index">1</span>
-                  <h3 className="drawer-section-title">路由拓扑</h3>
+              <section className="section">
+                <div className="section-head">
+                  <span className="section-index">1</span>
+                  <h3 className="section-title">路由拓扑</h3>
                 </div>
                 <RouteTopology model={topology} idle={!route.enabled} />
               </section>
 
-              <section className="drawer-section">
-                <div className="drawer-section-head">
-                  <span className="drawer-section-index">2</span>
-                  <h3 className="drawer-section-title">基本信息</h3>
+              <section className="section">
+                <div className="section-head">
+                  <span className="section-index">2</span>
+                  <h3 className="section-title">基本信息</h3>
                 </div>
-                <div className="drawer-field-grid">
+                <div className="field-grid">
                   <DrawerField label="路由名称" value={liveValues.name || '未命名'} />
                   <DrawerField label="Path Prefix" value={prefixes.join(' ') || '未配置'} />
                   <DrawerField label="Target URL" value={liveValues.targetUrl || '未配置'} />
@@ -194,36 +194,36 @@ export function RouteDetailDrawer({
                 </div>
               </section>
 
-              <section className="drawer-section">
-                <div className="drawer-section-head">
-                  <span className="drawer-section-index">3</span>
-                  <h3 className="drawer-section-title">运行状态</h3>
+              <section className="section">
+                <div className="section-head">
+                  <span className="section-index">3</span>
+                  <h3 className="section-title">运行状态</h3>
                 </div>
-                <div className="drawer-metrics">
+                <div className="metric-grid">
                   <DrawerMetric label="请求数" value={formatCount(traffic.totalRequests)} />
                   <DrawerMetric label="成功率" value={successRatePercent(traffic.totalRequests, traffic.failedRequests)} />
                   <DrawerMetric label="平均延迟" value={formatLatency(traffic.averageDurationMs)} />
                 </div>
-                <div className="h-[34px]">
-                  <RouteSparkline values={traffic.trafficBuckets} idle={!route.enabled} label={`${route.name} 最近 30 分钟请求数`} />
+                <div className="h-[38px]">
+                  <RouteSparkline values={traffic.trafficBuckets} idle={!route.enabled} label={route.name + ' 最近 30 分钟请求数'} />
                 </div>
               </section>
 
-              <section className="drawer-section">
-                <div className="drawer-section-head">
-                  <span className="drawer-section-index">4</span>
-                  <h3 className="drawer-section-title">最近日志</h3>
-                  <button type="button" className="console-button console-button-sm console-button-ghost" onClick={() => onOpenLogs(route)}>查看全部</button>
+              <section className="section">
+                <div className="section-head">
+                  <span className="section-index">4</span>
+                  <h3 className="section-title">最近日志</h3>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => onOpenLogs(route)}>查看全部</button>
                 </div>
                 {recentLogs.length === 0 ? (
-                  <p className="drawer-empty">暂无代理请求</p>
+                  <p className="form-hint">暂无代理请求</p>
                 ) : (
-                  <div className="drawer-log-list">
+                  <div className="log-rows">
                     {recentLogs.slice(0, 5).map((entry, logIndex) => (
-                      <div className="drawer-log-row" key={(entry.timestamp || entry.time || '') + logIndex}>
+                      <div className="log-row" key={(entry.timestamp || entry.time || '') + logIndex}>
                         <span>{formatTime(entry.timestamp || entry.time)}</span>
                         <span>{entry.method || '-'}</span>
-                        <span className="drawer-log-path" title={entry.path || '/'}>{entry.path || '/'}</span>
+                        <span className="log-row-path" title={entry.path || '/'}>{entry.path || '/'}</span>
                         <span className={statusClass(entry.status)}>{entry.status || '-'}</span>
                         <span>{formatDuration(entry.durationMs)}</span>
                       </div>
@@ -235,7 +235,7 @@ export function RouteDetailDrawer({
 
             <TabsContent value="config" className="grid gap-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="console-field-hint">左侧表单与 JSON 实时同步；保存后立即刷新 Gateway 与本地端口代理。</p>
+                <p className="form-hint">表单与 JSON 实时同步；保存后立即刷新 Gateway 与本地端口代理。</p>
                 <Button type="submit" form={DETAIL_FORM_ID} variant="primary">保存配置</Button>
               </div>
               <RouteFormPanel
@@ -250,10 +250,10 @@ export function RouteDetailDrawer({
                 formId={DETAIL_FORM_ID}
                 showActions={false}
               />
-              <div className="drawer-section">
-                <div className="drawer-section-head">
-                  <FileJson className="h-3.5 w-3.5 text-console-ink-subtle" aria-hidden="true" />
-                  <h3 className="drawer-section-title">JSON 配置</h3>
+              <div className="section">
+                <div className="section-head">
+                  <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
+                  <h3 className="section-title">JSON 配置</h3>
                   {jsonEditing ? (
                     <div className="flex gap-2">
                       <Button size="sm" variant="primary" onClick={() => void saveJsonDraft()} disabled={loading}>保存 JSON</Button>
@@ -263,7 +263,7 @@ export function RouteDetailDrawer({
                     <Button size="sm" variant="outline" onClick={() => { setJsonEditValue(formatJsonForDisplay(jsonPreview)); setJsonError(''); setJsonEditing(true); }} disabled={loading}>编辑 JSON</Button>
                   )}
                 </div>
-                {jsonError && <div className="console-error-box" role="alert">{jsonError}</div>}
+                {jsonError && <div className="alert-error" role="alert">{jsonError}</div>}
                 <Textarea
                   value={loading ? '正在加载配置…' : jsonDisplayValue}
                   onChange={(event) => setJsonEditValue(event.target.value)}
@@ -276,20 +276,20 @@ export function RouteDetailDrawer({
 
             <TabsContent value="logs" className="grid gap-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="console-field-hint">最近 {recentLogs.length} 条代理请求，完整日志支持实时流与诊断分析。</p>
+                <p className="form-hint">最近 {recentLogs.length} 条代理请求，完整日志支持实时流与诊断分析。</p>
                 <Button size="sm" variant="outline" onClick={() => onOpenLogs(route)}>
                   <ScrollText className="h-3.5 w-3.5" />打开完整日志
                 </Button>
               </div>
               {recentLogs.length === 0 ? (
-                <p className="drawer-empty">暂无代理请求</p>
+                <p className="form-hint">暂无代理请求</p>
               ) : (
-                <div className="drawer-log-list">
+                <div className="log-rows">
                   {recentLogs.slice(0, 20).map((entry, logIndex) => (
-                    <div className="drawer-log-row" key={(entry.timestamp || entry.time || '') + logIndex}>
+                    <div className="log-row" key={(entry.timestamp || entry.time || '') + logIndex}>
                       <span>{formatTime(entry.timestamp || entry.time)}</span>
                       <span>{entry.method || '-'}</span>
-                      <span className="drawer-log-path" title={entry.path || '/'}>{entry.path || '/'}</span>
+                      <span className="log-row-path" title={entry.path || '/'}>{entry.path || '/'}</span>
                       <span className={statusClass(entry.status)}>{entry.status || '-'}</span>
                       <span>{formatDuration(entry.durationMs)}</span>
                     </div>
@@ -299,15 +299,15 @@ export function RouteDetailDrawer({
             </TabsContent>
 
             <TabsContent value="metrics" className="grid gap-3">
-              <div className="drawer-metrics">
+              <div className="metric-grid">
                 <DrawerMetric label="请求数 / min" value={formatCount(traffic.requestsLastMinute)} />
                 <DrawerMetric label="平均延迟" value={formatLatency(traffic.averageDurationMs)} />
                 <DrawerMetric label="慢请求" value={formatCount(traffic.slowRequests)} />
               </div>
-              <div className="h-[60px]">
-                <RouteSparkline values={traffic.trafficBuckets} idle={!route.enabled} label={`${route.name} 最近 30 分钟请求数`} />
+              <div className="h-[64px]">
+                <RouteSparkline values={traffic.trafficBuckets} idle={!route.enabled} label={route.name + ' 最近 30 分钟请求数'} />
               </div>
-              <div className="drawer-field-grid">
+              <div className="field-grid">
                 <DrawerField label="累计请求数" value={formatCount(traffic.totalRequests)} />
                 <DrawerField label="失败请求" value={formatCount(traffic.failedRequests)} />
                 <DrawerField label="成功率" value={successRatePercent(traffic.totalRequests, traffic.failedRequests)} />
@@ -317,7 +317,7 @@ export function RouteDetailDrawer({
           </div>
         </Tabs>
 
-        <footer className="route-drawer-actions">
+        <footer className="drawer-actions">
           <Button variant="primary" onClick={() => setTab('config')}>
             <Pencil className="h-3.5 w-3.5" />编辑
           </Button>
@@ -338,18 +338,18 @@ export function RouteDetailDrawer({
 
 function DrawerField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="drawer-field">
+    <div className="field">
       <span className="route-field-label">{label}</span>
-      <span className="drawer-field-value" title={value}>{value}</span>
+      <span className="field-value" title={value}>{value}</span>
     </div>
   );
 }
 
 function DrawerMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="drawer-metric">
+    <div className="field">
       <span className="route-field-label">{label}</span>
-      <span className="drawer-metric-value">{value}</span>
+      <span className="metric-figure">{value}</span>
     </div>
   );
 }

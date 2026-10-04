@@ -30,6 +30,7 @@ class CoreFeaturesDocContractTest {
         assertThat(doc).contains("校验规则与错误语义");
         assertThat(doc).contains("关键不变量");
         assertThat(doc).contains("已知边界");
+        assertThat(doc).contains("无感自动更新");
     }
 
     @Test
@@ -90,10 +91,65 @@ class CoreFeaturesDocContractTest {
                 "/admin/api/proxy-logs/metrics",
                 "/admin/api/proxy-logs/routes/{routeId}",
                 "/admin/api/proxy-logs/stream",
+                "/admin/api/update/auto",
                 "/actuator/health",
         }) {
             assertThat(doc).as("文档必须记录接口 %s", endpoint).contains(endpoint);
         }
+    }
+
+    /**
+     * 无感自动更新的关键契约：默认开启、两阶段拆分、空闲判定接入两条代理路径、
+     * 文档记录默认阈值。
+     */
+    @Test
+    void seamlessAutoUpdateContractIsDocumentedAndImplemented() throws Exception {
+        String doc = read("docs/CORE-FEATURES.md");
+        String properties = read("src/main/java/com/geek/webrouter/config/UpdateProperties.java");
+        String auto = read("src/main/java/com/geek/webrouter/web/service/AutoUpdateService.java");
+        String tracker = read("src/main/java/com/geek/webrouter/web/service/InFlightRequestTracker.java");
+        String updateService = read("src/main/java/com/geek/webrouter/web/service/UpdateService.java");
+        String gateway = read("src/main/java/com/geek/webrouter/config/ProxyRequestLogFilter.java");
+        String localProxy = read("src/main/java/com/geek/webrouter/config/LocalPortProxyService.java");
+        String application = read("src/main/java/com/geek/webrouter/Application.java");
+        String yml = read("src/main/resources/application.yml");
+        String controller = read("src/main/java/com/geek/webrouter/web/controller/AppVersionController.java");
+
+        // 默认开启，且阈值与文档一致
+        assertThat(properties).contains("private boolean auto = true");
+        assertThat(properties).contains("private long initialDelaySeconds = 120");
+        assertThat(properties).contains("private long checkIntervalSeconds = 3600");
+        assertThat(properties).contains("private long quietSeconds = 30");
+        assertThat(properties).contains("private boolean autoApply = true");
+        assertThat(doc).contains("默认开启");
+        assertThat(doc).contains("120");
+        assertThat(doc).contains("3600");
+        assertThat(doc).contains("30");
+
+        // 两阶段：先暂存（不退出），空闲后再退出
+        assertThat(updateService).contains("UpdateApplyResult stage()");
+        assertThat(updateService).contains("void requestExit()");
+        assertThat(auto).contains("updateService.stage()");
+        assertThat(auto).contains("updateService.requestExit()");
+        assertThat(auto).contains("@Scheduled");
+
+        // 空闲判定必须接入 Gateway 与本地端口代理两条路径
+        assertThat(tracker).contains("public int begin()");
+        assertThat(tracker).contains("public int end()");
+        assertThat(tracker).contains("public boolean isIdle(long quietMillis)");
+        assertThat(gateway).contains("inFlightTracker.begin()");
+        assertThat(gateway).contains("inFlightTracker.end()");
+        assertThat(localProxy).contains("inFlightTracker.begin()");
+        assertThat(localProxy).contains("inFlightTracker.end()");
+
+        // 调度依赖 @EnableScheduling，重启依赖优雅关闭
+        assertThat(application).contains("@EnableScheduling");
+        assertThat(yml).contains("shutdown: graceful");
+        assertThat(yml).contains("timeout-per-shutdown-phase");
+
+        // 状态接口可观测
+        assertThat(controller).contains("/update/auto");
+        assertThat(doc).contains("/admin/api/update/auto");
     }
 
     @Test

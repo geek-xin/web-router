@@ -9,7 +9,7 @@ export const DialogClose = DialogPrimitive.Close;
 export const DialogPortal = DialogPrimitive.Portal;
 
 export const DialogOverlay = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Overlay>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>>(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay ref={ref} className={cn('console-overlay', className)} {...props} />
+  <DialogPrimitive.Overlay ref={ref} className={cn('overlay', className)} {...props} />
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
@@ -18,12 +18,12 @@ export const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrim
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      className={cn('console-dialog console-scroll fixed left-1/2 top-1/2 z-50 grid max-h-[90vh] w-[min(94vw,760px)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-auto p-5 outline-none', className)}
+      className={cn('modal scroll-area', className)}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="console-dialog-close focus-visible:outline-none">
-        <X className="h-3.5 w-3.5" />
+      <DialogPrimitive.Close className="modal-close focus-visible:outline-none">
+        <X className="h-4 w-4" />
         <span className="sr-only">关闭</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
@@ -31,9 +31,9 @@ export const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrim
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
-export const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('flex flex-col gap-1 pr-8', className)} {...props} />;
-export const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
-export const DialogTitle = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Title>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>>(({ className, ...props }, ref) => <DialogPrimitive.Title ref={ref} className={cn('console-dialog-title', className)} {...props} />);
+export const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('flex flex-col pr-8', className)} {...props} />;
+export const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn('modal-actions flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)} {...props} />;
+export const DialogTitle = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Title>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>>(({ className, ...props }, ref) => <DialogPrimitive.Title ref={ref} className={cn('modal-title', className)} {...props} />);
 DialogTitle.displayName = DialogPrimitive.Title.displayName;
-export const DialogDescription = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Description>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>>(({ className, ...props }, ref) => <DialogPrimitive.Description ref={ref} className={cn('console-dialog-description', className)} {...props} />);
+export const DialogDescription = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Description>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>>(({ className, ...props }, ref) => <DialogPrimitive.Description ref={ref} className={cn('modal-description', className)} {...props} />);
 DialogDescription.displayName = DialogPrimitive.Description.displayName;

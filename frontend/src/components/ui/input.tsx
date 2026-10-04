@@ -2,11 +2,11 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(({ className, ...props }, ref) => (
-  <input ref={ref} className={cn('console-input', className)} {...props} />
+  <input ref={ref} className={cn('field-input', className)} {...props} />
 ));
 Input.displayName = 'Input';
 
 export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(({ className, ...props }, ref) => (
-  <select ref={ref} className={cn('console-select', className)} {...props} />
+  <select ref={ref} className={cn('field-select', className)} {...props} />
 ));
 Select.displayName = 'Select';

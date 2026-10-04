@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDisabledReason,
+  autoUpdateIdleText,
+  autoUpdateSummary,
   canApplyUpdate,
   fallbackVersionInfo,
   formatBuildTime,
@@ -11,7 +13,21 @@ import {
   updateChannelLabel,
   updateStatusText,
 } from './version-utils';
-import type { AppVersionInfo, UpdateCheckResult } from './types';
+import type { AppVersionInfo, AutoUpdateStatus, UpdateCheckResult } from './types';
+
+function autoStatus(overrides: Partial<AutoUpdateStatus> = {}): AutoUpdateStatus {
+  return {
+    autoEnabled: true,
+    autoApply: true,
+    quietSeconds: 30,
+    inFlightCount: 0,
+    idleMillis: 60_000,
+    idle: true,
+    pendingVersion: '',
+    pendingAsset: '',
+    ...overrides,
+  };
+}
 
 const info: AppVersionInfo = {
   version: '1.3.0',
@@ -38,6 +54,27 @@ const available: UpdateCheckResult = {
   assetDigest: 'sha256:abc',
   message: '发现新版本 1.4.0',
 };
+
+describe('auto update status copy', () => {
+  it('explains the seamless flow when auto update is enabled', () => {
+    expect(autoUpdateSummary(autoStatus(), true)).toContain('无感');
+    expect(autoUpdateSummary(null, true)).toContain('正在读取');
+    expect(autoUpdateSummary(autoStatus(), false)).toContain('不支持');
+  });
+
+  it('explains why the update has not been applied yet', () => {
+    expect(autoUpdateIdleText(autoStatus({ inFlightCount: 3, idle: false }))).toContain('3 个代理请求');
+    expect(autoUpdateIdleText(autoStatus({ idle: false, idleMillis: 5_000 }))).toContain('等待静默 30 秒');
+    expect(autoUpdateIdleText(autoStatus({ idle: true }))).toContain('可安全更新');
+    expect(autoUpdateIdleText(null)).toBe('');
+  });
+
+  it('describes a staged update waiting for the idle window', () => {
+    expect(autoUpdateSummary(autoStatus({ pendingVersion: '1.4.0', idle: false }), true)).toContain('1.4.0');
+    expect(autoUpdateSummary(autoStatus({ pendingVersion: '1.4.0', idle: true }), true)).toContain('正在空闲窗口应用');
+    expect(autoUpdateSummary(autoStatus({ autoEnabled: false }), true)).toContain('已关闭');
+  });
+});
 
 describe('version-utils', () => {
   it('labels platforms and install modes in Chinese', () => {

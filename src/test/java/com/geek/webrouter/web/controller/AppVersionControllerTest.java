@@ -1,9 +1,12 @@
 package com.geek.webrouter.web.controller;
 
 import com.geek.webrouter.common.exception.GlobalExceptionHandler;
+import com.geek.webrouter.config.UpdateProperties;
 import com.geek.webrouter.web.model.dto.ReleaseAsset;
 import com.geek.webrouter.web.model.dto.ReleaseInfo;
 import com.geek.webrouter.web.service.AssetDownloader;
+import com.geek.webrouter.web.service.AutoUpdateService;
+import com.geek.webrouter.web.service.InFlightRequestTracker;
 import com.geek.webrouter.web.service.ReleaseClient;
 import com.geek.webrouter.web.service.impl.AppVersionServiceImpl;
 import com.geek.webrouter.web.service.impl.UpdateServiceImpl;
@@ -186,7 +189,9 @@ class AppVersionControllerTest {
         AppVersionServiceImpl appVersionService = new AppVersionServiceImpl(properties);
         UpdateServiceImpl updateService = new UpdateServiceImpl(appVersionService, releaseClient, downloader,
                 tempDir, 0L, exitAction);
-        return WebTestClient.bindToController(new AppVersionController(appVersionService, updateService))
+        InFlightRequestTracker tracker = new InFlightRequestTracker();
+        AutoUpdateService autoUpdateService = new AutoUpdateService(updateService, tracker, new UpdateProperties());
+        return WebTestClient.bindToController(new AppVersionController(appVersionService, updateService, autoUpdateService))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

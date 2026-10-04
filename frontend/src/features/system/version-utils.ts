@@ -1,4 +1,4 @@
-import type { AppVersionInfo, UpdateCheckResult } from './types';
+import type { AppVersionInfo, AutoUpdateStatus, UpdateCheckResult } from './types';
 
 /** 后端不可用时的兜底版本信息，保证界面不空白。 */
 export function fallbackVersionInfo(version: string, repository: string): AppVersionInfo {
@@ -23,6 +23,42 @@ export function normalizeVersionInfo(raw: Partial<AppVersionInfo> | null | undef
     updateChannel: text(raw?.updateChannel) || fallback.updateChannel,
     repository: text(raw?.repository) || fallback.repository,
   };
+}
+
+/** 自动更新策略的一句话说明，展示在版本抽屉里。 */
+export function autoUpdateSummary(status: AutoUpdateStatus | null, supported: boolean): string {
+  if (!supported) {
+    return '当前安装形态不支持自动更新，请手动下载新版本';
+  }
+  if (!status) {
+    return '正在读取自动更新状态…';
+  }
+  if (!status.autoEnabled) {
+    return '自动更新已关闭，可手动检查并安装';
+  }
+  if (status.pendingVersion) {
+    return status.idle
+      ? '新版本 ' + status.pendingVersion + ' 已就绪，正在空闲窗口应用'
+      : '新版本 ' + status.pendingVersion + ' 已下载，将在没有代理请求时自动应用';
+  }
+  return status.autoApply
+    ? '后台自动检查并下载，空闲时无感完成更新'
+    : '后台自动检查并下载，安装前需要你确认';
+}
+
+/** 空闲窗口说明：让用户理解「为什么现在还没重启」。 */
+export function autoUpdateIdleText(status: AutoUpdateStatus | null): string {
+  if (!status || !status.autoEnabled) {
+    return '';
+  }
+  if (status.inFlightCount > 0) {
+    return '当前有 ' + status.inFlightCount + ' 个代理请求进行中，等待处理完成后更新';
+  }
+  const quiet = Math.max(0, status.quietSeconds);
+  if (quiet > 0 && status.idleMillis < quiet * 1000) {
+    return '等待静默 ' + quiet + ' 秒（当前 ' + Math.round(status.idleMillis / 1000) + ' 秒）';
+  }
+  return '当前无代理请求，可安全更新';
 }
 
 export function platformLabel(platform: string): string {

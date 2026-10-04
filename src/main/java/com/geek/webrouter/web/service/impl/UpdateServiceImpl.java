@@ -132,6 +132,36 @@ public class UpdateServiceImpl implements UpdateService {
     }
 
     @Override
+    public UpdateApplyResult stage() {
+        UpdateCheckResult check = check();
+        if (!check.updateAvailable()) {
+            log.info("无需暂存更新: {}", check.message());
+            return null;
+        }
+        Path archive = updatesDir.resolve(safeFileName(check.assetName()));
+        // 已经下载并通过校验的包不重复下载（自动检查会周期性调用本方法）
+        if (!isVerifiedArchive(archive, check.assetDigest())) {
+            try {
+                assetDownloader.download(check.assetUrl(), archive);
+            } catch (IOException e) {
+                throw new BusinessException(ErrorCodeEnum.CONFIG_IO_ERROR, "下载更新包失败: " + e.getMessage());
+            }
+            verifyDigest(archive, check.assetDigest());
+        } else {
+            log.info("更新包已存在且校验通过，跳过重复下载: {}", archive.getFileName());
+        }
+        Path script = writeUpdaterScript(check, archive);
+        log.info("更新包已就绪（等待空闲窗口应用）: {} -> {}", archive, script);
+        return new UpdateApplyResult(check.latestVersion(), archive.toString(), script.toString(),
+                "更新包已下载并校验通过，将在没有代理请求时自动完成替换与重启");
+    }
+
+    @Override
+    public void requestExit() {
+        scheduleExit();
+    }
+
+    @Override
     public UpdateApplyResult apply(UpdateApplyRequest request) {
         UpdateCheckResult check = check();
         if (!check.updateAvailable()) {
@@ -143,18 +173,31 @@ public class UpdateServiceImpl implements UpdateService {
             throw new BusinessException(ErrorCodeEnum.BAD_REQUEST,
                     "目标版本 " + requestedVersion + " 不可更新，当前可用版本为 " + check.latestVersion());
         }
-        Path archive = updatesDir.resolve(safeFileName(check.assetName()));
-        try {
-            assetDownloader.download(check.assetUrl(), archive);
-        } catch (IOException e) {
-            throw new BusinessException(ErrorCodeEnum.CONFIG_IO_ERROR, "下载更新包失败: " + e.getMessage());
+        UpdateApplyResult staged = stage();
+        if (staged == null) {
+            throw new BusinessException(ErrorCodeEnum.BAD_REQUEST, check.message());
         }
-        verifyDigest(archive, check.assetDigest());
-        Path script = writeUpdaterScript(check, archive);
         scheduleExit();
-        log.info("更新包已就绪: {} -> {}", archive, script);
-        return new UpdateApplyResult(check.latestVersion(), archive.toString(), script.toString(),
-                "更新包已下载并校验通过，应用将在约 2 秒后退出，由 " + script.getFileName() + " 完成替换与重启");
+        return new UpdateApplyResult(staged.version(), staged.archivePath(), staged.updaterScript(),
+                "更新包已下载并校验通过，应用将在约 2 秒后退出，由 "
+                        + Path.of(staged.updaterScript()).getFileName() + " 完成替换与重启");
+    }
+
+    /** 更新包是否存在且摘要与发布方一致；摘要缺失时只要文件存在即视为可用。 */
+    private boolean isVerifiedArchive(Path archive, String digest) {
+        if (!Files.isRegularFile(archive)) {
+            return false;
+        }
+        String expected = normalizeDigest(digest);
+        if (expected == null) {
+            return true;
+        }
+        try {
+            return expected.equalsIgnoreCase(sha256(archive));
+        } catch (RuntimeException e) {
+            log.warn("读取已下载更新包摘要失败，将重新下载: {}", e.getMessage());
+            return false;
+        }
     }
 
     /** 启动时检测上一次更新日志，便于排障。 */

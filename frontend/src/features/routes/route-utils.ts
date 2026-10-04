@@ -112,16 +112,20 @@ export function routeStatusText(status: RouteStatus): string {
   }
 }
 
+/**
+ * 状态点的颜色类，必须与 styles.css 里的 `.state-*` 一致。
+ * 注意：`.status-*` 是日志表里 HTTP 状态码徽标的命名空间，两者不要混用。
+ */
 export function routeStatusDotClass(status: RouteStatus): string {
   switch (status) {
     case 'running':
-      return 'status-running';
+      return 'state-running';
     case 'warning':
-      return 'status-warning';
+      return 'state-warning';
     case 'error':
-      return 'status-error';
+      return 'state-error';
     default:
-      return 'status-stopped';
+      return 'state-stopped';
   }
 }
 

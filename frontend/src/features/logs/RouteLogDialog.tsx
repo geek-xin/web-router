@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Eye, Pause, Plus, Radio, RefreshCw, Search, X } from 'lucide-react';
+import { Eye, Pause, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -54,6 +54,7 @@ export function RouteLogDialog({ open, route, onOpenChange }: RouteLogDialogProp
 
 interface RouteLogPanelProps {
   open: boolean;
+  /** 传 null 表示「全部路由」：聚合所有路由的日志，无需先选一条。 */
   route: RouteConfig | null;
 }
 
@@ -70,22 +71,27 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
   const pollRef = React.useRef<number | null>(null);
 
   const routeId = route?.id;
+  // 未选路由时走「全部路由」聚合接口，而不是什么都不做
+  const scoped = Boolean(routeId);
+  const snapshotUrl = scoped
+    ? '/admin/api/proxy-logs/routes/' + encodeURIComponent(routeId!)
+    : '/admin/api/proxy-logs';
+  const streamUrl = scoped
+    ? '/admin/api/proxy-logs/routes/' + encodeURIComponent(routeId!) + '/stream'
+    : '/admin/api/proxy-logs/stream';
 
   const refreshSnapshot = React.useCallback(async (showError = false) => {
-    if (!routeId) {
-      return;
-    }
     try {
-      const snapshot = await fetchJson<ProxyRequestLogSnapshot>('/admin/api/proxy-logs/routes/' + encodeURIComponent(routeId));
+      const snapshot = await fetchJson<ProxyRequestLogSnapshot>(snapshotUrl);
       setState(snapshotToState(snapshot));
-      setStatus('日志快照已更新');
+      setStatus(scoped ? '日志快照已更新' : '全部路由日志已更新');
     } catch (error) {
       if (showError) {
         toast.error(error instanceof Error ? error.message : '日志加载失败');
       }
       setStatus('日志刷新失败');
     }
-  }, [routeId]);
+  }, [snapshotUrl, scoped]);
 
   const stopStream = React.useCallback(() => {
     sourceRef.current?.close();
@@ -101,10 +107,12 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
 
   const connectStream = React.useCallback(() => {
     stopStream();
-    if (!routeId || !route?.enabled || !window.EventSource || refreshModes[modeIndex].intervalMs !== 0) {
+    // 全部路由模式不要求路由处于启用状态；单路由模式沿用「停用不连流」的既有语义
+    const streamAllowed = scoped ? Boolean(route?.enabled) : true;
+    if (!streamAllowed || !window.EventSource || refreshModes[modeIndex].intervalMs !== 0) {
       return;
     }
-    const source = new EventSource('/admin/api/proxy-logs/routes/' + encodeURIComponent(routeId) + '/stream');
+    const source = new EventSource(streamUrl);
     sourceRef.current = source;
     setStatus('实时刷新已连接');
     source.addEventListener('proxy-request', (event) => {
@@ -117,10 +125,11 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
       stopStream();
       void refreshSnapshot(false);
     };
-  }, [modeIndex, refreshSnapshot, route?.enabled, routeId, stopStream]);
+  }, [modeIndex, refreshSnapshot, route?.enabled, scoped, streamUrl, stopStream]);
 
+  // 切换作用域（全部 ↔ 单路由）时重置视图并拉一次快照
   React.useEffect(() => {
-    if (!open || !routeId) {
+    if (!open) {
       return;
     }
     setState(initialState);
@@ -131,7 +140,7 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
   }, [open, routeId, refreshSnapshot]);
 
   React.useEffect(() => {
-    if (!open || !routeId) {
+    if (!open) {
       return;
     }
     stopPolling();
@@ -165,13 +174,13 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <span className="route-toolbar-eyebrow">Route Traffic</span>
-          <h3 className="mt-0.5 text-[15px] font-semibold text-console-ink">路由日志 · {route?.name || '请选择路由'}</h3>
-          <p className="mt-0.5 console-mono text-[11px] text-console-ink-subtle">{status}</p>
+          <h3 className="toolbar-title">路由日志 · {route?.name || '全部路由'}</h3>
+          <p className="mt-1 font-mono text-[11px]" style={{ color: 'var(--surface-ink-subtle)' }}>{status}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 lg:pr-10">
+        {/* pr-10 为对话框右上角关闭按钮预留位置；独立使用时不需要 */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:pr-10">
           <Button size="sm" variant="outline" onClick={() => setModeIndex((index) => (index + 1) % refreshModes.length)}>
             {refreshModes[modeIndex].intervalMs === -1 ? <Pause className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
             {refreshModes[modeIndex].label}
@@ -180,7 +189,7 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
         </div>
       </div>
 
-      <div className="kpi-row">
+      <div className="metric-grid metric-grid-5">
         <Metric label="请求数" value={formatCompactNumber(state.totalRequests)} />
         <Metric label="失败请求" value={formatCompactNumber(state.failedRequests)} />
         <Metric label="慢请求" value={formatCompactNumber(state.slowRequests)} />
@@ -188,23 +197,24 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
         <Metric label="平均延迟" value={formatLatency(averageDuration)} />
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {/* min-w-0：面板里的宽表格（min-w-[940px]）不得把网格轨道撑宽，否则头部按钮会被挤出容器 */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <TabsList className="route-drawer-tabs border-b-0">
+          <TabsList className="border-b-0">
             <TabsTrigger value="realtime">实时日志</TabsTrigger>
             <TabsTrigger value="top">总耗时 Top</TabsTrigger>
             <TabsTrigger value="slow">单耗时 Top</TabsTrigger>
             <TabsTrigger value="diagnostics">诊断分析</TabsTrigger>
           </TabsList>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="console-search">
+            <label className="search-field">
               <span className="sr-only">搜索路径</span>
-              <Search className="console-search-icon" aria-hidden="true" />
-              <Input className="console-input" value={pathSearch} onChange={(event) => setPathSearch(event.target.value)} type="search" placeholder="搜索路径" />
+              <Search className="search-field-icon" aria-hidden="true" />
+              <Input value={pathSearch} onChange={(event) => setPathSearch(event.target.value)} type="search" placeholder="搜索路径" />
             </label>
-            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px] text-console-ink-muted">
+            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px]" style={{ color: 'var(--surface-ink-muted)' }}>
               显示
-              <Select className="w-[72px] min-w-[72px]" value={String(limit)} onChange={(event) => setLimit(normalizeLimit(event.target.value))} aria-label="显示条数">
+              <Select className="w-[76px] min-w-[76px]" value={String(limit)} onChange={(event) => setLimit(normalizeLimit(event.target.value))} aria-label="显示条数">
                 {[20, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}
               </Select>
               条
@@ -223,9 +233,9 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
         </TabsContent>
         <TabsContent value="diagnostics">
           {diagnostics.length === 0 ? (
-            <div className="console-empty">
-              <strong className="console-empty-title">尚未选择请求</strong>
-              <span className="console-empty-copy">在「实时日志」或「单耗时 Top」中点击「拷贝分析」，把请求逐条加入这里形成诊断列表。</span>
+            <div className="empty-state">
+              <strong className="empty-title">尚未选择请求</strong>
+              <span className="empty-copy">在「实时日志」或「单耗时 Top」中点击「拷贝分析」，把请求逐条加入这里形成诊断列表。</span>
             </div>
           ) : (
             <LogTable logs={diagnostics} emptyText="暂无诊断请求" onDetail={setDetail} onAnalyze={(entry) => setDiagnostics((current) => current.filter((item) => diagnosticKey(item) !== diagnosticKey(entry)))} analyzeLabel="移除" />
@@ -240,17 +250,17 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="kpi-card">
-      <span className="kpi-label">{label}</span>
-      <strong className="kpi-value">{value}</strong>
+    <div className="field">
+      <span className="route-field-label">{label}</span>
+      <span className="metric-figure">{value}</span>
     </div>
   );
 }
 
 function PathStatsTable({ rows }: { rows: Array<{ path: string; count: number; total: number; max: number }> }) {
   return (
-    <div className="log-table-wrap console-scroll">
-      <table className="log-table min-w-[720px]">
+    <div className="table-wrap scroll-area">
+      <table className="data-table min-w-[720px]">
         <thead>
           <tr>
             <th className="w-14">序号</th>
@@ -262,14 +272,14 @@ function PathStatsTable({ rows }: { rows: Array<{ path: string; count: number; t
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr><td colSpan={5} className="text-center text-console-ink-subtle">暂无请求</td></tr>
+            <tr><td colSpan={5} className="text-center" style={{ color: 'var(--surface-ink-subtle)' }}>暂无请求</td></tr>
           ) : rows.map((row, index) => (
             <tr key={row.path}>
-              <td className="log-cell-mono">{index + 1}</td>
-              <td className="log-cell-mono max-w-[420px] truncate" title={row.path}>{row.path}</td>
-              <td className="log-cell-mono">{row.count}</td>
-              <td className="log-cell-mono">{formatDuration(row.total)}</td>
-              <td className="log-cell-mono">{formatDuration(row.max)}</td>
+              <td className="cell-mono">{index + 1}</td>
+              <td className="cell-mono max-w-[420px] truncate" title={row.path}>{row.path}</td>
+              <td className="cell-mono">{row.count}</td>
+              <td className="cell-mono">{formatDuration(row.total)}</td>
+              <td className="cell-mono">{formatDuration(row.max)}</td>
             </tr>
           ))}
         </tbody>
@@ -280,8 +290,8 @@ function PathStatsTable({ rows }: { rows: Array<{ path: string; count: number; t
 
 function LogTable({ logs, emptyText, durationLabel = '耗时', analyzeLabel = '拷贝分析', onDetail, onAnalyze }: { logs: ProxyRequestLogEntry[]; emptyText: string; durationLabel?: string; analyzeLabel?: string; onDetail: (entry: ProxyRequestLogEntry) => void; onAnalyze: (entry: ProxyRequestLogEntry) => void }) {
   return (
-    <div className="log-table-wrap console-scroll">
-      <table className="log-table min-w-[940px]">
+    <div className="table-wrap scroll-area">
+      <table className="data-table min-w-[940px]">
         <thead>
           <tr>
             <th className="w-14">序号</th>
@@ -296,18 +306,18 @@ function LogTable({ logs, emptyText, durationLabel = '耗时', analyzeLabel = '�
         </thead>
         <tbody>
           {logs.length === 0 ? (
-            <tr><td colSpan={8} className="text-center text-console-ink-subtle">{emptyText}</td></tr>
+            <tr><td colSpan={8} className="text-center" style={{ color: 'var(--surface-ink-subtle)' }}>{emptyText}</td></tr>
           ) : logs.map((entry, index) => (
             <tr key={diagnosticKey(entry) + index}>
-              <td className="log-cell-mono">{index + 1}</td>
-              <td className="log-cell-mono whitespace-nowrap">{formatTime(logTimestamp(entry))}</td>
+              <td className="cell-mono">{index + 1}</td>
+              <td className="cell-mono whitespace-nowrap">{formatTime(logTimestamp(entry))}</td>
               <td><span className={methodBadgeClass(entry.method)}>{entry.method || '-'}</span></td>
-              <td className="log-cell-mono max-w-[190px] truncate" title={entry.accessAddress || '-'}>{entry.accessAddress || '-'}</td>
-              <td className="log-cell-mono max-w-[320px] truncate" title={normalizedLogPath(entry.path)}>{normalizedLogPath(entry.path)}</td>
+              <td className="cell-mono max-w-[190px] truncate" title={entry.accessAddress || '-'}>{entry.accessAddress || '-'}</td>
+              <td className="cell-mono max-w-[320px] truncate" title={normalizedLogPath(entry.path)}>{normalizedLogPath(entry.path)}</td>
               <td><span className={statusBadgeClass(entry.status)}>{entry.status || '-'}</span></td>
-              <td className="log-cell-mono">{formatDuration(entry.durationMs)}</td>
+              <td className="cell-mono">{formatDuration(entry.durationMs)}</td>
               <td>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <Button size="sm" variant="ghost" onClick={() => onDetail(entry)}><Eye className="h-3.5 w-3.5" />详情</Button>
                   <Button size="sm" variant="ghost" onClick={() => onAnalyze(entry)}>{analyzeLabel === '拷贝分析' ? <Plus className="h-3.5 w-3.5" /> : null}{analyzeLabel}</Button>
                 </div>
@@ -336,19 +346,18 @@ function LogDetailDrawer({ entry, onClose }: { entry: ProxyRequestLogEntry; onCl
 
   return (
     <>
-      <button className="route-drawer-scrim" type="button" aria-label="关闭请求详情" onClick={onClose} />
-      <aside className="route-drawer console-scroll" role="dialog" aria-modal="true" aria-labelledby="route-log-detail-title">
-        <header className="route-drawer-head">
-          <div className="route-drawer-title-row">
+      <button className="drawer-scrim" type="button" aria-label="关闭请求详情" onClick={onClose} />
+      <aside className="drawer scroll-area" role="dialog" aria-modal="true" aria-labelledby="route-log-detail-title">
+        <header className="drawer-head">
+          <div className="drawer-title-row">
             <div className="min-w-0 flex-1">
-              <span className="route-toolbar-eyebrow">Request Detail</span>
-              <h3 id="route-log-detail-title" className="route-drawer-title mt-0.5">请求详情</h3>
+              <h3 id="route-log-detail-title" className="drawer-title">请求详情</h3>
             </div>
             <Button ref={closeButtonRef} size="sm" variant="outline" onClick={onClose}><X className="h-3.5 w-3.5" />关闭</Button>
           </div>
         </header>
-        <div className="route-drawer-body console-scroll">
-          <div className="drawer-field-grid">
+        <div className="drawer-body scroll-area">
+          <div className="field-grid">
             <Detail label="时间" value={formatTime(logTimestamp(entry))} />
             <Detail label="方法" value={entry.method || '-'} />
             <Detail label="状态" value={String(entry.status || '-')} />
@@ -356,14 +365,14 @@ function LogDetailDrawer({ entry, onClose }: { entry: ProxyRequestLogEntry; onCl
             <Detail label="实际访问" value={entry.accessAddress || '-'} />
             <Detail label="客户端 IP" value={entry.clientIp || '-'} />
           </div>
-          <div className="mt-3 grid gap-3">
+          <div className="mt-4 grid gap-3">
             <Pre label="路径" value={normalizedLogPath(entry.path)} />
             <Pre label="请求参数" value={pretty(entry.requestParams)} />
             <Pre label="请求体" value={pretty(entry.requestBody)} />
             <Pre label="返回预览" value={pretty(entry.responseBody)} />
           </div>
         </div>
-        <footer className="route-drawer-actions">
+        <footer className="drawer-actions">
           <Button variant="outline" onClick={() => void copyText(diagnosticContextText([entry]))}>拷贝诊断上下文</Button>
         </footer>
       </aside>
@@ -373,9 +382,9 @@ function LogDetailDrawer({ entry, onClose }: { entry: ProxyRequestLogEntry; onCl
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="drawer-field">
+    <div className="field">
       <span className="route-field-label">{label}</span>
-      <span className="drawer-field-value" title={value}>{value}</span>
+      <span className="field-value" title={value}>{value}</span>
     </div>
   );
 }
@@ -384,7 +393,10 @@ function Pre({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <h4 className="route-field-label mb-1">{label}</h4>
-      <pre className="console-scroll max-h-40 overflow-auto rounded-node border border-console-line bg-console-bg p-3 font-mono text-[11.5px] leading-5 text-console-ink-muted">{value}</pre>
+      <pre
+        className="scroll-area max-h-40 overflow-auto p-3 font-mono text-[11.5px] leading-5"
+        style={{ border: '1px solid var(--surface-line)', borderRadius: 'var(--radius-card)', background: 'var(--surface-sunken)', color: 'var(--surface-ink-muted)', margin: 0 }}
+      >{value}</pre>
     </div>
   );
 }
@@ -451,7 +463,7 @@ function logTimestamp(entry: ProxyRequestLogEntry): string | null | undefined {
 
 function diagnosticContextText(entries: ProxyRequestLogEntry[]): string {
   return entries.map((entry, index) => [
-    `#${index + 1}`,
+    '#' + (index + 1),
     '时间: ' + formatTime(logTimestamp(entry)),
     '方法: ' + (entry.method || '-'),
     '实际访问: ' + (entry.accessAddress || '-'),

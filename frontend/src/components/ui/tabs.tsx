@@ -5,12 +5,12 @@ import { cn } from '@/lib/utils';
 export const Tabs = TabsPrimitive.Root;
 
 export const TabsList = React.forwardRef<React.ElementRef<typeof TabsPrimitive.List>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>>(({ className, ...props }, ref) => (
-  <TabsPrimitive.List ref={ref} className={cn('route-drawer-tabs', className)} {...props} />
+  <TabsPrimitive.List ref={ref} className={cn('drawer-tabs', className)} {...props} />
 ));
 TabsList.displayName = TabsPrimitive.List.displayName;
 
 export const TabsTrigger = React.forwardRef<React.ElementRef<typeof TabsPrimitive.Trigger>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>>(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger ref={ref} className={cn('route-drawer-tab', className)} {...props} />
+  <TabsPrimitive.Trigger ref={ref} className={cn('drawer-tab', className)} {...props} />
 ));
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 

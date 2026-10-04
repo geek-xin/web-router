@@ -4,6 +4,7 @@ import com.geek.webrouter.common.enums.ErrorCodeEnum;
 import com.geek.webrouter.common.exception.BusinessException;
 import com.geek.webrouter.web.model.dto.ProxyRequestLogEntry;
 import com.geek.webrouter.web.model.entity.RouteConfig;
+import com.geek.webrouter.web.service.InFlightRequestTracker;
 import com.geek.webrouter.web.service.ProxyRequestLogService;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -55,6 +56,7 @@ public class LocalPortProxyService {
     );
 
     private final ProxyRequestLogService logService;
+    private final InFlightRequestTracker inFlightTracker;
     private final LocalProxyServerFactory serverFactory;
 
     private final HttpClient httpClient = HttpClient.create();
@@ -63,18 +65,33 @@ public class LocalPortProxyService {
     private long refreshVersion = 0;
 
     @Autowired
-    public LocalPortProxyService(ProxyRequestLogService logService) {
+    public LocalPortProxyService(ProxyRequestLogService logService, InFlightRequestTracker inFlightTracker) {
+        this(logService, inFlightTracker, defaultServerFactory());
+    }
+
+    /** 测试专用：使用真实 HttpClient，配合假 serverFactory。 */
+    LocalPortProxyService(ProxyRequestLogService logService) {
+        this(logService, new InFlightRequestTracker(), defaultServerFactory());
+    }
+
+    /** 测试专用：注入假 serverFactory。 */
+    LocalPortProxyService(ProxyRequestLogService logService, LocalProxyServerFactory serverFactory) {
+        this(logService, new InFlightRequestTracker(), serverFactory);
+    }
+
+    LocalPortProxyService(ProxyRequestLogService logService, InFlightRequestTracker inFlightTracker,
+                          LocalProxyServerFactory serverFactory) {
         this.logService = logService;
-        this.serverFactory = (config, handler) -> HttpServer.create()
+        this.inFlightTracker = inFlightTracker;
+        this.serverFactory = serverFactory;
+    }
+
+    private static LocalProxyServerFactory defaultServerFactory() {
+        return (config, handler) -> HttpServer.create()
                 .host(config.effectiveLocalIp())
                 .port(config.getLocalPort())
                 .handle(handler::apply)
                 .bindNow();
-    }
-
-    LocalPortProxyService(ProxyRequestLogService logService, LocalProxyServerFactory serverFactory) {
-        this.logService = logService;
-        this.serverFactory = serverFactory;
     }
 
     public Mono<Void> refreshAll(List<RouteConfig> enabledConfigs) {
@@ -160,6 +177,8 @@ public class LocalPortProxyService {
     }
 
     private Publisher<Void> proxy(RouteConfig config, HttpServerRequest request, HttpServerResponse response) {
+        // 登记在途请求：自动更新只在计数归零的静默窗口内重启
+        inFlightTracker.begin();
         long start = System.nanoTime();
         prepareLocalProxyResponse(response);
         String targetBaseUrl = targetBaseUrl(config, request.uri());
@@ -186,8 +205,11 @@ public class LocalPortProxyService {
                                     .retain()
                                     .doOnNext(buffer -> appendPreview(responseBody, buffer, responseContentType)))
                             .then()
-                            .doFinally(signalType -> recordLog(config, request, status, start,
-                                    requestParams, requestBody.toString(), responseBody.toString(), accessAddress));
+                            .doFinally(signalType -> {
+                                inFlightTracker.end();
+                                recordLog(config, request, status, start,
+                                        requestParams, requestBody.toString(), responseBody.toString(), accessAddress);
+                            });
                 })
                 .onErrorResume(error -> {
                     log.warn("本地端口代理请求失败: {} {} -> {} — {}",
@@ -195,8 +217,11 @@ public class LocalPortProxyService {
                     response.status(502);
                     return response.sendString(Mono.just("Proxy request failed"))
                             .then()
-                            .doFinally(signalType -> recordLog(config, request, 502, start,
-                                    requestParams, requestBody.toString(), "Proxy request failed", accessAddress));
+                            .doFinally(signalType -> {
+                                inFlightTracker.end();
+                                recordLog(config, request, 502, start,
+                                        requestParams, requestBody.toString(), "Proxy request failed", accessAddress);
+                            });
                 });
     }
 

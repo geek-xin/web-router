@@ -170,6 +170,9 @@
 - `src/main/java/com/geek/webrouter/web/controller/AppVersionController.java`：版本信息与自动更新 API。
 - `src/main/java/com/geek/webrouter/web/service/impl/AppVersionServiceImpl.java`：读取 classpath 的 `version.properties` 并暴露版本/平台/安装形态。
 - `src/main/java/com/geek/webrouter/web/service/impl/UpdateServiceImpl.java`：检查更新、下载校验、生成更新脚本并退出。
+- `src/main/java/com/geek/webrouter/web/service/AutoUpdateService.java`：无感自动更新调度（静默检查 → 预下载 → 空闲时应用）。
+- `src/main/java/com/geek/webrouter/web/service/InFlightRequestTracker.java`：在途代理请求计数，自动更新据此判断能否安全重启。
+- `src/main/java/com/geek/webrouter/config/UpdateProperties.java`：`wrouter.update.*` 配置（默认开启自动更新）。
 - `src/main/java/com/geek/webrouter/web/support/AppHomeResolver.java`：应用根目录解析（`wrouter.home` → `WROUTER_HOME` → `user.dir`）。
 - `src/main/java/com/geek/webrouter/web/support/ReleaseAssets.java`：发布资产命名契约，打包脚本与 CI 必须与之一致。
 - `src/main/java/com/geek/webrouter/web/support/UpdateScriptGenerator.java`：生成 `updates/apply-update.sh|.bat`，含备份、替换、回滚与重启。
@@ -215,6 +218,8 @@ scripts/build-release.sh --only jar,app-image,installer     # 全量契约资产
 - 改核心机制（路由配置、动态转发、本地端口代理、请求日志/指标、管理 API、校验规则、版本与更新）后，必须同步更新 `docs/CORE-FEATURES.md`；`CoreFeaturesDocContractTest` 会校验阈值常量、接口路径、错误码与文档互链是否一致。
 - 改打包脚本或资产命名时，必须同步 `ReleaseAssets`（命名契约的权威实现）与 `docs/PACKAGING.md`；`scripts/build-release.sh` 会在发布前逐项校验资产名。
 - 改版本与更新链路时，注意 `version.properties` 由 `pom.xml` 资源过滤注入；`/admin/api/update/check` 约定「任何异常都写进 message，接口本身始终成功」，不要改成抛异常。
+- 改自动更新时保持「客户无感」的三段式：检查 → 预下载（不退出进程）→ **仅在无在途请求且静默达标时**才退出重启。`UpdateService` 的 `stage()` 与 `requestExit()` 必须保持分离，不要合并回「下载即退出」。
+- 新增任何代理入口时，必须在请求进入/结束时调用 `InFlightRequestTracker.begin()` / `end()`，否则自动更新会在有流量时重启并掐断请求。
 - 改应用根目录解析时统一走 `AppHomeResolver`，不要各处直接读 `user.dir`；app-image 依赖启动参数 `-Dwrouter.home=$APPDIR`。
 - 新增打包产物后，需同步 `.github/workflows/release.yml` 矩阵、`docs/PACKAGING.md` 与 `wiki/` 中的交付形态说明。
 

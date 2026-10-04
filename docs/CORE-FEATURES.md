@@ -256,13 +256,47 @@ app.repository=geek-xin/web-router
 
 资源缺失时全部降级为安全默认（`version=unknown`、`installMode=jar` 等），接口不报错。
 
+### 无感自动更新
+
+**默认开启**，客户不需要点任何按钮。分三阶段，只有最后一阶段会短暂中断服务：
+
+| 阶段 | 触发 | 行为 | 对客户的影响 |
+| --- | --- | --- | --- |
+| 1. 静默检查 | 启动后 120 秒，之后每 3600 秒 | 查 GitHub Release、比对版本 | 无 |
+| 2. 预下载 | 发现新版本时 | 下载资产 → 校验 sha256 → 生成更新脚本，**不退出进程** | 无，服务照常代理 |
+| 3. 空闲应用 | 每 5 秒检查一次 | 在途请求为 0 且静默满 30 秒 → 安排退出，由脚本替换并重启 | 秒级重启 |
+
+判定「空闲」依赖 `InFlightRequestTracker`：Gateway 转发（`ProxyRequestLogFilter`）与
+每路由本地端口代理（`LocalPortProxyService`）在请求进入时计数 +1、结束时 -1。
+**只要还有在途请求，第 3 阶段就不会触发**，因此重启不会掐断正在进行的代理。
+
+`@text
+检查 ──► 下载并校验（客户无感）──► 等待 inFlight == 0 且静默 ≥ 30s ──► 重启
+                                          ▲
+                        有请求进行中 ──────┘ 继续等待，不打断
+`@
+
+配置项（`application.yml` → `wrouter.update.*`）：
+
+| 配置 | 默认 | 说明 |
+| --- | --- | --- |
+| `auto` | `true` | 总开关；关闭后只保留手动「一键更新」 |
+| `initial-delay-seconds` | `120` | 首次检查延迟，避免与启动争抢资源 |
+| `check-interval-seconds` | `3600` | 检查间隔 |
+| `quiet-seconds` | `30` | 判定空闲所需的静默时长 |
+| `auto-apply` | `true` | `false` 时只预下载，等用户手动确认 |
+
+配合 `server.shutdown: graceful` 与 `spring.lifecycle.timeout-per-shutdown-phase: 30s`：
+退出前先让在途请求处理完，再交给更新脚本替换文件。
+
 ### 接口
 
 | 接口 | 行为 |
 | --- | --- |
 | `GET /admin/api/version` | 当前版本、构建时间、平台、安装形态、是否支持自更新、通道、仓库 |
 | `GET /admin/api/update/check` | 查 GitHub Release、比对版本、按安装形态与平台选包；**永远返回 success=true**，异常写进 `message` |
-| `POST /admin/api/update/apply` | 下载资产 → 校验 sha256 → 生成平台更新脚本 → 应用约 2 秒后退出，由脚本替换并重启 |
+| `GET /admin/api/update/auto` | 自动更新状态：开关、在途请求数、空闲判定、待应用版本 |
+| `POST /admin/api/update/apply` | 手动一键更新：下载资产 → 校验 sha256 → 生成脚本 → 约 2 秒后退出并重启 |
 
 选包规则（与 `ReleaseAssets`、打包脚本三方一致）：
 
@@ -290,7 +324,8 @@ app.repository=geek-xin/web-router
 | 卡片指标 | `GET /admin/api/proxy-logs/metrics` | 载入 + 每 5 秒 |
 | 网关状态 | `GET /actuator/health` | 载入 |
 | 详情抽屉 | `/routes/{id}/raw`、`/proxy-logs/routes/{id}` | 打开时 |
-| 版本与更新 | `/admin/api/version`、`/update/check` | 打开版本抽屉时 |
+| 版本与更新 | `/admin/api/version`、`/update/check`、`/update/auto` | 打开版本抽屉时（自动更新状态每 3 秒） |
+| 日志视图 | `/admin/api/proxy-logs`（全部）或 `/proxy-logs/routes/{id}`（单路由） | 载入 + 实时流 / 轮询 |
 
 ### 核心界面
 
@@ -301,6 +336,11 @@ app.repository=geek-xin/web-router
   - **列表视图**：同样字段压成一行，带列头，适合一次浏览大量路由。
 - **详情抽屉**：① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，另有配置 / 日志 / 指标标签页。
 - **日志视图**：实时流、Top 路径、单耗时 Top、诊断分析。
+  - **默认展示全部路由的聚合日志**，不需要先选一条路由。
+  - 顶部下拉可按路由收窄；选项为「全部路由（聚合所有日志）」+ 各条路由。
+  - 作用域决定数据源：全部 → `/admin/api/proxy-logs` 与 `/proxy-logs/stream`；
+    单路由 → `/proxy-logs/routes/{routeId}` 与 `/routes/{routeId}/stream`。
+  - 全部路由模式下实时流**不要求路由处于启用状态**（单路由模式沿用「停用不连流」的既有语义）。
 
 ### 主题
 
@@ -367,6 +407,7 @@ app.repository=geek-xin/web-router
 | --- | --- |
 | GET | `/admin/api/version` |
 | GET | `/admin/api/update/check` |
+| GET | `/admin/api/update/auto` |
 | POST | `/admin/api/update/apply` |
 
 ### 运维

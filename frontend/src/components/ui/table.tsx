@@ -2,8 +2,8 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(({ className, ...props }, ref) => (
-  <div className="log-table-wrap console-scroll">
-    <table ref={ref} className={cn('log-table', className)} {...props} />
+  <div className="table-wrap scroll-area">
+    <table ref={ref} className={cn('data-table', className)} {...props} />
   </div>
 ));
 Table.displayName = 'Table';

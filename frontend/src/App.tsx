@@ -4,25 +4,31 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Bell,
+  ChevronDown,
+  ChevronUp,
   CircleHelp,
+  Download,
   FileJson,
   Gauge,
-  Info,
   LayoutGrid,
-  Menu,
+  List,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
   PowerOff,
   Route as RouteIcon,
   ScrollText,
   Search,
-  Settings,
   Settings2,
   Sun,
-  TriangleAlert,
+  Trash2,
+  Upload,
   Waypoints,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input, Select } from '@/components/ui/input';
 import { fetchJson, jsonRequest } from '@/lib/api';
 import { stripProtocol } from '@/lib/utils';
 import { APP_REPOSITORY, APP_VERSION, GATEWAY_ENDPOINT } from '@/lib/app-meta';
@@ -40,23 +46,34 @@ import {
   sortRoutes,
 } from '@/features/routes/route-utils';
 import { formatCompactNumber, formatCount, formatLatency, normalizeTrafficMetrics, type RouteTrafficMetrics } from '@/features/routes/route-metrics';
-import { RouteToolbar } from '@/features/routes/RouteToolbar';
 import { RouteCard } from '@/features/routes/RouteCard';
 import { RouteList } from '@/features/routes/RouteList';
-import { RouteSparkline } from '@/features/routes/RouteSparkline';
+import { RouteToolbar } from '@/features/routes/RouteToolbar';
 import {
   applyTheme,
+  bandToggleLabel,
+  nextBandMode,
+  nextSidebarMode,
   nextTheme,
+  normalizeBandMode,
   normalizeRouteView,
+  normalizeSidebarMode,
   normalizeTheme,
   prefersDarkScheme,
   readPreference,
+  BAND_STORAGE_KEY,
+  resolveBandMode,
+  resolveSidebarMode,
   resolveTheme,
   ROUTE_VIEW_STORAGE_KEY,
   safeStorage,
+  SIDEBAR_STORAGE_KEY,
+  sidebarToggleLabel,
   THEME_STORAGE_KEY,
   writePreference,
+  type BandMode,
   type RouteViewMode,
+  type SidebarMode,
   type ThemeMode,
 } from '@/lib/preferences';
 import { RouteFormDialog } from '@/features/routes/RouteFormDialog';
@@ -120,6 +137,8 @@ export default function App() {
   // 主题与展示形式：用户显式选择会被记住，否则跟随系统 / 默认卡片视图
   const [theme, setTheme] = React.useState<ThemeMode>(() => resolveTheme(normalizeTheme(readPreference(safeStorage(), THEME_STORAGE_KEY)), prefersDarkScheme()));
   const [routeView, setRouteView] = React.useState<RouteViewMode>(() => normalizeRouteView(readPreference(safeStorage(), ROUTE_VIEW_STORAGE_KEY)) ?? 'card');
+  const [sidebarMode, setSidebarMode] = React.useState<SidebarMode>(() => resolveSidebarMode(normalizeSidebarMode(readPreference(safeStorage(), SIDEBAR_STORAGE_KEY))));
+  const [bandMode, setBandMode] = React.useState<BandMode>(() => resolveBandMode(normalizeBandMode(readPreference(safeStorage(), BAND_STORAGE_KEY))));
   const [form, setForm] = React.useState<FormState>({ open: false, mode: 'create', route: null });
   const [detailDrawer, setDetailDrawer] = React.useState<DetailDrawerState>({ open: false, route: null, fileName: '', content: '', loading: false, error: '' });
   const [deleteIds, setDeleteIds] = React.useState<string[]>([]);
@@ -211,6 +230,22 @@ export default function App() {
     writePreference(safeStorage(), ROUTE_VIEW_STORAGE_KEY, next);
   }
 
+  function toggleSidebar() {
+    setSidebarMode((current) => {
+      const next = nextSidebarMode(current);
+      writePreference(safeStorage(), SIDEBAR_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
+  function toggleBand() {
+    setBandMode((current) => {
+      const next = nextBandMode(current);
+      writePreference(safeStorage(), BAND_STORAGE_KEY, next);
+      return next;
+    });
+  }
+
   React.useEffect(() => {
     void loadMetrics();
     const timer = window.setInterval(() => void loadMetrics(), METRICS_POLL_MS);
@@ -223,7 +258,6 @@ export default function App() {
   );
 
   const totals = React.useMemo(() => computeTotals(routes, metricsById), [routes, metricsById]);
-  const selectedRoutes = React.useMemo(() => routes.filter((route) => selectedIds.includes(route.id)), [routes, selectedIds]);
   const logRoute = React.useMemo(() => routes.find((route) => route.id === logRouteId) || null, [routes, logRouteId]);
 
   async function handleSaveRoute(payload: RouteConfigPayload, mode: 'create' | 'edit' | 'copy', route?: RouteConfig | null) {
@@ -259,7 +293,7 @@ export default function App() {
     try {
       const data = await fetchJson<RouteExportResponse>('/admin/api/routes/export');
       downloadJson(data, routeExportFileName(data.exportedAt));
-      toast.success(`已导出 ${data.routes.length} 条路由`);
+      toast.success('已导出 ' + data.routes.length + ' 条路由');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '导出失败');
     } finally {
@@ -272,7 +306,7 @@ export default function App() {
     try {
       const payload = parseRouteImportFile(await file.text());
       const data = await fetchJson<RouteImportResponse>('/admin/api/routes/import', jsonRequest(payload));
-      toast.success(`已导入 ${data.importedCount} 条路由`);
+      toast.success('已导入 ' + data.importedCount + ' 条路由');
       await loadRoutes();
       await loadMetrics();
     } catch (error) {
@@ -332,162 +366,160 @@ export default function App() {
 
   return (
     <>
-      <NetworkBackdrop />
-      <div className="console-shell">
-        <ConsoleSidebar
-          routeCount={routes.length}
-          gatewayState={gatewayState}
-          view={view}
-          onViewChange={setView}
-          configPathFull={configPathFull}
-          showConfigPath={showConfigPath}
-          onToggleConfigPath={() => setShowConfigPath((value) => !value)}
-          onExport={() => void exportRoutes()}
-          onImport={(file) => void importRoutes(file)}
-          exporting={exporting}
-          importing={importing}
-          version={versionInfo?.version || APP_VERSION}
-          platform={versionInfo?.platform || 'unknown'}
-          onOpenVersion={() => setVersionOpen(true)}
-        />
-
-        <div className="console-main">
-          <ConsoleTopbar
+      <div className="app-canvas">
+        <div className={sidebarMode === 'collapsed' ? 'app-shell app-shell-collapsed' : 'app-shell'}>
+          <AppSidebar
+            mode={sidebarMode}
+            onToggleMode={toggleSidebar}
+            routeCount={routes.length}
             gatewayState={gatewayState}
+            view={view}
+            onViewChange={setView}
+            configPathFull={configPathFull}
+            showConfigPath={showConfigPath}
+            onToggleConfigPath={() => setShowConfigPath((value) => !value)}
+            onExport={() => void exportRoutes()}
+            onImport={(file) => void importRoutes(file)}
+            exporting={exporting}
+            importing={importing}
             version={versionInfo?.version || APP_VERSION}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            onSearchFocus={() => setView('routes')}
+            platform={versionInfo?.platform || 'unknown'}
             onOpenVersion={() => setVersionOpen(true)}
           />
 
-          <div className="console-workspace">
-            {view === 'routes' ? (
-              <>
-                <section className="kpi-row" aria-label="路由概览">
-                  <KpiCard label="路由总数" value={formatCount(totals.routeCount)} active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} icon={<RouteIcon className="h-3.5 w-3.5" />} />
-                  <KpiCard label="运行中" value={formatCount(totals.enabledCount)} active={statusFilter === 'enabled'} onClick={() => setStatusFilter('enabled')} icon={<Activity className="h-3.5 w-3.5" />} tone="success" />
-                  <KpiCard label="已停用" value={formatCount(totals.disabledCount)} active={statusFilter === 'disabled'} onClick={() => setStatusFilter('disabled')} icon={<PowerOff className="h-3.5 w-3.5" />} />
-                  <KpiCard
-                    label="请求数 / 分钟"
-                    value={formatCompactNumber(totals.requestsLastMinute)}
-                    icon={<Gauge className="h-3.5 w-3.5" />}
-                    spark={totals.trafficBuckets}
-                  />
-                  <KpiCard label="平均延迟" value={formatLatency(totals.averageDurationMs)} icon={<Waypoints className="h-3.5 w-3.5" />} />
-                </section>
+          <div className="app-main">
+            <AppTopbar
+              gatewayState={gatewayState}
+              version={versionInfo?.version || APP_VERSION}
+              theme={theme}
+              search={search}
+              onSearchChange={(value) => { setSearch(value); setView('routes'); }}
+              onToggleTheme={toggleTheme}
+              onOpenVersion={() => setVersionOpen(true)}
+            />
 
-                <section className="console-panel p-3.5" aria-labelledby="route-config-heading">
-                  <RouteToolbar
-                    headingId="route-config-heading"
-                    search={search}
-                    status={statusFilter}
-                    sort={sortKey}
-                    selectedCount={selectedIds.length}
-                    viewMode={routeView}
-                    onViewModeChange={changeRouteView}
-                    onSearchChange={setSearch}
+            <div className="app-content scroll-area">
+              {view === 'routes' ? (
+                <>
+                  <OverviewBand
+                    totals={totals}
+                    statusFilter={statusFilter}
                     onStatusChange={setStatusFilter}
-                    onSortChange={setSortKey}
-                    onAdd={() => setForm({ open: true, mode: 'create', route: null })}
-                    onExport={() => void exportRoutes()}
-                    onImport={(file) => void importRoutes(file)}
-                    onBatchDelete={() => setDeleteIds(selectedIds)}
-                    exporting={exporting}
-                    importing={importing}
+                    mode={bandMode}
+                    onToggleMode={toggleBand}
                   />
 
-                  {loading ? (
-                    <div className={`route-card-board mt-3.5 ${detailDrawer.open ? 'route-card-board-with-drawer' : ''}`} aria-live="polite">
-                      <SkeletonCards />
-                    </div>
-                  ) : visibleRoutes.length === 0 ? (
-                    <div className="console-empty mt-3.5" aria-live="polite">
-                      <RouteIcon className="h-5 w-5 text-console-ink-subtle" aria-hidden="true" />
-                      <strong className="console-empty-title">还没有匹配的路由</strong>
-                      <span className="console-empty-copy">
-                        {routes.length === 0
-                          ? '点击「新增路由」配置默认地址、监听端口和访问页，按需添加路径前缀。'
-                          : '当前筛选条件下没有路由，试着切换状态筛选或清空搜索关键词。'}
-                      </span>
-                      <Button variant="primary" onClick={() => setForm({ open: true, mode: 'create', route: null })}>新增路由</Button>
-                    </div>
-                  ) : routeView === 'card' ? (
-                    <div className={`route-card-board mt-3.5 ${detailDrawer.open ? 'route-card-board-with-drawer' : ''}`} aria-live="polite">
-                      {visibleRoutes.map((route, index) => (
-                        <RouteCard
-                          key={route.id}
-                          route={route}
-                          index={index}
-                          selected={selectedIds.includes(route.id)}
-                          metrics={metricsById[route.id]}
-                          onSelectedChange={(selected) => setSelectedIds((current) => selected ? Array.from(new Set([...current, route.id])) : current.filter((id) => id !== route.id))}
-                          onView={() => void openDetail(route)}
-                          onCopy={() => setForm({ open: true, mode: 'copy', route })}
-                          onLogs={() => openLogs(route)}
-                          onAccess={() => openAccess(route)}
-                          onToggle={() => void toggleRoute(route)}
-                          onDelete={() => setDeleteIds([route.id])}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3.5" aria-live="polite">
-                      <RouteList
-                        routes={visibleRoutes}
-                        metricsById={metricsById}
-                        selectedIds={selectedIds}
-                        onSelectedChange={(routeId, selected) => setSelectedIds((current) => selected ? Array.from(new Set([...current, routeId])) : current.filter((id) => id !== routeId))}
-                        onView={(route) => void openDetail(route)}
-                        onCopy={(route) => setForm({ open: true, mode: 'copy', route })}
-                        onLogs={(route) => openLogs(route)}
-                        onAccess={(route) => openAccess(route)}
-                        onToggle={(route) => void toggleRoute(route)}
-                        onDelete={(route) => setDeleteIds([route.id])}
-                      />
-                    </div>
-                  )}
+                  <section className="surface-panel p-4" aria-labelledby="route-panel-title">
+                    <RouteToolbar
+                      headingId="route-panel-title"
+                      routeCount={routes.length}
+                      visibleCount={visibleRoutes.length}
+                      status={statusFilter}
+                      sort={sortKey}
+                      selectedCount={selectedIds.length}
+                      viewMode={routeView}
+                      onViewModeChange={changeRouteView}
+                      onStatusChange={setStatusFilter}
+                      onSortChange={setSortKey}
+                      onAdd={() => setForm({ open: true, mode: 'create', route: null })}
+                      onExport={() => void exportRoutes()}
+                      onImport={(file: File) => void importRoutes(file)}
+                      onBatchDelete={() => setDeleteIds(selectedIds)}
+                      exporting={exporting}
+                      importing={importing}
+                    />
 
-                  <p className="mt-3.5 text-[11.5px] text-console-ink-subtle">
-                    共 {routes.length} 条路由，当前显示 {visibleRoutes.length} 条{selectedIds.length > 0 ? `，已选 ${selectedIds.length} 条` : ''}。
-                  </p>
+                    {/* 只有这一块滚动：工具栏与下方统计行保持固定，见设计系统 §5.5 */}
+                    <div className="panel-scroll scroll-area">
+                      {loading ? (
+                        <div className="route-card-board mt-4" aria-live="polite">
+                          <SkeletonCards />
+                        </div>
+                      ) : visibleRoutes.length === 0 ? (
+                        <div className="empty-state" aria-live="polite">
+                          <RouteIcon className="h-5 w-5" aria-hidden="true" />
+                          <strong className="empty-title">还没有匹配的路由</strong>
+                          <span className="empty-copy">
+                            {routes.length === 0
+                              ? '点击「新增路由」配置默认地址、监听端口和访问页，按需添加路径前缀。'
+                              : '当前筛选条件下没有路由，试着切换状态筛选或清空搜索关键词。'}
+                          </span>
+                          <Button variant="primary" onClick={() => setForm({ open: true, mode: 'create', route: null })}>新增路由</Button>
+                        </div>
+                      ) : routeView === 'card' ? (
+                        <div className="route-card-board mt-4" aria-live="polite">
+                          {visibleRoutes.map((route, index) => (
+                            <RouteCard
+                              key={route.id}
+                              route={route}
+                              index={index}
+                              selected={selectedIds.includes(route.id)}
+                              metrics={metricsById[route.id]}
+                              onSelectedChange={(selected) => setSelectedIds((current) => selected ? Array.from(new Set([...current, route.id])) : current.filter((id) => id !== route.id))}
+                              onView={() => void openDetail(route)}
+                              onCopy={() => setForm({ open: true, mode: 'copy', route })}
+                              onLogs={() => openLogs(route)}
+                              onAccess={() => openAccess(route)}
+                              onToggle={() => void toggleRoute(route)}
+                              onDelete={() => setDeleteIds([route.id])}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-4" aria-live="polite">
+                          <RouteList
+                            routes={visibleRoutes}
+                            metricsById={metricsById}
+                            selectedIds={selectedIds}
+                            onSelectedChange={(routeId, selected) => setSelectedIds((current) => selected ? Array.from(new Set([...current, routeId])) : current.filter((id) => id !== routeId))}
+                            onView={(route) => void openDetail(route)}
+                            onCopy={(route) => setForm({ open: true, mode: 'copy', route })}
+                            onLogs={(route) => openLogs(route)}
+                            onAccess={(route) => openAccess(route)}
+                            onToggle={(route) => void toggleRoute(route)}
+                            onDelete={(route) => setDeleteIds([route.id])}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="panel-footnote text-[11.5px]">
+                      共 {routes.length} 条路由，当前显示 {visibleRoutes.length} 条{selectedIds.length > 0 ? '，已选 ' + selectedIds.length + ' 条' : ''}。
+                    </p>
+                  </section>
+                </>
+              ) : (
+                <section className="surface-panel p-4" aria-label="请求日志">
+                  <div className="toolbar mb-4">
+                    <div className="toolbar-heading">
+                      <h2 className="toolbar-title">请求日志</h2>
+                      <p className="toolbar-note">默认展示全部路由日志，可按路由筛选；支持实时流、耗时 Top 与诊断分析</p>
+                    </div>
+                    <label className="search-field">
+                      <span className="sr-only">选择路由</span>
+                      <Search className="search-field-icon" aria-hidden="true" />
+                      <select
+                        className="field-select w-full"
+                        value={logRouteId || ''}
+                        onChange={(event) => setLogRouteId(event.target.value || null)}
+                        aria-label="选择要查看日志的路由"
+                      >
+                        <option value="">全部路由（聚合所有日志）</option>
+                        {routes.map((route) => (
+                          <option key={route.id} value={route.id}>{route.name} · {localBinding(route.localIp, route.localPort) || '未配置端口'}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <Button variant="outline" onClick={() => setView('routes')}>返回路由列表</Button>
+                  </div>
+                  {/* 日志面板同样只让内部区域滚动，页面本身不出现滚动条。
+                      route 为 null 时展示全部路由的聚合日志，不需要先选一条。 */}
+                  <div className="panel-scroll scroll-area">
+                    <RouteLogPanel open route={logRoute} />
+                  </div>
                 </section>
-              </>
-            ) : (
-              <section className="console-panel p-3.5" aria-label="请求日志">
-                <div className="route-toolbar mb-3.5">
-                  <div className="route-toolbar-heading">
-                    <span className="route-toolbar-eyebrow">Request Monitor</span>
-                    <h2 className="route-toolbar-title">请求日志</h2>
-                  </div>
-                  <label className="console-search">
-                    <span className="sr-only">选择路由</span>
-                    <Search className="console-search-icon" aria-hidden="true" />
-                    <select
-                      className="console-select w-full"
-                      value={logRouteId || ''}
-                      onChange={(event) => setLogRouteId(event.target.value || null)}
-                      aria-label="选择要查看日志的路由"
-                    >
-                      <option value="">全部路由（选择一条查看明细）</option>
-                      {routes.map((route) => (
-                        <option key={route.id} value={route.id}>{route.name} · {localBinding(route.localIp, route.localPort) || '未配置端口'}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <Button variant="outline" onClick={() => setView('routes')}>返回路由列表</Button>
-                </div>
-                {logRoute ? (
-                  <RouteLogPanel open route={logRoute} />
-                ) : (
-                  <div className="console-empty">
-                    <ScrollText className="h-5 w-5 text-console-ink-subtle" aria-hidden="true" />
-                    <strong className="console-empty-title">请选择一条路由</strong>
-                    <span className="console-empty-copy">日志按路由归集，选择上方路由即可查看实时流、耗时 Top 与诊断分析。</span>
-                  </div>
-                )}
-              </section>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -540,8 +572,11 @@ interface Totals {
   enabledCount: number;
   disabledCount: number;
   requestsLastMinute: number;
+  requestsInWindow: number;
+  peakPerMinute: number;
   averageDurationMs: number;
   trafficBuckets: number[];
+  deltaPercent: number | null;
 }
 
 function computeTotals(routes: RouteConfig[], metricsById: Record<string, RouteTrafficMetrics>): Totals {
@@ -566,71 +601,201 @@ function computeTotals(routes: RouteConfig[], metricsById: Record<string, RouteT
     });
   }
 
+  const requestsInWindow = buckets.reduce((sum, value) => sum + value, 0);
+  const peakPerMinute = buckets.reduce((max, value) => Math.max(max, value), 0);
+  const current = buckets[buckets.length - 1] || 0;
+  const previous = buckets.length > 1 ? buckets[buckets.length - 2] : 0;
+  const deltaPercent = previous > 0 ? ((current - previous) / previous) * 100 : null;
+
   return {
     routeCount: routes.length,
     enabledCount,
     disabledCount: routes.length - enabledCount,
     requestsLastMinute,
+    requestsInWindow,
+    peakPerMinute,
     averageDurationMs: totalRequests > 0 ? Math.round(totalDurationMs / totalRequests) : 0,
     trafficBuckets: buckets,
+    deltaPercent,
   };
 }
 
-function KpiCard({ label, value, icon, active = false, onClick, spark, tone }: { label: string; value: string; icon: React.ReactNode; active?: boolean; onClick?: () => void; spark?: number[]; tone?: 'success' }) {
-  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (!onClick) {
-      return;
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onClick();
-    }
+/** 概览带：展开时是「左侧白色主数字卡 + 右侧 30 分钟柱状带」；收起时压成一行摘要。 */
+function OverviewBand({ totals, statusFilter, onStatusChange, mode, onToggleMode }: {
+  totals: Totals;
+  statusFilter: RouteStatusFilter;
+  onStatusChange: (value: RouteStatusFilter) => void;
+  mode: BandMode;
+  onToggleMode: () => void;
+}) {
+  const [hovered, setHovered] = React.useState<number | null>(null);
+  const peak = totals.peakPerMinute > 0 ? totals.peakPerMinute : 1;
+  const delta = totals.deltaPercent;
+  const deltaUp = delta !== null && delta >= 0;
+  const collapsed = mode === 'collapsed';
+
+  const toggle = (
+    <button
+      type="button"
+      className="band-toggle"
+      onClick={onToggleMode}
+      aria-expanded={!collapsed}
+      aria-controls="overview-band-body"
+      aria-label={bandToggleLabel(mode)}
+      title={bandToggleLabel(mode)}
+    >
+      {collapsed ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronUp className="h-4 w-4" aria-hidden="true" />}
+    </button>
+  );
+
+  if (collapsed) {
+    return (
+      <section className="band band-collapsed" aria-label="路由概览">
+        <div className="band-summary">
+          <span className="band-summary-icon" aria-hidden="true"><Gauge className="h-3.5 w-3.5" /></span>
+          <span className="band-summary-figure">{formatCount(totals.requestsLastMinute)}</span>
+          <span className="band-summary-unit">次 / 分钟</span>
+          <span className="band-summary-sep" aria-hidden="true" />
+          <span className="band-summary-text">
+            30 分钟 {formatCount(totals.requestsInWindow)} 次 · 峰值 {formatCompactNumber(totals.peakPerMinute)} / 分钟 · 平均延迟 {formatLatency(totals.averageDurationMs)}
+          </span>
+          <span className="band-summary-stats">
+            <button type="button" className="band-summary-stat" aria-pressed={statusFilter === 'all'} onClick={() => onStatusChange('all')}>
+              <span className="dot" aria-hidden="true" />路由 {formatCount(totals.routeCount)}
+            </button>
+            <button type="button" className="band-summary-stat" aria-pressed={statusFilter === 'enabled'} onClick={() => onStatusChange('enabled')}>
+              <span className="dot state-running" aria-hidden="true" />运行 {formatCount(totals.enabledCount)}
+            </button>
+            <button type="button" className="band-summary-stat" aria-pressed={statusFilter === 'disabled'} onClick={() => onStatusChange('disabled')}>
+              <span className="dot state-stopped" aria-hidden="true" />停用 {formatCount(totals.disabledCount)}
+            </button>
+          </span>
+          {toggle}
+        </div>
+      </section>
+    );
   }
 
   return (
-    <div
-      className={`kpi-card${active ? ' kpi-card-active' : ''}`}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-pressed={onClick ? active : undefined}
-      aria-label={onClick ? `${label}：${value}，点击筛选` : `${label}：${value}`}
-      onClick={onClick}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="kpi-head">
-        <span className="kpi-label">{label}</span>
-        <span className={tone === 'success' ? 'text-console-success' : 'text-console-ink-subtle'} aria-hidden="true">{icon}</span>
-      </div>
-      <div className="flex items-baseline gap-2">
-        <strong className="kpi-value">{value}</strong>
-        {active && <span className="kpi-filter-badge">当前筛选</span>}
-      </div>
-      {spark && (
-        <div className="kpi-spark accent-cyan">
-          <RouteSparkline values={spark} label="全局最近 30 分钟请求数" />
+    <section className="band" aria-label="路由概览">
+      <div className="band-lead">
+        <div className="band-lead-head">
+          <span className="band-lead-icon" aria-hidden="true"><Gauge className="h-3.5 w-3.5" /></span>
+          <span className="band-lead-title">本分钟请求</span>
+          <span className="chip">每 5 秒刷新</span>
+          {toggle}
         </div>
-      )}
-    </div>
+        <div id="overview-band-body" className="band-lead-figure-row">
+          <strong className="band-lead-figure">{formatCount(totals.requestsLastMinute)}</strong>
+          <div className="band-lead-delta">
+            {delta === null ? (
+              <span>上一分钟没有请求，暂无可比数据</span>
+            ) : (
+              <>
+                <span className="band-delta-chip">
+                  {deltaUp ? <ArrowUpRight className="h-3 w-3" aria-hidden="true" /> : <ArrowDownRight className="h-3 w-3" aria-hidden="true" />}
+                  {Math.abs(delta).toFixed(1)}%
+                </span>
+                <span>相比上一分钟</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="band-lead-split">
+          <SplitStat label="路由总数" value={formatCount(totals.routeCount)} active={statusFilter === 'all'} onClick={() => onStatusChange('all')} icon={<RouteIcon className="h-3 w-3" />} />
+          <SplitStat label="运行中" value={formatCount(totals.enabledCount)} tone="var(--surface-success)" active={statusFilter === 'enabled'} onClick={() => onStatusChange('enabled')} icon={<Activity className="h-3 w-3" />} />
+          <SplitStat label="已停用" value={formatCount(totals.disabledCount)} tone="var(--surface-ink-subtle)" active={statusFilter === 'disabled'} onClick={() => onStatusChange('disabled')} icon={<PowerOff className="h-3 w-3" />} />
+        </div>
+      </div>
+
+      <div className="band-chart">
+        <div className="band-chart-head">
+          <span className="band-chart-label">最近 30 分钟请求</span>
+          <strong className="band-chart-figure">{formatCount(totals.requestsInWindow)}</strong>
+          <span className="band-chart-note">
+            峰值 {formatCompactNumber(totals.peakPerMinute)} / 分钟 · 平均延迟 {formatLatency(totals.averageDurationMs)}
+          </span>
+        </div>
+
+        <div
+          className={'band-bars' + (totals.requestsInWindow === 0 ? ' band-bars-empty' : '')}
+          role="img"
+          aria-label={'最近 30 分钟每分钟请求数，峰值 ' + totals.peakPerMinute + ' 次'}
+        >
+          {totals.trafficBuckets.map((value, index) => {
+            const isLast = index === totals.trafficBuckets.length - 1;
+            const isActive = hovered === index || (hovered === null && isLast);
+            const height = value > 0 ? Math.max(6, Math.round((value / peak) * 100)) : 4;
+            return (
+              <span
+                key={index}
+                className={'band-bar' + (isActive ? ' band-bar-hot' : '')}
+                style={{ height: height + '%' }}
+                title={(totals.trafficBuckets.length - 1 - index) + ' 分钟前：' + value + ' 次'}
+                onMouseEnter={() => setHovered(index)}
+                onMouseLeave={() => setHovered(null)}
+              />
+            );
+          })}
+        </div>
+        <div className="band-bar-ticks" aria-hidden="true">
+          <span className="band-bar-tick">-29m</span>
+          <span className="band-bar-tick">-15m</span>
+          <span className="band-bar-tick">现在</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
-function ConsoleTopbar({ gatewayState, version, theme, onToggleTheme, onSearchFocus, onOpenVersion }: { gatewayState: GatewayState; version: string; theme: ThemeMode; onToggleTheme: () => void; onSearchFocus: () => void; onOpenVersion: () => void }) {
-  const running = gatewayState === 'running';
+function SplitStat({ label, value, icon, tone, active = false, onClick }: { label: string; value: string; icon: React.ReactNode; tone?: string; active?: boolean; onClick: () => void }) {
   return (
-    <header className="console-topbar">
-      <div className="min-w-0">
-        <h1 className="topbar-title">路由管理</h1>
+    <button type="button" className="band-split-item" aria-pressed={active} onClick={onClick}>
+      <span className="band-split-label">
+        <span className="dot" style={tone ? { background: tone } : undefined} aria-hidden="true" />
+        {label}
+      </span>
+      <span className="band-split-value">
+        <span className="band-split-figure">{value}</span>
+        <span className="band-split-unit">条</span>
+      </span>
+    </button>
+  );
+}
+
+function AppTopbar({ gatewayState, version, theme, search, onSearchChange, onToggleTheme, onOpenVersion }: {
+  gatewayState: GatewayState;
+  version: string;
+  theme: ThemeMode;
+  search: string;
+  onSearchChange: (value: string) => void;
+  onToggleTheme: () => void;
+  onOpenVersion: () => void;
+}) {
+  const running = gatewayState === 'running';
+  const stateText = running ? 'Gateway 运行中' : gatewayState === 'checking' ? '正在检查' : 'Gateway 未响应';
+  return (
+    <header className="app-topbar">
+      <div className="topbar-heading">
+        <h1 className="topbar-title">路由控制台</h1>
         <p className="topbar-subtitle">管理本地路由、代理端口和请求转发</p>
       </div>
       <div className="topbar-actions">
-        <button type="button" className="version-pill" onClick={onOpenVersion} aria-label={`当前版本 v${version}，查看版本与更新`} title="版本与更新">
-          <span className="console-mono">v{version}</span>
-        </button>
-        <span className="gateway-pill" title={running ? 'Gateway 运行中' : gatewayState === 'checking' ? '正在检查 Gateway 状态' : 'Gateway 未响应'}>
-          <span className={`status-dot ${running ? 'status-running' : gatewayState === 'checking' ? 'status-warning' : 'status-error'}`} aria-hidden="true" />
-          {running ? 'Gateway Running' : gatewayState === 'checking' ? 'Checking' : 'Gateway Down'}
-          <span className="gateway-pill-address">{GATEWAY_ENDPOINT}</span>
+        <label className="topbar-search">
+          <span className="sr-only">搜索路由</span>
+          <Search className="topbar-search-icon" aria-hidden="true" />
+          <Input value={search} onChange={(event) => onSearchChange(event.target.value)} type="search" placeholder="搜索路由名称、Path、Target" />
+          <span className="topbar-search-key">⌘K</span>
+        </label>
+        <span className="state-pill" title={running ? 'Gateway 运行中' : gatewayState === 'checking' ? '正在检查 Gateway 状态' : 'Gateway 未响应'}>
+          <span className={'dot ' + (running ? 'state-running' : gatewayState === 'checking' ? 'state-checking' : 'state-error')} aria-hidden="true" />
+          {stateText}
+          <span className="state-pill-address">{GATEWAY_ENDPOINT}</span>
         </span>
+        <button type="button" className="version-pill" onClick={onOpenVersion} aria-label={'当前版本 v' + version + '，查看版本与更新'} title="版本与更新">
+          v{version}
+        </button>
         <button
           type="button"
           className="icon-button"
@@ -638,11 +803,9 @@ function ConsoleTopbar({ gatewayState, version, theme, onToggleTheme, onSearchFo
           aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
           title={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
         >
-          {theme === 'dark' ? <Sun className="h-3.5 w-3.5" aria-hidden="true" /> : <Moon className="h-3.5 w-3.5" aria-hidden="true" />}
+          {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <button type="button" className="icon-button" onClick={onSearchFocus} aria-label="搜索路由"><Search className="h-3.5 w-3.5" /></button>
-        <button type="button" className="icon-button" aria-label="通知"><Bell className="h-3.5 w-3.5" /></button>
-        <button type="button" className="icon-button" aria-label="设置"><Settings className="h-3.5 w-3.5" /></button>
+        <button type="button" className="icon-button icon-button-dot" aria-label="通知"><Bell className="h-4 w-4" aria-hidden="true" /></button>
         <span className="topbar-avatar" aria-hidden="true">WR</span>
       </div>
     </header>
@@ -650,6 +813,8 @@ function ConsoleTopbar({ gatewayState, version, theme, onToggleTheme, onSearchFo
 }
 
 interface SidebarProps {
+  mode: SidebarMode;
+  onToggleMode: () => void;
   routeCount: number;
   gatewayState: GatewayState;
   view: WorkspaceView;
@@ -666,102 +831,108 @@ interface SidebarProps {
   onOpenVersion: () => void;
 }
 
-function ConsoleSidebar({ routeCount, gatewayState, view, onViewChange, configPathFull, showConfigPath, onToggleConfigPath, onExport, onImport, exporting, importing, version, platform, onOpenVersion }: SidebarProps) {
+function AppSidebar({ mode, onToggleMode, routeCount, gatewayState, view, onViewChange, configPathFull, showConfigPath, onToggleConfigPath, onExport, onImport, exporting, importing, version, platform, onOpenVersion }: SidebarProps) {
   const importRef = React.useRef<HTMLInputElement>(null);
   const running = gatewayState === 'running';
+  const collapsed = mode === 'collapsed';
+  // 收起态只留图标：所有可点元素都要有 title / aria-label 兜底
+  const tip = (label: string) => (collapsed ? label : undefined);
 
   return (
-    <aside className="console-sidebar console-scroll">
-      <div className="side-brand">
-        <span className="side-brand-mark" aria-hidden="true">
-          <RouteNodeMark />
-        </span>
-        <span className="side-brand-text">
-          <span className="side-brand-title">WROUTER</span>
-          <span className="side-brand-subtitle">Local Gateway Console</span>
+    <aside className="app-sidebar scroll-area">
+      <div className="brand">
+        <span className="brand-mark" aria-hidden="true"><RouteNodeMark /></span>
+        <span className="brand-text">
+          <span className="brand-name">wrouter</span>
+          <span className="brand-sub">Gateway Console</span>
         </span>
       </div>
 
-      <nav className="side-nav" aria-label="主导航">
-        <button type="button" className={`side-nav-item${view === 'routes' ? ' side-nav-item-active' : ''}`} onClick={() => onViewChange('routes')}>
-          <LayoutGrid className="side-nav-icon" aria-hidden="true" />
-          <span className="side-nav-label">路由管理</span>
-          <span className="side-badge">{routeCount}</span>
+      <nav className="side-section" aria-label="主导航">
+        <button type="button" className={'nav-item' + (view === 'routes' ? ' nav-item-active' : '')} onClick={() => onViewChange('routes')} title={tip('路由管理')}>
+          <LayoutGrid className="nav-icon" aria-hidden="true" />
+          <span className="nav-text">路由管理</span>
+          <span className="nav-count">{routeCount}</span>
         </button>
-        <button type="button" className={`side-nav-item${view === 'logs' ? ' side-nav-item-active' : ''}`} onClick={() => onViewChange('logs')}>
-          <ScrollText className="side-nav-icon" aria-hidden="true" />
-          <span className="side-nav-label">日志</span>
+        <button type="button" className={'nav-item' + (view === 'logs' ? ' nav-item-active' : '')} onClick={() => onViewChange('logs')} title={tip('请求日志')}>
+          <ScrollText className="nav-icon" aria-hidden="true" />
+          <span className="nav-text">请求日志</span>
         </button>
       </nav>
 
-      <div>
-        <p className="side-group-label">运行状态</p>
-        <div className="side-nav">
-          <div className="side-status-row">
-            <span className={`status-dot ${running ? 'status-running' : 'status-error'}`} aria-hidden="true" />
-            <span>Gateway</span>
-          </div>
-          <div className="side-status-row">
-            <span className={`status-dot ${running ? 'status-running' : 'status-stopped'}`} aria-hidden="true" />
-            <span>Local Proxy</span>
-          </div>
+      <div className="side-section side-section-status">
+        <p className="side-label">运行状态</p>
+        <div className="nav-item" style={{ cursor: 'default' }}>
+          <span className={'dot ' + (running ? 'state-running' : 'state-error')} aria-hidden="true" />
+          <span className="nav-text">Gateway</span>
+        </div>
+        <div className="nav-item" style={{ cursor: 'default' }}>
+          <span className={'dot ' + (running ? 'state-running' : 'state-stopped')} aria-hidden="true" />
+          <span className="nav-text">Local Proxy</span>
         </div>
       </div>
 
-      <div>
-        <p className="side-group-label">系统设置</p>
-        <div className="side-nav">
-          <button type="button" className="side-nav-item" onClick={onToggleConfigPath} aria-expanded={showConfigPath}>
-            <Settings2 className="side-nav-icon" aria-hidden="true" />
-            <span className="side-nav-label">配置管理</span>
-          </button>
-          <button type="button" className="side-nav-item" onClick={onExport} disabled={exporting}>
-            <FileJson className="side-nav-icon" aria-hidden="true" />
-            <span className="side-nav-label">{exporting ? '导出中…' : '导出配置'}</span>
-          </button>
-          <input
-            ref={importRef}
-            className="hidden"
-            type="file"
-            accept="application/json,.json"
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = '';
-              if (file) {
-                onImport(file);
-              }
-            }}
-          />
-          <button type="button" className="side-nav-item" onClick={() => importRef.current?.click()} disabled={importing}>
-            <ArrowUpRight className="side-nav-icon" aria-hidden="true" />
-            <span className="side-nav-label">{importing ? '导入中…' : '导入配置'}</span>
-          </button>
-          <button type="button" className="side-nav-item" onClick={onOpenVersion}>
-            <CircleHelp className="side-nav-icon" aria-hidden="true" />
-            <span className="side-nav-label">关于</span>
-          </button>
-        </div>
+      <div className="side-section">
+        <p className="side-label">系统设置</p>
+        <button type="button" className={'nav-item' + (showConfigPath ? ' nav-item-active' : '')} onClick={onToggleConfigPath} aria-expanded={showConfigPath} title={tip('配置目录')}>
+          <Settings2 className="nav-icon" aria-hidden="true" />
+          <span className="nav-text">配置目录</span>
+        </button>
+        {showConfigPath && (
+          <span className="status-panel-paths">{configPathFull || '配置目录已隐藏'}</span>
+        )}
+        <button type="button" className="nav-item" onClick={onExport} disabled={exporting} title={tip('导出配置')}>
+          <Download className="nav-icon" aria-hidden="true" />
+          <span className="nav-text">{exporting ? '导出中…' : '导出配置'}</span>
+        </button>
+        <input
+          ref={importRef}
+          className="hidden"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (file) {
+              onImport(file);
+            }
+          }}
+        />
+        <button type="button" className="nav-item" onClick={() => importRef.current?.click()} disabled={importing} title={tip('导入配置')}>
+          <Upload className="nav-icon" aria-hidden="true" />
+          <span className="nav-text">{importing ? '导入中…' : '导入配置'}</span>
+        </button>
+        <button type="button" className="nav-item" onClick={onOpenVersion} title={tip('关于')}>
+          <CircleHelp className="nav-icon" aria-hidden="true" />
+          <span className="nav-text">关于</span>
+        </button>
       </div>
-
-      {showConfigPath && (
-        <div className="runtime-card">
-          <span className="side-group-label" style={{ padding: 0 }}>配置目录</span>
-          {configPathFull
-            ? <span className="runtime-card-address" title={configPathFull} style={{ whiteSpace: 'normal', wordBreak: 'break-all' }}>{configPathFull}</span>
-            : <span className="runtime-card-address">配置目录已隐藏</span>}
-        </div>
-      )}
 
       <div className="side-spacer" />
 
-      <div className="runtime-card">
-        <div className="runtime-card-head">
-          <span className={`status-dot ${running ? 'status-running' : 'status-error'}`} aria-hidden="true" />
-          {running ? '网关运行中' : gatewayState === 'checking' ? '正在检查网关' : '网关未响应'}
+      <div className="status-panel">
+        <div className="status-panel-head">
+          <span className={'dot ' + (running ? 'state-running' : gatewayState === 'checking' ? 'state-checking' : 'state-error')} aria-hidden="true" />
+          <span className="status-panel-title">{running ? '网关运行中' : gatewayState === 'checking' ? '正在检查网关' : '网关未响应'}</span>
         </div>
-        <span className="runtime-card-address">{GATEWAY_ENDPOINT}</span>
-        <button type="button" className="runtime-card-version runtime-card-version-button" onClick={onOpenVersion} title={`${platformLabel(platform)} · 查看版本与更新`}>
+        <span className="status-panel-address">{GATEWAY_ENDPOINT}</span>
+        <button type="button" className="status-panel-meta" onClick={onOpenVersion} title={platformLabel(platform) + ' · 查看版本与更新'}>
           v{version} · {platformLabel(platform)}
+        </button>
+      </div>
+
+      {/* 收起按钮固定在侧栏最下方：与运行卡同处底部区域，视线更集中 */}
+      <div className="sidebar-footer">
+        <button
+          type="button"
+          className="sidebar-toggle"
+          onClick={onToggleMode}
+          aria-expanded={!collapsed}
+          aria-label={sidebarToggleLabel(mode)}
+          title={sidebarToggleLabel(mode)}
+        >
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+          <span className="sidebar-toggle-label">{sidebarToggleLabel(mode)}</span>
         </button>
       </div>
     </aside>
@@ -772,52 +943,23 @@ function SkeletonCards() {
   return (
     <>
       {[0, 1, 2, 3, 4, 5].map((index) => (
-        <div key={index} className="console-skeleton h-[190px]" aria-hidden="true" />
+        <div key={index} className="skeleton h-[196px]" aria-hidden="true" />
       ))}
       <span className="sr-only">正在加载路由…</span>
     </>
   );
 }
 
-/** 品牌背景装饰：极淡的网络节点与连线，见设计系统 §7.2。 */
-function NetworkBackdrop() {
-  return (
-    <div className="network-backdrop" aria-hidden="true">
-      <svg className="network-backdrop-left" viewBox="0 0 620 460" fill="none" stroke="currentColor" strokeWidth="1.2">
-        <path d="M60 380 L200 300 L340 350 L470 240" />
-        <path d="M200 300 L230 180 L370 130 L470 240" />
-        <path d="M60 380 L120 240 L230 180" />
-        <circle cx="60" cy="380" r="7" />
-        <circle cx="200" cy="300" r="7" />
-        <circle cx="340" cy="350" r="7" />
-        <circle cx="470" cy="240" r="7" />
-        <circle cx="120" cy="240" r="7" />
-        <circle cx="230" cy="180" r="7" />
-        <circle cx="370" cy="130" r="7" />
-      </svg>
-      <svg className="network-backdrop-right" viewBox="0 0 620 460" fill="none" stroke="currentColor" strokeWidth="1.2">
-        <path d="M80 120 L220 200 L360 140 L500 230" />
-        <path d="M220 200 L260 330 L400 380 L500 230" />
-        <circle cx="80" cy="120" r="7" />
-        <circle cx="220" cy="200" r="7" />
-        <circle cx="360" cy="140" r="7" />
-        <circle cx="500" cy="230" r="7" />
-        <circle cx="260" cy="330" r="7" />
-        <circle cx="400" cy="380" r="7" />
-      </svg>
-    </div>
-  );
-}
-
+/** 品牌符号：节点与连线的极简写法，用当前色描边，随主题切换。 */
 function RouteNodeMark() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="#4DA3FF" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
       <path d="M6 7h12" />
       <path d="M6 7l6 10" />
       <path d="M18 7l-6 10" />
-      <circle cx="6" cy="7" r="2.4" fill="#07111F" />
-      <circle cx="18" cy="7" r="2.4" fill="#07111F" stroke="#10D9A0" />
-      <circle cx="12" cy="17" r="2.4" fill="#07111F" />
+      <circle cx="6" cy="7" r="2.2" fill="var(--surface-navy)" />
+      <circle cx="18" cy="7" r="2.2" fill="var(--surface-navy)" />
+      <circle cx="12" cy="17" r="2.2" fill="var(--surface-navy)" />
     </svg>
   );
 }
@@ -872,7 +1014,7 @@ function routeExportFileName(exportedAt: string): string {
     pad(date.getUTCMinutes()),
     pad(date.getUTCSeconds()),
   ].join('');
-  return `wrouter-routes-${stamp}.json`;
+  return 'wrouter-routes-' + stamp + '.json';
 }
 
 function parseRouteImportFile(content: string): { version: number; routes: RouteConfigPayload[] } {

@@ -1,6 +1,7 @@
 package com.geek.webrouter.config;
 
 import com.geek.webrouter.web.model.dto.ProxyRequestLogEntry;
+import com.geek.webrouter.web.service.InFlightRequestTracker;
 import com.geek.webrouter.web.service.ProxyRequestLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -29,6 +30,7 @@ public class ProxyRequestLogFilter implements GlobalFilter, Ordered {
     private static final int MAX_DETAIL_CHARS = 4096;
 
     private final ProxyRequestLogService logService;
+    private final InFlightRequestTracker inFlightTracker;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -37,6 +39,8 @@ public class ProxyRequestLogFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        // 进入代理链路时登记在途请求：自动更新据此判断能否安全重启
+        inFlightTracker.begin();
         long start = System.nanoTime();
         String routeId = route.getId();
         String method = exchange.getRequest().getMethod().name();
@@ -55,19 +59,22 @@ public class ProxyRequestLogFilter implements GlobalFilter, Ordered {
         ServerWebExchange decoratedExchange = exchange.mutate().response(responseDecorator).build();
 
         return chain.filter(decoratedExchange)
-                .doFinally(signalType -> logService.record(new ProxyRequestLogEntry(
-                        null,
-                        routeId,
-                        method,
-                        path,
-                        clientIp,
-                        status(exchange),
-                        (System.nanoTime() - start) / 1_000_000,
-                        requestParams,
-                        "",
-                        responseBody.toString(),
-                        accessAddress
-                )));
+                .doFinally(signalType -> {
+                    inFlightTracker.end();
+                    logService.record(new ProxyRequestLogEntry(
+                            null,
+                            routeId,
+                            method,
+                            path,
+                            clientIp,
+                            status(exchange),
+                            (System.nanoTime() - start) / 1_000_000,
+                            requestParams,
+                            "",
+                            responseBody.toString(),
+                            accessAddress
+                    ));
+                });
     }
 
     @Override

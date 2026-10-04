@@ -16,7 +16,7 @@ class RouteConfigTemplateTest {
 
         assertThat(form).contains("监听 IP");
         assertThat(form).contains("readOnly aria-readonly=\"true\"");
-        assertThat(form).contains("required-field-mark");
+        assertThat(form).contains("required-mark");
         assertThat(form).contains("监听端口");
         assertThat(form).contains("访问页");
         assertThat(form).contains("默认地址（兜底）");

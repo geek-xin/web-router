@@ -2,16 +2,16 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const badgeVariants = cva('console-badge', {
+const badgeVariants = cva('chip', {
   variants: {
     variant: {
       default: '',
-      primary: 'console-badge-primary',
-      success: 'console-badge-success',
-      warning: 'console-badge-warning',
-      danger: 'console-badge-danger',
-      muted: 'console-badge-muted',
-      accent: 'console-badge-primary',
+      primary: 'chip-accent',
+      success: 'chip-success',
+      warning: 'chip-warning',
+      danger: 'chip-danger',
+      muted: '',
+      accent: 'chip-accent',
     },
   },
   defaultVariants: { variant: 'default' },

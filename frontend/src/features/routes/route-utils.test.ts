@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { activeLocalBinding, deriveRouteStatus, filterRoutes, normalizePathPrefix, routeAccentClass, routeAccessUrl, sortRoutes, validateRoutePayload, visiblePathPrefixes } from './route-utils';
+import { activeLocalBinding, deriveRouteStatus, filterRoutes, normalizePathPrefix, routeAccentClass, routeAccessUrl, routeStatusDotClass, sortRoutes, validateRoutePayload, visiblePathPrefixes } from './route-utils';
 import { normalizeTrafficMetrics } from './route-metrics';
 
 describe('route route-utils', () => {
   it('normalizes path prefixes and removes trailing slashes', () => {
     expect(normalizePathPrefix('/api//')).toBe('/api');
+  });
+
+  it('maps route status to the dot classes defined in styles.css', () => {
+    // 回归：这里曾经返回 status-*，而样式表只定义了 .state-*，导致状态点全部是灰色。
+    // .status-* 是日志表 HTTP 状态码徽标的命名空间，不要与状态点混用。
+    expect(routeStatusDotClass('running')).toBe('state-running');
+    expect(routeStatusDotClass('stopped')).toBe('state-stopped');
+    expect(routeStatusDotClass('warning')).toBe('state-warning');
+    expect(routeStatusDotClass('error')).toBe('state-error');
   });
 
   it('opens relative access pages through active local binding', () => {

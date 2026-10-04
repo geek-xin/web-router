@@ -4,20 +4,20 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'console-button focus-visible:outline-none disabled:pointer-events-none',
+  'btn',
   {
     variants: {
       variant: {
         default: '',
-        primary: 'console-button-primary',
+        primary: 'btn-primary',
         outline: '',
-        ghost: 'console-button-ghost',
-        danger: 'console-button-danger',
+        ghost: 'btn-ghost',
+        danger: 'btn-danger',
       },
       size: {
         default: '',
-        sm: 'console-button-sm',
-        icon: 'console-button-icon',
+        sm: 'btn-sm',
+        icon: 'btn-icon',
       },
     },
     defaultVariants: {

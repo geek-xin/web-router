@@ -3,7 +3,7 @@ import { sparklineGeometry, TRAFFIC_BUCKET_COUNT } from './route-metrics';
 
 interface RouteSparklineProps {
   values?: number[] | null;
-  /** 停用路由：曲线静止并降权，见设计系统 §5.4。 */
+  /** 停用路由：曲线静止并降权，见设计系统 §7.3。 */
   idle?: boolean;
   label?: string;
   className?: string;
@@ -20,18 +20,18 @@ export function RouteSparkline({ values, idle = false, label, className }: Route
   return (
     <svg
       className={['sparkline', idle || !geometry.hasSignal ? 'sparkline-idle' : '', className].filter(Boolean).join(' ')}
-      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+      viewBox={'0 0 ' + WIDTH + ' ' + HEIGHT}
       preserveAspectRatio="none"
       role="img"
       aria-label={label || '最近 30 分钟请求数'}
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.2" />
           <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path className="sparkline-area" d={geometry.area} fill={`url(#${gradientId})`} />
+      <path className="sparkline-area" d={geometry.area} fill={'url(#' + gradientId + ')'} />
       <path className="sparkline-line" d={geometry.line} />
     </svg>
   );
