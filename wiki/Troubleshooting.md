@@ -1,4 +1,31 @@
+<div align="center">
+
 # 常见问题
+
+**按症状找答案**
+
+</div>
+
+---
+
+## 症状速查
+
+| 你看到的 | 先看这里 |
+| --- | --- |
+| 管理后台打不开 / 连接被拒绝 | [服务是否启动](#管理后台打不开) |
+| 路由配好了但请求 404 | [新增路由后没有生效](#新增路由后没有生效) |
+| 上游收到的路径少了前缀 | [前缀路径访问不到](#前缀路径访问不到) |
+| 本地端口连不上 | [本地端口代理访问不到](#本地端口代理访问不到) |
+| 接口返回 200 但提示失败 | [API 返回 HTTP 200 但 success=false](#api-返回-http-200-但-successfalse) |
+| 日志面板是空的 | [请求日志为空](#请求日志为空) |
+| 502 | [本地端口代理返回 502](#本地端口代理返回-502) |
+| 统计数字比预期多 | [统计数字对不上](#统计数字对不上) |
+| 启动报端口占用 | [端口被占用](#端口被占用) |
+| 更新日志 / 检查更新报错 | [GitHub API 限流](#版本抽屉--更新日志显示github-api-限流) |
+| 有新版本但一直没重启 | [自动更新一直没重启](#自动更新一直没重启) |
+| 安装后打不开 | [发布包运行失败](#发布包运行失败) |
+
+---
 
 ## 管理后台打不开
 
@@ -49,7 +76,7 @@ Gateway 会按层级 `StripPrefix`：请求 `/test/hello` 时上游收到 `/hell
 ## API 返回 HTTP 200 但 success=false
 
 这是项目约定。业务异常与参数校验错误返回 HTTP 200，响应体 `success=false`、`code` 为业务码（校验错误为 400）。
-前端据此判断业务成败。
+前端据此判断业务成败，脚本里也应判断 `success` 字段。
 
 ## 请求日志为空
 
@@ -70,12 +97,12 @@ Gateway 会按层级 `StripPrefix`：请求 `/test/hello` 时上游收到 `/hell
 ## 端口被占用
 
 主端口由 `server.port` 决定（默认 `9999`）；本地端口由各路由 `localPort` 决定。
-冲突时先停用占用该绑定的路由，或改用其他端口。前端顶栏展示的 Gateway 地址来自 `frontend/src/lib/app-meta.ts`，改端口时需同步。
+冲突时先停用占用该绑定的路由，或改用其他端口。前端展示的 Gateway 地址来自 `frontend/src/lib/app-meta.ts`，改端口时需同步。
 
 ## 版本抽屉 / 更新日志显示「GitHub API 限流」
 
-未认证的 GitHub API 每小时只有 60 次配额。恢复时间会写在提示里；
-设置环境变量 `WROUTER_GITHUB_TOKEN` 可提升到每小时 5000 次：
+未认证的 GitHub API 每小时只有 60 次配额，恢复时间会写在提示里。
+设置环境变量可提升到每小时 5000 次：
 
 ```bash
 export WROUTER_GITHUB_TOKEN=ghp_xxxxxxxx
@@ -93,4 +120,5 @@ export WROUTER_GITHUB_TOKEN=ghp_xxxxxxxx
 - macOS 首次打开提示「无法验证开发者」时，右键 →「打开」，或在「系统设置 → 隐私与安全性」里允许。
 - Windows SmartScreen 提示时选择「更多信息 → 仍要运行」。
 
-安装与启动方式的完整说明见 [打包与发布](../docs/PACKAGING.md)。
+安装与启动方式的完整说明见
+[打包与发布](https://github.com/geek-xin/web-router/blob/main/docs/PACKAGING.md)。

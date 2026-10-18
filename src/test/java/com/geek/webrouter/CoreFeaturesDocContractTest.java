@@ -232,6 +232,9 @@ class CoreFeaturesDocContractTest {
         assertThat(implementation).contains("CORE-FEATURES.md");
         assertThat(core).contains("./UI-DESIGN-SYSTEM.md");
         assertThat(core).contains("./UI-IMPLEMENTATION.md");
-        assertThat(wikiHome).contains("../docs/CORE-FEATURES.md");
+        // wiki 是独立仓库（web-router.wiki.git），页面里的相对路径 ../docs/... 在 GitHub Wiki 上会失效，
+        // 因此 wiki 一律使用指向仓库的绝对链接；这里只校验「确实引用了核心功能文档」，
+        // 不锁死链接形态，避免为了通过测试而把死链写回去。
+        assertThat(wikiHome).contains("docs/CORE-FEATURES.md");
     }
 }

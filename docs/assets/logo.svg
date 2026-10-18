@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="wrouter">
+  <!-- wrouter 品牌标记：一个分发节点 + 两条出边。16px 变体见 frontend/public/favicon.svg。 -->
+  <rect width="64" height="64" rx="16" fill="#101F33"/>
+  <path d="M17 22 L47 22" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  <path d="M17 22 L32 45" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  <path d="M47 22 L32 45" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="17" cy="22" r="6" fill="#101F33" stroke="#FFFFFF" stroke-width="3"/>
+  <circle cx="47" cy="22" r="6" fill="#101F33" stroke="#8FC1FF" stroke-width="3"/>
+  <circle cx="32" cy="45" r="6" fill="#101F33" stroke="#FFFFFF" stroke-width="3"/>
+</svg>
