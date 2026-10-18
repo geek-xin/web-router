@@ -214,6 +214,20 @@ jobs:
           {
             echo "## wrouter ${v}"
             echo
+            # 版本说明取自 CHANGELOG.md 对应小节：Release 页面的重点应是「这个版本做了什么」，
+            # 而不是一串提交标题。找不到该版本小节时退化为只列提交。
+            if [ -f CHANGELOG.md ] && grep -q "^## \[\?${v}\]\?" CHANGELOG.md; then
+              echo "### 版本说明 / Highlights"
+              echo
+              awk -v ver="${v}" '
+                $0 ~ "^## \\[?" ver "\\]?" { inside = 1; next }
+                inside && /^## \[/ { exit }
+                inside { print }
+              ' CHANGELOG.md | sed -e '/./,$!d' | head -n 40
+              echo
+              echo "完整变更见 [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)。"
+              echo
+            fi
             echo "### 下载 / Downloads"
             echo
             echo "| 方式 | 文件 |"
