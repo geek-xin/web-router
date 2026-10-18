@@ -1,4 +1,4 @@
-import type { AppVersionInfo, AutoUpdateStatus, UpdateCheckResult } from './types';
+import type { AppVersionInfo, AutoUpdateStatus, ReleaseHistory, ReleaseHistoryItem, UpdateCheckResult } from './types';
 
 /** 后端不可用时的兜底版本信息，保证界面不空白。 */
 export function fallbackVersionInfo(version: string, repository: string): AppVersionInfo {
@@ -61,21 +61,176 @@ export function autoUpdateIdleText(status: AutoUpdateStatus | null): string {
   return '当前无代理请求，可安全更新';
 }
 
+/** 发布契约里的五个平台标识 → 展示用的系统名。 */
+const PLATFORM_LABELS: Record<string, string> = {
+  'macos-arm64': 'macOS',
+  'macos-x64': 'macOS',
+  'linux-x64': 'Linux',
+  'linux-arm64': 'Linux',
+  'windows-x64': 'Windows',
+};
+
+const PLATFORM_FAMILIES: Record<string, string> = {
+  macos: 'macOS',
+  darwin: 'macOS',
+  linux: 'Linux',
+  windows: 'Windows',
+};
+
+/**
+ * 平台标签：只展示**系统名**（macOS / Linux / Windows）。
+ *
+ * <p>不展示 CPU 架构：界面上「macOS · Apple Silicon」这类文案过长，
+ * 在版本抽屉与侧栏都会挤占空间，而架构对使用者没有决策价值——
+ * 更新包由后端按 `platform` 标识自动选，不需要用户判断。
+ * 架构仍可通过 `GET /admin/api/version` 的 `platform` 字段（如 `macos-arm64`）取得。</p>
+ *
+ * <p>只有后端确实没上报平台时才回落到「未知平台」；认不出的标识原样显示，不吞掉信息。</p>
+ */
 export function platformLabel(platform: string): string {
-  switch (platform) {
-    case 'macos-arm64':
-      return 'macOS · Apple Silicon';
-    case 'macos-x64':
-      return 'macOS · Intel';
-    case 'linux-x64':
-      return 'Linux · x64';
-    case 'linux-arm64':
-      return 'Linux · ARM64';
-    case 'windows-x64':
-      return 'Windows · x64';
-    default:
-      return '未识别平台';
+  const token = text(platform).toLowerCase();
+  if (!token || token === 'unknown') {
+    return '未知平台';
   }
+  const known = PLATFORM_LABELS[token];
+  if (known) {
+    return known;
+  }
+  // 契约外的 `<family>-<arch>` 组合按前缀识别系统名
+  const separator = token.indexOf('-');
+  if (separator > 0) {
+    const family = PLATFORM_FAMILIES[token.slice(0, separator)];
+    if (family) {
+      return family;
+    }
+  }
+  return token;
+}
+
+/**
+ * 归一化历史版本响应：后端不可用或字段缺失时给出安全默认，界面不空白。
+ * 后端已按版本号倒序返回，这里不重排，只做防御性过滤。
+ */
+export function normalizeReleaseHistory(
+  raw: Partial<ReleaseHistory> | null | undefined,
+  fallbackVersion: string,
+): ReleaseHistory {
+  const releases = Array.isArray(raw?.releases)
+    ? raw!.releases.filter((item): item is ReleaseHistoryItem => Boolean(item && text(item.version)))
+    : [];
+  return {
+    currentVersion: text(raw?.currentVersion) || fallbackVersion,
+    repository: text(raw?.repository),
+    releases,
+    message: text(raw?.message),
+  };
+}
+
+/**
+ * 历史版本列表的说明文案：有数据时说明条数与来源，无数据时说明原因。
+ *
+ * <p>注意「有数据但带 message」这一种：那是后端刷新失败、回落到缓存数据时
+ * 给出的提示（形如「读取最新版本失败，以下为缓存数据：…」）。
+ * 此时**必须把提示显示出来**，否则用户会以为看到的就是最新列表。</p>
+ */
+export function historySummary(history: ReleaseHistory | null): string {
+  if (!history) {
+    return '正在读取历史版本…';
+  }
+  if (history.releases.length === 0) {
+    return history.message || '暂无可用的历史版本';
+  }
+  const suffix = history.repository ? ' · ' + history.repository : '';
+  const summary = '共 ' + history.releases.length + ' 个已发布版本' + suffix;
+  // 有数据时若仍带 message，说明是缓存回落，必须如实标注
+  return history.message ? summary + ' · ' + history.message : summary;
+}
+
+/** 版本发布时间的紧凑格式（YYYY-MM-DD）；空值或非法值返回占位符。 */
+export function formatReleaseDate(publishedAt: string): string {
+  const value = text(publishedAt);
+  if (!value) {
+    return '—';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+}
+
+/** 修订记录预览：折叠态只显示首行，空内容给出占位文案。 */
+export function releaseNotesPreview(notes: string, maxLength = 80): string {
+  const value = text(notes);
+  if (!value) {
+    return '该版本未提供修订记录';
+  }
+  const firstLine = value.split(/\r?\n/).find((line) => text(line)) || value;
+  const cleaned = cleanMarkdownLine(firstLine);
+  return cleaned.length <= maxLength ? cleaned : cleaned.slice(0, maxLength) + '…';
+}
+
+/**
+ * 把 GitHub Release 的 Markdown 说明转成纯文本展示。
+ *
+ * <p>抽屉里没有 Markdown 渲染器，直接展示会露出 `##`、`**`、表格竖线等标记。
+ * 这里只做**展示层**的轻量降噪：保留内容与换行，去掉标记符号，
+ * 表格行转成 ` · ` 分隔的一行，不引入任何依赖，也不改变原始数据。</p>
+ */
+export function formatReleaseNotes(notes: string): string {
+  const value = notes || '';
+  if (!text(value)) {
+    return '该版本未提供修订记录';
+  }
+  const lines = value.split(/\r?\n/);
+  const output: string[] = [];
+  let inFence = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // 代码块围栏本身没有信息量，但块内内容要原样保留
+    if (/^```/.test(trimmed)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) {
+      output.push(line);
+      continue;
+    }
+    // 表格分隔行（| --- | --- |）纯粹是排版标记
+    if (/^\|?[\s:|-]+\|?$/.test(trimmed) && trimmed.includes('-')) {
+      continue;
+    }
+    if (trimmed.startsWith('|')) {
+      const cells = trimmed.split('|').map((cell) => cleanMarkdownLine(cell)).filter((cell) => cell !== '');
+      if (cells.length > 0) {
+        output.push(cells.join(' · '));
+      }
+      continue;
+    }
+    output.push(cleanMarkdownLine(line));
+  }
+  return output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** 去掉单行里的 Markdown 标记，保留可见文字。 */
+function cleanMarkdownLine(line: string): string {
+  let result = line.replace(/\s+$/, '');
+  // 引用块
+  result = result.replace(/^\s*>\s?/, '');
+  // 标题
+  result = result.replace(/^\s*#{1,6}\s*/, '');
+  // 列表项
+  result = result.replace(/^(\s*)[-*+]\s+/, '$1• ');
+  // 图片与链接：保留可读文字
+  result = result.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+  result = result.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // 粗体 / 斜体 / 行内代码 / 删除线
+  result = result.replace(/\*\*([^*]+)\*\*/g, '$1');
+  result = result.replace(/__([^_]+)__/g, '$1');
+  result = result.replace(/`([^`]*)`/g, '$1');
+  result = result.replace(/~~([^~]+)~~/g, '$1');
+  return result.trim();
 }
 
 export function installModeLabel(installMode: string): string {

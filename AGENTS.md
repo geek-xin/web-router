@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-`wrouter` 是一个轻量 Web 路由代理，当前版本 `1.3.0`，基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty、Thymeleaf 挂载页和 React/Vite 管理后台。它通过本地 JSON 文件维护路由配置，支持：
+`wrouter` 是一个轻量 Web 路由代理，当前版本 `1.4.0`，基于 Spring Boot 3.5、Spring Cloud Gateway、Reactor Netty、Thymeleaf 挂载页和 React/Vite 管理后台。它通过本地 JSON 文件维护路由配置，支持：
 
 - 按一个或多个路径前缀转发到目标服务。
 - 为单条路由可选启动独立本地 IP/端口代理。

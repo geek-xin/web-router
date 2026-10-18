@@ -2,20 +2,22 @@
 
 本文记录 `wrouter` 正式发布版本的主要能力和行为变化。
 
-## [未发布] - 2026-09-30
+## [1.4.0] - 2026-10-18
 
 ### 版本定位
 
-- 按新的 wrouter 视觉语言重写管理后台：从浅色 chunky 风格切换为深色开发者网络控制台，并沉淀为可执行的 UI 规范文档与契约测试。
+- 按新的 wrouter 视觉语言重写管理后台：从 chunky 风格切换为「暖纸画布 + 白色操作外壳」的开发者控制台，并沉淀为可执行的 UI 规范文档与契约测试。
 
 ### 管理后台
 
-- 全新应用外壳：208px 侧边栏（导航 / 运行状态 / 系统设置 / 网关运行卡）、56px 顶栏（Gateway 状态胶囊 + 工具入口）、KPI 行（路由总数 / 运行中 / 已停用 / 请求数·分钟 / 平均延迟）。
+- 全新应用外壳：可收起侧边栏（导航 / 运行状态 / 系统设置 / 网关运行卡）、顶栏（搜索 + 主题 + 更新日志 + 头像）、概览带（路由总数 / 运行中 / 已停用 / 请求数·分钟 / 平均延迟）。
+- 主题改为**浅色默认、深色可选**，两套令牌共用语义变量；未显式选择时跟随系统，选择后写入 `localStorage`。
 - 路由列表保持卡片式：每卡包含状态、Path 前缀（超过 3 个折叠为 +N）、Target、本地端口、每分钟请求数、平均延迟与 30 分钟流量 Sparkline；按序号分配强调色，停用卡片降权。
-- 详情抽屉改为 Topology-first：① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，并保留配置 / 日志 / 指标标签页与常驻操作栏。
+- 详情从抽屉改为**占用控制台版面的页内视图**（Topology-first）：① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，并保留配置 / 日志 / 指标标签页与常驻操作栏。
 - 路由拓扑固定表达 `Client → wrouter → 本地端口 → 目标服务`，含流动连线与未命中虚线分支。
 - 新增日志视图（侧边栏进入）：按路由查看实时流、Top 路径、单耗时 Top 与诊断分析。
-- 新增品牌符号（节点 + 连线）、极淡网络背景装饰、状态点呼吸与抽屉滑入动效，并遵循 `prefers-reduced-motion`。
+- 新增品牌符号（节点 + 连线）、状态点呼吸与抽屉滑入动效，并遵循 `prefers-reduced-motion`；删除背景网络装饰，分层只由 Paper Shell 承担。
+- 下拉筛选改用 Radix Select，展开列表与触发框共用同一套令牌（原生 `<select>` 的弹层由系统绘制，无法跟随深浅主题）。
 - 工具栏改为搜索 + 状态筛选 + 排序（最近创建 / 名称 / 流量 / 延迟）+ 导出 / 导入 / 新增。
 
 ### 流量指标
@@ -30,7 +32,8 @@
 - 新增 `docs/CORE-FEATURES.md`：核心功能的权威说明，覆盖数据模型、路由配置管理、Gateway 动态转发、本地端口代理、请求观测与流量指标、管理 API、校验规则、关键不变量与已知边界。
 - 新增 `docs/UI-DESIGN-SYSTEM.md`（色彩、排版、布局、组件、动效、拓扑、验收清单）与 `docs/UI-IMPLEMENTATION.md`（规范到文件、类名与数据契约的映射）。
 - 新增 `CoreFeaturesDocContractTest`，校验核心功能文档中的阈值、接口路径、错误码与实现保持一致，并强制文档互链。
-- 清理 `docs/` 下旧设计稿与旧截图，README 更新为新控制台截图与视觉语言说明。
+- 清理 `docs/` 下旧设计稿与旧截图，README 按主流仓库结构重写（徽章、特性表、截图、下载矩阵、快速开始、文档导航、贡献与许可）。
+- 新增 `LICENSE`（MIT）并在 README 标注。
 - 新增 `AdminUiContractTest`，把设计系统与实现映射中的关键契约固化为断言，替换原 chunky 风格断言测试。
 - 前端新增 `route-metrics` 模块与单测，覆盖指标格式化、Sparkline 几何与日志兜底序列。
 
@@ -38,7 +41,7 @@
 
 - 新增 `scripts/build-package.sh`：按类型产出单平台产物——`jar`（JAR 分发包）、`app-image`（jpackage 免安装镜像）、`installer`（macOS `dmg` / Linux `deb`+`rpm` / Windows `exe`），内置运行时无需目标机安装 JDK。
 - 新增 `scripts/build-release.sh`：编排全部类型并按契约命名发布到 `target/release/`，同时产出 `SHA256SUMS.txt` 与 `release-manifest.txt`；任一资产名不符合契约即失败退出。
-- 新增 `.github/workflows/release.yml`：tag `v*` 或手动触发后，在 macos-14 / macos-13 / ubuntu-latest / windows-latest 矩阵上并行构建，汇总为 GitHub Release。
+- 新增 `.github/workflows/release.yml`：tag `v*` 或手动触发后，在 macos-14 / macos-15-intel / ubuntu-latest / windows-latest 矩阵上并行构建，汇总为 GitHub Release。
 - 资产命名契约由 `ReleaseAssets` 统一实现，打包脚本与 CI 必须与之一致：`wrouter-<version>-jar.zip`、`wrouter-<version>-<platform>-app.zip`（Linux 为 `-app.tar.gz`）、`wrouter-<version>-<platform>.dmg|deb|rpm|exe`。
 - 应用根目录改由 `AppHomeResolver` 解析（`wrouter.home` → `WROUTER_HOME` → `user.dir`），app-image 启动参数固定 `-Dwrouter.home=$APPDIR`；传统 JAR 形态仍默认取启动工作目录，原有部署方式不变。
 
@@ -48,7 +51,20 @@
 - 新增 `GET /admin/api/update/check`：查询 GitHub Release，按更新通道过滤草稿/预发布，按命名契约选包；任何异常都写进 `message`，接口本身始终 `success=true`。
 - 新增 `POST /admin/api/update/apply`：下载 → 校验 SHA-256 → 生成平台更新脚本到 `updates/` → 约 2 秒后退出；不可更新时抛 `BusinessException`，摘要不一致时删除已下载文件。
 - 新增 `UpdateScriptGenerator`：生成 `updates/apply-update.sh`（类 Unix）与 `apply-update.bat`（Windows），等待旧进程退出 → 备份到 `updates/backup-<旧版本>/` → 解压替换 → 重启，任一步失败自动回滚并写 `updates/update.log`。
-- 管理后台新增「版本与更新」抽屉：侧边栏与顶栏常驻显示版本号，抽屉展示构建时间/平台/安装方式/更新通道，支持检查更新与一键更新。
+- 管理后台新增「版本与更新」抽屉：侧边栏运行卡常驻显示版本号，抽屉展示构建时间/平台/安装方式/更新通道，支持检查更新与一键更新。
+
+### 资源加载与缓存
+
+- 入口页（`/admin`、`/`）改为 `no-store`，静态资源按内容哈希生成版本串（`AssetVersionResolver`），彻底消除「改了但看不到」。
+- 新增 `AdminCacheControlFilter` 与对应测试。
+
+### 更新日志入口
+
+- 顶栏铃铛由纯装饰改为**更新日志面板**：展示最新发布版本的修订内容（版本号、日期、当前/预览徽标、展开全文与 GitHub 跳转），回答「最新一版改了什么」。
+- 数据复用 `GET /admin/api/update/history`，只读、不触发下载或重启；「查看全部版本与更新」跳转版本抽屉。
+- 新增未读点：最新版本比上次看过的版本新才亮，已读标记存 `localStorage` 键 `wrouter.changelog.seen`，无记录时以当前运行版本为基线。
+- 新增 `ChangelogBell` 组件与 `changelog-utils` 纯函数层（归一化、版本比较、未读判定、已读读写），并补 10 个单测。
+- 新增 `GET /admin/api/update/history` 的消费端契约测试；顶栏不再保留静态「通知」按钮。
 
 ### 文档与测试（打包）
 

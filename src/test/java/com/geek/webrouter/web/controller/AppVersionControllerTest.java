@@ -10,6 +10,7 @@ import com.geek.webrouter.web.service.InFlightRequestTracker;
 import com.geek.webrouter.web.service.ReleaseClient;
 import com.geek.webrouter.web.service.impl.AppVersionServiceImpl;
 import com.geek.webrouter.web.service.impl.UpdateServiceImpl;
+import com.geek.webrouter.web.support.RuntimePlatform;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.MediaType;
@@ -65,9 +66,52 @@ class AppVersionControllerTest {
                 .expectBody()
                 .jsonPath("$.success").isEqualTo(true)
                 .jsonPath("$.data.version").isEqualTo("unknown")
-                .jsonPath("$.data.platform").isEqualTo("unknown")
+                // 平台即使缺失也要按运行期 JVM 推导，不能显示「未识别平台」
+                .jsonPath("$.data.platform").isEqualTo(RuntimePlatform.currentToken())
                 .jsonPath("$.data.installMode").isEqualTo("jar")
                 .jsonPath("$.data.updateSupported").isEqualTo(true);
+    }
+
+    @Test
+    void historyEndpointListsReleasesWithNotesAndMarksTheCurrentOne() {
+        WebTestClient client = client(properties("1.3.0", "jar", "macos-arm64"),
+                new FakeReleaseClient(List.of(
+                        new ReleaseInfo("v1.4.0", "wrouter v1.4.0", "新增历史版本视图", "2026-10-01T00:00:00Z",
+                                "https://example.test/releases/v1.4.0", false, false, List.of()),
+                        new ReleaseInfo("v1.3.0", "wrouter v1.3.0", "修复若干问题", "2026-09-30T15:56:37Z",
+                                "https://example.test/releases/v1.3.0", false, false, List.of()))));
+
+        client.get()
+                .uri("/admin/api/update/history")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.data.currentVersion").isEqualTo("1.3.0")
+                .jsonPath("$.data.repository").isEqualTo("geek-xin/web-router")
+                .jsonPath("$.data.message").isEqualTo("")
+                .jsonPath("$.data.releases[0].version").isEqualTo("1.4.0")
+                .jsonPath("$.data.releases[0].notes").isEqualTo("新增历史版本视图")
+                .jsonPath("$.data.releases[0].current").isEqualTo(false)
+                .jsonPath("$.data.releases[1].version").isEqualTo("1.3.0")
+                .jsonPath("$.data.releases[1].current").isEqualTo(true);
+    }
+
+    /** 历史版本接口与检查更新一样：任何异常都不许冒泡，接口本身始终成功。 */
+    @Test
+    void historyEndpointStaysSuccessfulWhenGitHubIsUnavailable() {
+        WebTestClient client = client(properties("1.3.0", "jar", "macos-arm64"),
+                new FakeReleaseClient(new IOException("Connection reset")));
+
+        client.get()
+                .uri("/admin/api/update/history")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.data.releases").isEmpty()
+                .jsonPath("$.data.message").value(String.class,
+                        message -> org.assertj.core.api.Assertions.assertThat(message).contains("读取历史版本失败"));
     }
 
     @Test

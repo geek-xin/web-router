@@ -256,6 +256,17 @@ app.repository=geek-xin/web-router
 
 资源缺失时全部降级为安全默认（`version=unknown`、`installMode=jar` 等），接口不报错。
 
+**平台兜底**：`app.platform` 只在打包脚本显式传 `-Dwrouter.platform=...` 时才有值；
+直接 `mvn package` / `spring-boot:run` 的产物该字段为空。此时 `AppVersionServiceImpl.resolvePlatform()`
+会调用 `RuntimePlatform.currentToken()`，按 JVM 的 `os.name` / `os.arch` 推导出平台标识
+（如 `macos-arm64`），因此管理后台的「运行平台」不会显示成「未识别平台」。
+
+- 构建元信息里已是受支持标识时**优先采用**，发布契约不被运行期推导改写。
+- 推导结果必须落在 `ReleaseAssets.platformToken()` 认可的五个标识内，否则回落到 `unknown`；
+  jar 形态与平台无关，`updateSupported` 仍为 `true`。
+- 判定 macOS 必须先于 Windows：`"darwin"` 含子串 `"win"`，顺序反了会把 macOS 认成 Windows
+  （既显示错平台，也会为 Darwin 生成 `.bat` 更新脚本）。`UpdatePlatform.current()` 同一顺序约束。
+
 ### 无感自动更新
 
 **默认开启**，客户不需要点任何按钮。分三阶段，只有最后一阶段会短暂中断服务：
@@ -296,7 +307,35 @@ app.repository=geek-xin/web-router
 | `GET /admin/api/version` | 当前版本、构建时间、平台、安装形态、是否支持自更新、通道、仓库 |
 | `GET /admin/api/update/check` | 查 GitHub Release、比对版本、按安装形态与平台选包；**永远返回 success=true**，异常写进 `message` |
 | `GET /admin/api/update/auto` | 自动更新状态：开关、在途请求数、空闲判定、待应用版本 |
+| `GET /admin/api/update/history` | 历史版本与修订记录：列出全部已发布版本（含预发布与当前版本），按版本号倒序；**永远返回 success=true**，失败时列表为空并把原因写进 `message`；有缓存可回落时列表非空、`message` 标注为缓存数据 |
 | `POST /admin/api/update/apply` | 手动一键更新：下载资产 → 校验 sha256 → 生成脚本 → 约 2 秒后退出并重启 |
+
+`history` 与 `check` 的分工：`check` 只回答「有没有比当前更新的版本」，会过滤草稿、按通道过滤预发布、
+只保留比当前新的版本；`history` 回答「每个版本改了什么」，保留草稿之外的**全部**已发布版本。
+历史查询结果按仓库缓存 60 秒（GitHub 未认证限流为每小时 60 次，避免反复打开抽屉把额度耗尽）；
+**失败不写缓存**，网络恢复后下一次请求立即重试。
+
+**缓存过期但刷新失败时回落到旧数据**，而不是清空列表。旧实现直接返回 `null`，
+于是「几秒前还能看到版本列表，一次网络抖动就变成空列表 + 报错」。
+GitHub 是外部依赖，抖动属正常现象，此时给用户看稍旧的版本列表远好于什么都不给——
+但必须**如实标注**：`message` 会写明「读取最新版本失败，以下为缓存数据：<原因>」，
+前端在有数据时也会把这句提示显示出来。只有「从没成功过」时才真正返回空列表 + 失败原因。
+
+#### 阻塞调用必须离开事件循环
+
+本应用是 WebFlux（Reactor Netty），**事件循环线程数 = CPU 核数**（本机 12 个）。
+`HttpReleaseClient` 用的是阻塞式 `HttpClient.send()`，因此：
+
+- `AppVersionController` 的 `/update/check`、`/update/history`、`/update/apply`
+  必须通过 `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())` 执行，
+  事件循环只负责编排。与 `DynamicRouteService` / `LocalPortProxyService` 的处理方式一致。
+- 直接在控制器里调用会占满事件循环：实测 12 个并发阻塞调用会让纯内存接口
+  `/admin/api/version` 的响应从 0.9ms 恶化到 **537ms**，网络抖动时直接抛
+  `ConnectException`，在界面上表现为「读取历史版本失败」。
+- `HttpReleaseClient` 对 `IOException`（连接层故障）做最多 3 次退避重试（300ms → 600ms）；
+  HTTP 状态码错误（403/404 等）是确定性结果，不重试，以免浪费 GitHub 配额。
+- 异常描述统一走 `HttpReleaseClient.describe()` 拼接异常链：`ConnectException` 自带的
+  `message` 常为 `null`，只打类名会丢掉根因。
 
 选包规则（与 `ReleaseAssets`、打包脚本三方一致）：
 
@@ -316,6 +355,25 @@ app.repository=geek-xin/web-router
 
 源码 `frontend/src/**`；视觉规范见 [UI 设计系统](UI-DESIGN-SYSTEM.md)。
 
+### 静态资源缓存策略
+
+入口页 `/admin` 引用带 `?v=<构建标记>` 的 `app.js` / `app.css`，
+因此**入口页本身绝不能被缓存**——一旦缓存，服务端即使更新了产物，
+浏览器仍会按旧的 `?v=` 取旧文件，表现为「修好的问题刷新后依然存在」。
+`AdminCacheControlFilter` 统一设置响应头：
+
+| 路径 | Cache-Control | 理由 |
+| --- | --- | --- |
+| `/admin`、`/admin/`、`/` | `no-store, must-revalidate` + `Pragma: no-cache` | 它决定用哪个版本的产物 |
+| `/admin/assets/**?v=…` | `public, max-age=31536000, immutable` | 文件名固定、靠查询串失效，可安全长缓存 |
+| `/admin/assets/**`（无 `?v=`） | `public, max-age=300, must-revalidate` | 短缓存并回源校验 |
+| 其它（含 `/admin/api/**`） | 不改写 | 业务响应自行决定 |
+
+版本串 `?v=` **不再手写**，由 `AssetVersionResolver` 对 `app.css` + `app.js` 内容取
+SHA-256 前 8 位算出，渲染入口页时注入。手工维护版本串有两个真实故障：忘记提升，
+以及更隐蔽的**复用已用过的版本串**——浏览器缓存里已有该 URL 的旧响应，新产物永远取不到，
+表现为「改了但看不到」。改为内容派生后，内容一变版本串必变，人工步骤被消除。
+
 ### 数据来源
 
 | 界面数据 | 来源 | 刷新 |
@@ -323,8 +381,9 @@ app.repository=geek-xin/web-router
 | 路由列表 | `GET /admin/api/routes` | 载入 + 写操作后 |
 | 卡片指标 | `GET /admin/api/proxy-logs/metrics` | 载入 + 每 5 秒 |
 | 网关状态 | `GET /actuator/health` | 载入 |
-| 详情抽屉 | `/routes/{id}/raw`、`/proxy-logs/routes/{id}` | 打开时 |
-| 版本与更新 | `/admin/api/version`、`/update/check`、`/update/auto` | 打开版本抽屉时（自动更新状态每 3 秒） |
+| 路由详情（页内） | `/routes/{id}/raw`、`/proxy-logs/routes/{id}` | 打开时 |
+| 版本与更新 | `/admin/api/version`、`/update/check`、`/update/auto`、`/update/history` | 打开版本抽屉时（自动更新状态每 3 秒；历史版本可手动刷新） |
+| 更新日志铃铛 | `/admin/api/update/history` | 顶栏挂载时静默一次；面板内可刷新 |
 | 日志视图 | `/admin/api/proxy-logs`（全部）或 `/proxy-logs/routes/{id}`（单路由） | 载入 + 实时流 / 轮询 |
 
 ### 核心界面
@@ -334,7 +393,11 @@ app.repository=geek-xin/web-router
 - **两种展示形式**（可切换，选择会被记住）：
   - **卡片视图**（默认）：每卡含状态、Path 标签、Target、本地端口、请求数·分钟、平均延迟、30 分钟 Sparkline。
   - **列表视图**：同样字段压成一行，带列头，适合一次浏览大量路由。
-- **详情抽屉**：① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，另有配置 / 日志 / 指标标签页。
+- **路由详情**：占用控制台版面（非抽屉/模态），① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，另有配置 / 日志 / 指标标签页。
+- **更新日志铃铛**（顶栏）：只读展示最新发布版本的修订内容，回答「最新一版改了什么」。
+  - 数据来自 `/admin/api/update/history`，与版本抽屉同源，但**不触发下载、不参与自动更新决策**。
+  - 红点表示「有未读的新版本日志」：最新版本比上次看过的版本新才亮，无记录时基线是当前运行版本。
+  - 已读标记存 `localStorage` 键 `wrouter.changelog.seen`；点开面板即推进，点击「查看全部版本与更新」进入版本抽屉。
 - **日志视图**：实时流、Top 路径、单耗时 Top、诊断分析。
   - **默认展示全部路由的聚合日志**，不需要先选一条路由。
   - 顶部下拉可按路由收窄；选项为「全部路由（聚合所有日志）」+ 各条路由。
@@ -408,6 +471,7 @@ app.repository=geek-xin/web-router
 | GET | `/admin/api/version` |
 | GET | `/admin/api/update/check` |
 | GET | `/admin/api/update/auto` |
+| GET | `/admin/api/update/history` |
 | POST | `/admin/api/update/apply` |
 
 ### 运维

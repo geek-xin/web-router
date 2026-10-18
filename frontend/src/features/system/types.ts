@@ -26,6 +26,25 @@ export interface UpdateCheckResult {
   message: string;
 }
 
+/** 与后端 ReleaseHistoryItem 对应：一条历史版本。 */
+export interface ReleaseHistoryItem {
+  version: string;
+  name: string;
+  publishedAt: string;
+  releaseUrl: string;
+  prerelease: boolean;
+  current: boolean;
+  notes: string;
+}
+
+/** 与后端 ReleaseHistory 对应。 */
+export interface ReleaseHistory {
+  currentVersion: string;
+  repository: string;
+  releases: ReleaseHistoryItem[];
+  message: string;
+}
+
 /** 与后端 AutoUpdateStatus 对应。 */
 export interface AutoUpdateStatus {
   autoEnabled: boolean;

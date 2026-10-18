@@ -19,7 +19,7 @@
 | `frontend/src/features/routes/RouteCard.tsx` | 卡片视图 |
 | `frontend/src/features/routes/RouteList.tsx` | 列表视图（与卡片共享数据与 Accent） |
 | `frontend/src/features/routes/RouteToolbar.tsx` | 筛选 / 排序 / 视图切换 / 导入导出 / 新增 |
-| `frontend/src/features/routes/RouteDetailDrawer.tsx` | Topology-first 详情抽屉 |
+| `frontend/src/features/routes/RouteDetailView.tsx` | Topology-first 路由详情（占用控制台版面，非抽屉） |
 | `frontend/src/features/routes/RouteTopology.tsx` | 拓扑图（Client → wrouter → 端口 → 目标） |
 | `frontend/src/features/routes/RouteSparkline.tsx` | 卡片/列表共用的迷你流量曲线 |
 | `frontend/src/features/routes/RouteFormDialog.tsx` | 新增/编辑/拷贝路由表单（`RouteFormDialog` + 可复用 `RouteFormPanel`） |
@@ -30,6 +30,8 @@
 | `frontend/src/features/logs/RouteLogDialog.tsx` | 日志面板（`RouteLogPanel`）+ 请求详情抽屉 |
 | `frontend/src/features/logs/log-utils.ts` | 日志归并、Top 排序、快照归一 |
 | `frontend/src/features/system/VersionDialog.tsx` | 版本与自动更新抽屉 |
+| `frontend/src/features/system/ChangelogBell.tsx` | 顶栏「更新日志」铃铛：只读面板、未读点、展开修订记录 |
+| `frontend/src/features/system/changelog-utils.ts` | 更新日志归一化、版本比较、未读判定与已读标记读写 |
 | `frontend/src/features/system/version-utils.ts` | 平台/安装方式文案、构建时间与体积格式化、更新可用性判定 |
 | `frontend/src/lib/app-meta.ts` | 版本号兜底、Gateway 地址、仓库名、流量窗口 |
 | `src/main/resources/templates/index.html` | Thymeleaf 挂载页 + 资源版本号 |
@@ -105,7 +107,7 @@
 `.sidebar-footer` · `.sidebar-toggle` · `.sidebar-toggle-label` ·
 `.side-section` · `.side-section-status` · `.side-label` · `.side-spacer` ·
 `.nav-item` · `.nav-item-active` · `.nav-icon` · `.nav-text` · `.nav-count` ·
-`.status-panel` · `.status-panel-head` · `.status-panel-title` · `.status-panel-address` · `.status-panel-meta` · `.status-panel-paths`
+`.status-panel` · `.status-panel-head` · `.status-panel-title` · `.status-panel-address` · `.status-panel-meta` · `.status-panel-version` · `.status-panel-platform` · `.status-panel-paths`
 
 收起态由 `.app-shell-collapsed` 承担（覆盖 `--sidebar-width` 为 76px 并隐藏文案）；
 侧栏项在收起态必须带 `title`，`.sidebar-toggle` 必须带 `aria-label` + `aria-expanded`。
@@ -122,8 +124,9 @@
 
 `.app-topbar` · `.topbar-heading` · `.topbar-title` · `.topbar-subtitle` · `.topbar-actions` ·
 `.topbar-search` · `.topbar-search-icon` · `.topbar-search-key` ·
-`.state-pill` · `.state-pill-address` · `.version-pill` ·
-`.icon-button` · `.icon-button-dot` · `.topbar-avatar`
+
+`.icon-button` · `.icon-button-dot` · `.icon-button-sm` · `.topbar-avatar` ·
+`.changelog-bell`（铃铛容器，见 3.14）
 
 ### 3.5 概览带
 
@@ -143,7 +146,9 @@
 
 ### 3.7 控件
 
-`.field-input` · `.field-select` ·
+`.field-input` · `.field-select`（原生，仅兜底；界面下拉一律用 Radix Select）·
+`.select-trigger` · `.select-value` · `.select-hint` · `.select-placeholder` · `.select-caret` ·
+`.select-content` · `.select-viewport` · `.select-item` · `.select-item-text` · `.select-item-label` · `.select-item-hint` · `.select-item-check` ·
 `.btn` · `.btn-primary` · `.btn-danger` · `.btn-ghost` · `.btn-sm` · `.btn-icon` ·
 `.chip` · `.chip-accent` · `.chip-success` · `.chip-warning` · `.chip-danger`
 
@@ -158,13 +163,28 @@
 `.accent-blue` · `.accent-cyan` · `.accent-purple` · `.accent-orange` · `.accent-green` · `.accent-slate` ·
 `.sparkline` · `.sparkline-line` · `.sparkline-area` · `.sparkline-idle`
 
+> **操作行必须容纳 6 个按钮**（查看/日志/拷贝/访问/停用/删除，合计约 325px）。
+> 4 列布局（≥1720px）时卡片内容区仅约 307px，因此 `.route-card-actions` 必须保留 `flex-wrap: wrap`，
+> 否则删除按钮会溢出卡片外（历史缺陷）。
+
 ### 3.9 路由列表
 
 `.route-list` · `.route-list-head` · `.route-list-head-cell` · `.route-list-row` · `.route-list-row-selected` · `.route-list-row-muted` ·
-`.route-list-main` · `.route-list-name` · `.route-list-desc` · `.route-list-paths` · `.route-list-targets` · `.route-list-port` ·
+`.route-list-main` · `.route-list-name` · `.route-list-desc` · `.route-list-targets` · `.route-list-port` ·
 `.route-list-metrics` · `.route-list-num` · `.route-list-stacked-label` · `.route-list-spark` · `.route-list-actions`
 
+> **操作列按内容撑开**：列定义用 `minmax(250px, max-content)`，不要写死 `250px`。
+> 6 个按钮约 325px，写死会让 `justify-content: flex-end` 的溢出向左盖到曲线列
+> （历史缺陷：曲线与「查看/日志」文字重叠）。
+
 ### 3.10 抽屉、拓扑与弹窗
+
+**底部操作栏状态机**（`RouteDetailView.tsx`，设计系统 §6.9）：`editing = tab === 'config'`。
+`editing` 为假时最左侧是 `编辑`（点击 `setTab('config')`）；为真时该按钮被 `保存` 替换
+（`type="submit"` + `form={DETAIL_FORM_ID}`，提交 `RouteFormPanel`）。**默认进入详情停在「概览」标签页，所以看不到「保存」。**
+配置表单用 `showActions={false}` 关闭自带按钮，保证保存入口唯一；文案固定为 `保存` / `保存中…`。
+
+> 详情已从抽屉改为**页内视图**：类名见 §3.12。`.drawer-*` 现仅由日志面板（`RouteLogDialog`）与版本抽屉使用。
 
 `.drawer-scrim` · `.drawer` · `.drawer-head` · `.drawer-title-row` · `.drawer-title` · `.drawer-file` · `.drawer-paths` ·
 `.drawer-tabs` · `.drawer-tab` · `.drawer-body` · `.drawer-actions` ·
@@ -173,7 +193,7 @@
 `.topology` · `.topology-node` · `.topology-node-client` · `.topology-node-gateway` · `.topology-node-port` · `.topology-node-target` ·
 `.topology-node-icon` · `.topology-node-body` ·
 `.topology-node-kicker` · `.topology-node-value` · `.topology-node-note` ·
-`.topology-link` · `.topology-link-flow` · `.topology-link-idle` · `.topology-fallback` · `.topology-fallback-label` · `.topology-fallback-value` ·
+`.topology-link` · `.topology-link-active` · `.topology-link-svg` · `.topology-link-svg-v` · `.topology-link-svg-h` · `.topology-link-base` · `.topology-link-flow` · `.topology-link-arrow` · `.topology-link-arrow-down` · `.topology-link-arrow-right` · `.topology-flow-live` · `.topology-flow-error` · `.topology-flow-idle` · `.topology-fallback` · `.topology-fallback-label` · `.topology-fallback-value` ·
 `.overlay` · `.modal` · `.modal-title` · `.modal-description` · `.modal-close` · `.modal-actions` ·
 `.form-grid` · `.form-field` · `.form-label` · `.form-hint` · `.required-mark` · `.alert-error` · `.prefix-editor` · `.prefix-remove`
 
@@ -183,7 +203,45 @@
 `.method-badge` + `.method-get` · `.method-post` · `.method-put` · `.method-delete` · `.method-other` ·
 `.status-badge` + `.status-2xx` · `.status-3xx` · `.status-4xx` · `.status-5xx` · `.status-none`
 
-### 3.12 空态、骨架、滚动与轻提示
+### 3.12 路由详情（页内视图）
+
+`.route-detail-view` · `.detail-head` · `.detail-back` · `.detail-heading` · `.detail-title` · `.detail-meta` ·
+`.detail-file` · `.detail-paths` · `.detail-actions` · `.detail-body` · `.detail-overview` · `.detail-span-2` ·
+`.detail-metric-row` · `.detail-metric` · `.detail-metric-icon` · `.detail-metric-body` · `.detail-metric-value` · `.detail-spark`
+
+- 详情**占用控制台版面**（`.surface-panel` + `.route-detail-view`），不是覆盖式抽屉：没有 `.drawer-scrim`，也没有 `aria-modal`。
+- `.detail-overview` 两列栅格；`.detail-span-2` 让拓扑与最近日志通栏；≤1100px 退化为单列。
+- `.detail-body` 是详情内唯一滚动区（与 `.panel-scroll` 同约定：`flex:1; min-height:0; overflow-y:auto`）。
+- 操作栏 `.detail-actions` 常驻底部：最左侧按状态在 `编辑`/`保存` 间切换，`删除` 用 `margin-left:auto` 推右。
+- `.detail-overview .topology` 在宽屏下横向四列铺开，比抽屉里的纵向链路更贴合真实拓扑。
+
+### 3.13 历史版本与修订记录
+
+`.release-history` · `.release-history-row` · `.release-history-row-current` · `.release-history-head` ·
+`.release-history-version` · `.release-history-date` · `.release-history-chevron` · `.release-history-chevron-open` ·
+`.release-history-preview` · `.release-history-notes` · `.release-history-link`
+
+- 折叠态显示 `releaseNotesPreview()` 的首行摘要，展开态显示完整修订记录（`.release-history-notes` 等宽、可滚）。
+- `-row-current` 用强调边框与强调底标出当前运行版本，与 `chip-accent` 的「当前」徽标双重表达，不靠颜色单一维度。
+- `.release-history-chevron-open` 旋转 180°，与 `aria-expanded` 同步。
+
+### 3.14 更新日志铃铛
+
+`.changelog-bell` · `.changelog-pop` · `.changelog-pop-head` · `.changelog-pop-heading` · `.changelog-pop-title` · `.changelog-pop-sub` ·
+`.changelog-list` · `.changelog-item` · `.changelog-item-current` · `.changelog-item-head` ·
+`.changelog-version` · `.changelog-date` · `.changelog-chevron` · `.changelog-chevron-open` ·
+`.changelog-preview` · `.changelog-notes` · `.changelog-link` ·
+`.changelog-pop-error` · `.changelog-pop-empty` · `.changelog-pop-foot` · `.changelog-pop-link`
+
+- 组件：`features/system/ChangelogBell.tsx`；纯函数与未读判定在 `features/system/changelog-utils.ts`。
+- 数据：`GET /admin/api/update/history`；挂载即静默拉一次，面板内可刷新，**不触发下载/重启**。
+- 未读点复用 `.icon-button-dot`（红点），判定见 `hasUnreadChangelog()`：
+  最新版本比「上次看过的版本」新才亮，无记录时基线是当前运行版本。
+- 已读标记存 `localStorage` 键 `wrouter.changelog.seen`（`CHANGELOG_SEEN_STORAGE_KEY`），打开面板即推进。
+- 弹层 `z-index: 70`，高于抽屉（40/50）与下拉（60）；点击外部或 `Esc` 关闭。
+- 默认最多 4 条（`CHANGELOG_VISIBLE_LIMIT`），完整历史仍在版本抽屉（见 3.13）。
+
+### 3.15 空态、骨架、滚动与轻提示
 
 `.empty-state` · `.empty-title` · `.empty-copy` · `.skeleton` · `.scroll-area` · `[data-sonner-toast]`
 
@@ -263,7 +321,8 @@
 | 构建命令 | `npm run build`（= `npm run typecheck` + `vite build`） |
 | 类型检查 | `tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit` |
 | 产物 | `src/main/resources/static/admin/assets/app.js` / `app.css`（固定文件名，需提交） |
-| 缓存失效 | `src/main/resources/templates/index.html` 里的 `?v=` 查询串 |
+| 缓存失效 | 由 `AssetVersionResolver` 按产物内容算出并注入 `?v=`；**不再手写**，改完产物无需人工提升 |
+| 缓存头 | `AdminCacheControlFilter`：入口页 `no-store`、版本化资源 `immutable`；**入口页被缓存会导致改动看不到** |
 | 样式分层 | `@tailwind base` / `@tailwind components` 在文件顶部，**`@tailwind utilities` 在文件末尾** |
 
 > **为什么 utilities 必须在末尾**：组件类与 Tailwind 工具类特异性相同（都是单类），

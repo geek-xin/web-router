@@ -4,6 +4,7 @@ import com.geek.webrouter.common.exception.GlobalExceptionHandler;
 import com.geek.webrouter.config.DynamicRouteService;
 import com.geek.webrouter.web.model.entity.RouteConfig;
 import com.geek.webrouter.web.service.RouteConfigService;
+import com.geek.webrouter.web.support.AssetVersionResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -24,7 +25,7 @@ class RouteConfigControllerTest {
         route.setId("route-a");
         routeConfigService.exportRoutes = List.of(route);
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        routeConfigService, new NoopDynamicRouteService()))
+                        routeConfigService, new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -47,7 +48,7 @@ class RouteConfigControllerTest {
         routeConfigService.importedRoutes = List.of(routeConfig("orders", 19091));
         NoopDynamicRouteService dynamicRouteService = new NoopDynamicRouteService();
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        routeConfigService, dynamicRouteService))
+                        routeConfigService, dynamicRouteService, new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -83,7 +84,7 @@ class RouteConfigControllerTest {
     @Test
     void createReturnsValidationMessageWhenTargetUrlHasNoPort() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                        new NoopRouteConfigService(), new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -112,7 +113,7 @@ class RouteConfigControllerTest {
     @Test
     void createReturnsValidationMessageWhenLocalPortMissing() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                        new NoopRouteConfigService(), new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -141,7 +142,7 @@ class RouteConfigControllerTest {
     @Test
     void createReturnsValidationMessageWhenProxyAddressHasNoPort() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                        new NoopRouteConfigService(), new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -171,7 +172,7 @@ class RouteConfigControllerTest {
     @Test
     void createReturnsValidationMessageWhenPathPrefixHasNoProxyAddress() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                        new NoopRouteConfigService(), new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -201,7 +202,7 @@ class RouteConfigControllerTest {
     @Test
     void createAllowsMissingPathPrefixes() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                        new NoopRouteConfigService(), new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();
@@ -228,7 +229,7 @@ class RouteConfigControllerTest {
     @Test
     void createReturnsValidationMessageWhenRouteNameTooLong() {
         WebTestClient client = WebTestClient.bindToController(new RouteConfigController(
-                        new NoopRouteConfigService(), new NoopDynamicRouteService()))
+                        new NoopRouteConfigService(), new NoopDynamicRouteService(), new AssetVersionResolver()))
                 .controllerAdvice(new GlobalExceptionHandler())
                 .validator(validator())
                 .build();

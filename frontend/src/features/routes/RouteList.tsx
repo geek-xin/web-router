@@ -14,7 +14,6 @@ import {
   routeBehaviorSummary,
   routeStatusDotClass,
   routeStatusText,
-  visiblePathPrefixes,
 } from './route-utils';
 import { RouteSparkline } from './RouteSparkline';
 import { cn } from '@/lib/utils';
@@ -43,7 +42,6 @@ export function RouteList({ routes, metricsById, selectedIds, onSelectedChange, 
     <div className="route-list" role="list" aria-label="路由列表视图">
       <div className="route-list-head" role="presentation">
         <span className="route-list-head-cell">路由</span>
-        <span className="route-list-head-cell">Path</span>
         <span className="route-list-head-cell">Target / 本地端口</span>
         <span className="route-list-head-cell">请求 / min</span>
         <span className="route-list-head-cell">延迟</span>
@@ -53,7 +51,6 @@ export function RouteList({ routes, metricsById, selectedIds, onSelectedChange, 
 
       {routes.map((route, index) => {
         const prefixes = effectivePathPrefixes(route);
-        const { chips, more } = visiblePathPrefixes(prefixes);
         const metrics = metricsById[route.id];
         const status = deriveRouteStatus(route, metrics);
         const binding = activeLocalBinding(route);
@@ -84,13 +81,6 @@ export function RouteList({ routes, metricsById, selectedIds, onSelectedChange, 
                   {routeStatusText(status)} · {routeBehaviorSummary(route)}
                 </span>
               </span>
-            </span>
-
-            <span className="route-list-paths">
-              {chips.length === 0
-                ? <span className="route-prefix-chip">全部兜底</span>
-                : chips.map((prefix) => <span key={prefix} className="route-prefix-chip">{prefix}</span>)}
-              {more > 0 && <span className="route-prefix-chip route-prefix-chip-more">+{more}</span>}
             </span>
 
             <span className="route-list-targets">

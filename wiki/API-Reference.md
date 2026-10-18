@@ -29,7 +29,7 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/` | 重定向到 `/admin` |
-| `GET` | `/admin` | 管理后台页面 |
+| `GET` | `/admin` | 管理后台页面（入口页不缓存） |
 
 ## 路由配置
 
@@ -37,7 +37,7 @@
 | --- | --- | --- |
 | `GET` | `/admin/api/routes` | 全部路由，按文件 mtime 倒序 |
 | `GET` | `/admin/api/routes/{routeId}` | 单条路由 |
-| `GET` | `/admin/api/routes/{routeId}/raw` | 原始 JSON 文件内容 |
+| `GET` | `/admin/api/routes/{routeId}/raw` | 原始 JSON 文件内容（`fileName` + `content`） |
 | `GET` | `/admin/api/routes/export` | 导出全部路由 |
 | `POST` | `/admin/api/routes/import` | 批量导入（总是新增） |
 | `POST` | `/admin/api/routes` | 创建，成功后刷新代理 |
@@ -54,6 +54,7 @@ curl -X POST http://localhost:9999/admin/api/routes \
     "pathPrefixes": ["/test", "/api/test"],
     "targetUrl": "localhost:8081",
     "accessPageBaseUrl": "localhost:8082",
+    "accessPage": "/test/hello",
     "localIp": "127.0.0.1",
     "localPort": 18081,
     "enabled": true
@@ -76,12 +77,23 @@ curl -X DELETE http://localhost:9999/admin/api/routes/route-20260603234846-4d2de
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/admin/api/proxy-logs` | 全部路由日志快照 |
-| `GET` | `/admin/api/proxy-logs/metrics` | 全部路由紧凑指标，供卡片 / KPI 使用 |
+| `GET` | `/admin/api/proxy-logs/metrics` | 全部路由紧凑指标，供卡片 / 概览带使用 |
 | `GET` | `/admin/api/proxy-logs/routes/{routeId}` | 指定路由快照 |
 | `GET` | `/admin/api/proxy-logs/stream` | 全部路由 SSE，事件名 `proxy-request` |
 | `GET` | `/admin/api/proxy-logs/routes/{routeId}/stream` | 指定路由 SSE |
 
-`/metrics` 返回 `Map<routeId, RouteTrafficMetrics>`：`routeId`、`totalRequests`、`failedRequests`、`slowRequests`、`totalDurationMs`、`requestsLastMinute`、`failedLastMinute`、`averageDurationMs`、`trafficBuckets`（由旧到新，长度 30）。未产生过请求的路由不会出现在结果中。
+`/metrics` 返回 `Map<routeId, RouteTrafficMetrics>`：
+
+| 字段 | 含义 |
+| --- | --- |
+| `routeId` | 基础路由 ID |
+| `totalRequests` / `failedRequests` | 累计请求数与 `status >= 400` 累计 |
+| `slowRequests` | 耗时 ≥ 1000ms 累计 |
+| `totalDurationMs` / `averageDurationMs` | 累计耗时与平均延迟 |
+| `requestsLastMinute` / `failedLastMinute` | 最近 60 秒滚动值 |
+| `trafficBuckets` | 最近 30 分钟每分钟请求数，由旧到新，长度 30 |
+
+未产生过请求的路由不会出现在结果中。
 
 ```bash
 curl http://localhost:9999/admin/api/proxy-logs/metrics
@@ -92,9 +104,14 @@ curl -N http://localhost:9999/admin/api/proxy-logs/routes/route-20260603234846-4
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/admin/api/version` | 当前版本信息（version / buildTime / platform / installMode / updateSupported） |
+| `GET` | `/admin/api/version` | 当前版本信息（version / buildTime / platform / installMode / updateSupported / updateChannel / repository） |
 | `GET` | `/admin/api/update/check` | 检查更新；**始终 `success=true`**，失败原因写在 `message` |
+| `GET` | `/admin/api/update/auto` | 自动更新状态：开关、在途请求数、空闲判定、待应用版本、静默阈值 |
+| `GET` | `/admin/api/update/history` | 历史版本与修订记录（含预发布与当前版本）；失败时列表为空、原因写进 `message` |
 | `POST` | `/admin/api/update/apply` | 下载更新包并生成更新脚本；不可更新时抛 `BusinessException` |
+
+> `check` 只回答「有没有比当前更新的版本」，会过滤草稿与预发布；
+> `history` 回答「每个版本改了什么」，保留草稿之外的全部已发布版本。
 
 ## 运维端点
 

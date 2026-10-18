@@ -1,5 +1,6 @@
 package com.geek.webrouter.web.service;
 
+import com.geek.webrouter.web.model.dto.ReleaseHistory;
 import com.geek.webrouter.web.model.dto.UpdateApplyRequest;
 import com.geek.webrouter.web.model.dto.UpdateApplyResult;
 import com.geek.webrouter.web.model.dto.UpdateCheckResult;
@@ -22,6 +23,14 @@ public interface UpdateService {
 
     /** 检查更新；任何异常都写进 message，不抛出。 */
     UpdateCheckResult check();
+
+    /**
+     * 历史版本与修订记录：列出仓库里全部已发布版本（含预发布与当前版本）。
+     *
+     * <p>与 {@link #check()} 只关心「有没有更新」不同，这里回答「每个版本改了什么」。
+     * 查询失败时返回空列表并写明原因，不抛异常。</p>
+     */
+    ReleaseHistory history();
 
     /**
      * 下载更新包、校验摘要并生成更新脚本，但不退出进程。

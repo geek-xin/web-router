@@ -8,8 +8,37 @@
 | 本地端口代理 | Reactor Netty `HttpServer` + `HttpClient` | 为单条路由提供独立入口 |
 | 配置存储 | 本地 JSON 文件 | 唯一持久化介质，无数据库 |
 | 请求观测 | 内存统计 + SSE | 快照日志、实时流、滚动流量指标 |
-| 管理后台 | React 19 + Vite + Tailwind | 路由增删改查、拓扑、日志、指标 |
-| 页面挂载 | Thymeleaf | 输出 `#root`，注入配置目录 meta |
+| 管理后台 | React 19 + Vite + Tailwind | 路由增删改查、拓扑、日志、指标、版本更新 |
+| 页面挂载 | Thymeleaf | 输出 `#root`，注入配置目录 meta 与资源版本串 |
+
+```mermaid
+flowchart TB
+    subgraph Entry[入口]
+        GW["Spring Cloud Gateway :9999"]
+        LP["LocalPortProxyService :localPort"]
+    end
+    subgraph Core[核心服务]
+        DR["DynamicRouteService"]
+        RC["RouteConfigServiceImpl"]
+        PL["ProxyRequestLogService"]
+        AU["AutoUpdateService / UpdateService"]
+    end
+    subgraph Store[持久化]
+        JSON["config/routes/*.json"]
+        UPD["updates/"]
+    end
+    UI["React 管理后台 /admin"] --> RC
+    RC --> JSON
+    RC --> DR
+    DR --> GW
+    GW --> Target["目标服务"]
+    LP --> Target
+    GW --> PL
+    LP --> PL
+    PL --> UI
+    AU --> UPD
+    AU --> UI
+```
 
 ## 配置存储
 
@@ -18,6 +47,7 @@
 - 写入使用 Jackson pretty printer，文件可读、可手工编辑、可进版本库。
 - `listAll()` 按文件最后修改时间倒序返回。
 - **配置文件名 = 路由 ID**；任何外部传入的 routeId 都必须经 `resolveFilePath()` 校验（`^[a-zA-Z0-9_-]+$`），用于阻断路径穿越。
+- 写操作在 `synchronized (fileMonitor)` 内串行；更新时若可编辑内容未变，会恢复原 mtime，避免列表顺序跳动。
 
 运行时目录：
 
@@ -33,10 +63,10 @@
 
 1. 取信号量，保证同一时刻只有一次刷新。
 2. 计算期望路由集：所有 `enabled` 配置 × 每个路径前缀 = 一条 Gateway 路由。
-3. 差量计算需删除与需保存的 routeId，顺序执行。
+3. 差量计算需删除与需保存的 routeId，顺序执行（内容未变的 routeId 不删除重建，避免刷新瞬间 404）。
 4. 刷新本地端口代理，替换内存快照并发布 `RefreshRoutesEvent`。
 
-差量更新而非全量重建，内容未变的 routeId 不会被删除重建，避免刷新期间的瞬时 404。所有写操作（创建 / 更新 / 删除 / 导入）持久化后都会触发刷新，**改完即生效**。
+所有写操作（创建 / 更新 / 删除 / 导入）持久化后都会触发刷新，**改完即生效**。
 
 注册规则：
 
@@ -73,16 +103,44 @@
 
 两条路径写入同一个 `ProxyRequestLogService`，统计口径一致。**同时配置 `localPort` 的路由，一次客户端请求可能产生两条日志**（Gateway 一条 + 本地代理一条）。
 
+指标窗口：最近 60 秒请求/失败数用 1 秒桶 × 60，30 分钟序列用 60 秒桶 × 30，累计平均延迟来自累计耗时。
+
+## 版本与自动更新
+
+```mermaid
+sequenceDiagram
+    participant S as AutoUpdateService
+    participant U as UpdateService
+    participant G as GitHub Release
+    participant T as InFlightRequestTracker
+    S->>U: 静默检查（启动 120s 后，每 3600s）
+    U->>G: GET /repos/{repo}/releases
+    G-->>U: 版本列表
+    U->>U: 比对版本 + 按 installMode/platform 选包
+    U->>G: 下载资产
+    U->>U: 校验 sha256 + 生成更新脚本
+    Note over U: 只预下载，不退出进程
+    S->>T: 轮询在途请求与空闲时长
+    T-->>S: inFlight=0 且静默达标
+    S->>U: requestExit()
+    U->>U: 约 2s 后退出，脚本替换并重启
+```
+
+- 构建元信息由 `pom.xml` 资源过滤注入 `version.properties`（版本 / 构建时间 / 平台 / 安装形态 / 通道 / 仓库）。
+- `/admin/api/update/check` 约定「任何异常都写进 message，接口本身始终成功」。
+- 更新脚本写在 `updates/apply-update.sh|.bat`：等旧进程退出 → 备份 → 解压替换 → 重启，失败自动回滚并写 `updates/update.log`。
+
 ## 管理后台资源
 
 | 文件 | 职责 |
 | --- | --- |
-| `frontend/src/App.tsx` | 应用外壳：侧边栏、顶栏、KPI 行、路由网格 |
-| `frontend/src/features/**` | 路由卡片、工具栏、表单、抽屉、拓扑、日志、指标 |
+| `frontend/src/App.tsx` | 应用外壳：侧边栏、顶栏、概览带、路由网格 |
+| `frontend/src/features/**` | 路由卡片、工具栏、表单、详情、拓扑、日志、指标、版本与更新日志 |
 | `frontend/src/styles.css` | CSS 变量与组件层样式入口 |
 | `src/main/resources/templates/index.html` | Thymeleaf 挂载页 |
 | `src/main/resources/static/admin/assets/app.js`、`app.css` | Vite 构建产物 |
 
-改前端后需 `npm run build` 更新静态资源，再由 Spring Boot 直接提供。
+入口页不缓存（`no-store`），静态资源版本串由 `AssetVersionResolver` 按产物内容哈希生成，
+因此「改了但看不到」不会发生。改前端后需 `npm run build` 更新静态资源。
 
 > 完整实现细节、关键不变量与已知边界见 [核心功能说明](../docs/CORE-FEATURES.md)。

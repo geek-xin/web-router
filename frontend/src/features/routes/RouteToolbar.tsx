@@ -1,10 +1,23 @@
 import * as React from 'react';
 import { Download, LayoutGrid, List, Plus, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/input';
+import { Select, type SelectOption } from '@/components/ui/select';
 import type { RouteSortKey, RouteStatusFilter } from './types';
 import type { RouteViewMode } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
+
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: 'all', label: '全部状态' },
+  { value: 'enabled', label: '仅运行中' },
+  { value: 'disabled', label: '仅已停用' },
+];
+
+const SORT_OPTIONS: SelectOption[] = [
+  { value: 'recent', label: '最近创建' },
+  { value: 'name', label: '按名称' },
+  { value: 'traffic', label: '按流量' },
+  { value: 'latency', label: '按延迟' },
+];
 
 interface RouteToolbarProps {
   headingId?: string;
@@ -52,18 +65,19 @@ export function RouteToolbar({
         <p className="toolbar-note">共 {routeCount} 条，当前显示 {visibleCount} 条</p>
       </div>
 
-      <Select value={status} onChange={(event) => onStatusChange(event.target.value as RouteStatusFilter)} aria-label="按状态筛选">
-        <option value="all">全部状态</option>
-        <option value="enabled">仅运行中</option>
-        <option value="disabled">仅已停用</option>
-      </Select>
+      <Select
+        value={status}
+        onValueChange={(value) => onStatusChange(value as RouteStatusFilter)}
+        options={STATUS_OPTIONS}
+        aria-label="按状态筛选"
+      />
 
-      <Select value={sort} onChange={(event) => onSortChange(event.target.value as RouteSortKey)} aria-label="排序方式">
-        <option value="recent">最近创建</option>
-        <option value="name">按名称</option>
-        <option value="traffic">按流量</option>
-        <option value="latency">按延迟</option>
-      </Select>
+      <Select
+        value={sort}
+        onValueChange={(value) => onSortChange(value as RouteSortKey)}
+        options={SORT_OPTIONS}
+        aria-label="排序方式"
+      />
 
       {selectedCount > 0 && (
         <Button variant="danger" onClick={onBatchDelete}>

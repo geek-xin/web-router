@@ -4,6 +4,8 @@ import com.geek.webrouter.common.enums.ErrorCodeEnum;
 import com.geek.webrouter.common.exception.BusinessException;
 import com.geek.webrouter.web.model.dto.AppVersionInfo;
 import com.geek.webrouter.web.model.dto.ReleaseAsset;
+import com.geek.webrouter.web.model.dto.ReleaseHistory;
+import com.geek.webrouter.web.model.dto.ReleaseHistoryItem;
 import com.geek.webrouter.web.model.dto.ReleaseInfo;
 import com.geek.webrouter.web.model.dto.UpdateApplyRequest;
 import com.geek.webrouter.web.model.dto.UpdateApplyResult;
@@ -61,6 +63,20 @@ public class UpdateServiceImpl implements UpdateService {
     /** 默认的后台退出延迟（毫秒）。 */
     private static final long DEFAULT_EXIT_DELAY_MILLIS = 2000L;
 
+    /**
+     * 历史版本查询的缓存时长（毫秒）。
+     *
+     * <p>GitHub 未认证请求限流为每小时 60 次。版本抽屉每次打开都会拉一次历史，
+     * 短暂缓存可避免反复打开把额度耗尽，同时保证用户重新打开时能较快看到新发布的版本。</p>
+     */
+    static final long HISTORY_CACHE_MILLIS = 60_000L;
+
+    /** 历史版本缓存：仓库 + 抓取时间戳 + 结果。 */
+    private volatile HistoryCache historyCache;
+
+    /** 最近一次历史版本读取失败原因；成功时清空。 */
+    private volatile String historyFailure = "";
+
     /** 摘要算法名。 */
     private static final String DIGEST_ALGORITHM = "sha256";
 
@@ -70,24 +86,35 @@ public class UpdateServiceImpl implements UpdateService {
     private final Path updatesDir;
     private final long exitDelayMillis;
     private final Runnable exitAction;
+    /** 时间源；抽出接口便于测试推进「缓存是否过期」。 */
+    private final java.util.function.LongSupplier clock;
 
     @Autowired
     public UpdateServiceImpl(AppVersionService appVersionService, ReleaseClient releaseClient,
                              AssetDownloader assetDownloader) {
         this(appVersionService, releaseClient, assetDownloader, AppHomeResolver.resolveUpdatesDir(),
-                DEFAULT_EXIT_DELAY_MILLIS, () -> System.exit(0));
+                DEFAULT_EXIT_DELAY_MILLIS, () -> System.exit(0), System::currentTimeMillis);
     }
 
     /** 便于测试注入的完整构造函数。 */
     public UpdateServiceImpl(AppVersionService appVersionService, ReleaseClient releaseClient,
                       AssetDownloader assetDownloader, Path updatesDir, long exitDelayMillis,
                       Runnable exitAction) {
+        this(appVersionService, releaseClient, assetDownloader, updatesDir, exitDelayMillis, exitAction,
+                System::currentTimeMillis);
+    }
+
+    /** 完整构造函数（含时间源），仅测试使用。 */
+    UpdateServiceImpl(AppVersionService appVersionService, ReleaseClient releaseClient,
+                      AssetDownloader assetDownloader, Path updatesDir, long exitDelayMillis,
+                      Runnable exitAction, java.util.function.LongSupplier clock) {
         this.appVersionService = appVersionService;
         this.releaseClient = releaseClient;
         this.assetDownloader = assetDownloader;
         this.updatesDir = updatesDir;
         this.exitDelayMillis = exitDelayMillis;
         this.exitAction = exitAction;
+        this.clock = clock;
     }
 
     @Override
@@ -104,7 +131,7 @@ public class UpdateServiceImpl implements UpdateService {
         try {
             releases = releaseClient.listReleases(current.repository());
         } catch (Exception e) {
-            log.warn("检查更新失败: {}", e.getMessage());
+            log.warn("检查更新失败: {}", HttpReleaseClient.describe(e));
             return unavailable(current, "检查更新失败：" + describeFailure(e));
         }
         if (releases == null || releases.isEmpty()) {
@@ -129,6 +156,83 @@ public class UpdateServiceImpl implements UpdateService {
                 text(release.htmlUrl(), ""), matched.name(), text(matched.browserDownloadUrl(), ""),
                 matched.size(), text(matched.digest(), ""),
                 "发现新版本 " + latestVersion + "（当前 " + current.version() + "），更新包 " + matched.name());
+    }
+
+    @Override
+    public ReleaseHistory history() {
+        AppVersionInfo current = appVersionService.currentVersion();
+        String repository = current.repository();
+        if (repository == null || repository.isBlank()) {
+            return new ReleaseHistory(current.version(), "", List.of(), "未配置更新仓库地址，无法读取历史版本");
+        }
+        List<ReleaseInfo> releases = cachedReleases(repository);
+        if (releases == null) {
+            return new ReleaseHistory(current.version(), repository, List.of(),
+                    "读取历史版本失败：" + historyFailure);
+        }
+        if (releases.isEmpty()) {
+            return new ReleaseHistory(current.version(), repository, List.of(),
+                    "仓库 " + repository + " 暂无可用的发布版本");
+        }
+        String currentVersion = ReleaseVersionComparator.normalize(current.version());
+        List<ReleaseHistoryItem> items = releases.stream()
+                .filter(release -> !release.draft())
+                .filter(release -> release.tagName() != null && !release.tagName().isBlank())
+                .map(release -> toHistoryItem(release, currentVersion))
+                .sorted(Comparator.comparing(ReleaseHistoryItem::version,
+                        ReleaseVersionComparator::compare).reversed())
+                .toList();
+        // 有数据时仍可能带 message：那是刷新失败回落到缓存数据的提示，必须透传给前端
+        return new ReleaseHistory(current.version(), repository, items, historyFailure);
+    }
+
+    /**
+     * 拉取发布列表，命中缓存时直接复用。
+     *
+     * <p><b>缓存过期但刷新失败时回落到旧数据</b>，而不是清空列表。
+     * 旧实现直接返回 {@code null}，于是「几秒前还能看到版本列表，一次网络抖动
+     * 就变成空列表 + 报错」。GitHub 是外部依赖，抖动属正常现象，
+     * 此时给用户看稍旧的版本列表远好于什么都不给——但要**如实标注数据可能不是最新**。</p>
+     *
+     * <p>只有「从没成功过」时才真正返回 {@code null}（界面显示失败原因）。
+     * 失败本身仍不写入缓存，网络恢复后下一次请求会立即重新拉取。</p>
+     */
+    private List<ReleaseInfo> cachedReleases(String repository) {
+        HistoryCache cache = historyCache;
+        long now = clock.getAsLong();
+        if (cache != null && cache.repository().equals(repository)
+                && now - cache.fetchedAt() < HISTORY_CACHE_MILLIS) {
+            historyFailure = "";
+            return cache.releases();
+        }
+        List<ReleaseInfo> releases;
+        try {
+            releases = releaseClient.listReleases(repository);
+        } catch (Exception e) {
+            log.warn("读取历史版本失败: {}", HttpReleaseClient.describe(e));
+            if (cache != null && cache.repository().equals(repository) && !cache.releases().isEmpty()) {
+                // 有旧数据可用：如实标注「可能不是最新」，但不要把列表清空
+                historyFailure = "读取最新版本失败，以下为缓存数据：" + describeFailure(e);
+                return cache.releases();
+            }
+            historyFailure = describeFailure(e);
+            return null;
+        }
+        historyFailure = "";
+        List<ReleaseInfo> snapshot = releases == null ? List.of() : List.copyOf(releases);
+        historyCache = new HistoryCache(repository, now, snapshot);
+        return snapshot;
+    }
+
+    private static ReleaseHistoryItem toHistoryItem(ReleaseInfo release, String currentVersion) {
+        String version = ReleaseVersionComparator.normalize(release.tagName());
+        return new ReleaseHistoryItem(version,
+                text(release.name(), release.tagName()),
+                text(release.publishedAt(), ""),
+                text(release.htmlUrl(), ""),
+                release.prerelease(),
+                !version.isEmpty() && version.equals(currentVersion),
+                truncate(release.body()));
     }
 
     @Override
@@ -381,13 +485,26 @@ public class UpdateServiceImpl implements UpdateService {
 
     private static String describeFailure(Exception e) {
         String message = e.getMessage();
+        // 我们自己抛的 IllegalStateException 已经是面向用户的可操作说明
+        // （例如「GitHub API 限流…可设置 WROUTER_GITHUB_TOKEN…」），
+        // 再拼上「（IllegalStateException）」只会干扰阅读，毫无信息量。
+        if (e instanceof IllegalStateException && message != null && !message.isBlank()) {
+            return message;
+        }
+        // ConnectException 的 message 常为 null，只打类名会丢掉根因（可能是 DNS、拒绝连接或超时），
+        // 因此统一用异常链文本描述。
+        String chain = HttpReleaseClient.describe(e);
         if (message == null || message.isBlank()) {
-            return "网络请求失败（" + e.getClass().getSimpleName() + "）";
+            return "网络请求失败（" + chain + "）";
         }
         if (message.contains("UnknownHost") || message.contains("Connection") || message.contains("timed out")) {
             return "无法连接 GitHub（" + message + "）";
         }
-        return message;
+        return message + "（" + chain + "）";
+    }
+
+    /** 历史版本缓存条目。 */
+    private record HistoryCache(String repository, long fetchedAt, List<ReleaseInfo> releases) {
     }
 
     private void deleteQuietly(Path path) {

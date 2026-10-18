@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { CheckCircle2, Download, Info, RefreshCw, TriangleAlert, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Download, History, Info, RefreshCw, TriangleAlert, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { fetchJson, jsonRequest } from '@/lib/api';
-import type { AppVersionInfo, AutoUpdateStatus, UpdateApplyResult, UpdateCheckResult } from './types';
+import { cn } from '@/lib/utils';
+import type { AppVersionInfo, AutoUpdateStatus, ReleaseHistory, ReleaseHistoryItem, UpdateApplyResult, UpdateCheckResult } from './types';
 import {
   applyDisabledReason,
   autoUpdateIdleText,
@@ -12,9 +13,14 @@ import {
   fallbackVersionInfo,
   formatBuildTime,
   formatBytes,
+  formatReleaseDate,
+  formatReleaseNotes,
+  historySummary,
   installModeLabel,
+  normalizeReleaseHistory,
   normalizeVersionInfo,
   platformLabel,
+  releaseNotesPreview,
   updateChannelLabel,
   updateStatusText,
 } from './version-utils';
@@ -36,6 +42,10 @@ export function VersionDialog({ open, onOpenChange, versionFallback, repositoryF
   const [applying, setApplying] = React.useState(false);
   const [error, setError] = React.useState('');
   const [autoStatus, setAutoStatus] = React.useState<AutoUpdateStatus | null>(null);
+  const [history, setHistory] = React.useState<ReleaseHistory | null>(null);
+  const [loadingHistory, setLoadingHistory] = React.useState(false);
+  /** 展开查看完整修订记录的版本号；同时只展开一个。 */
+  const [expandedVersion, setExpandedVersion] = React.useState('');
 
   const loadVersion = React.useCallback(async () => {
     try {
@@ -76,15 +86,30 @@ export function VersionDialog({ open, onOpenChange, versionFallback, repositoryF
     }
   }, []);
 
+  const loadHistory = React.useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const raw = await fetchJson<Partial<ReleaseHistory>>('/admin/api/update/history');
+      setHistory(normalizeReleaseHistory(raw, versionFallback));
+    } catch {
+      // 旧后端没有该接口，或网络不可用：降级为「无历史版本」，不影响其余小节
+      setHistory(normalizeReleaseHistory(null, versionFallback));
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [versionFallback]);
+
   React.useEffect(() => {
     if (!open) {
       return;
     }
     setCheck(null);
+    setExpandedVersion('');
     void loadVersion();
     void checkUpdate(true);
     void loadAutoStatus();
-  }, [open, loadVersion, checkUpdate, loadAutoStatus]);
+    void loadHistory();
+  }, [open, loadVersion, checkUpdate, loadAutoStatus, loadHistory]);
 
   // 打开期间轮询自动更新状态：在途请求数与空闲判定会实时变化
   React.useEffect(() => {
@@ -237,9 +262,81 @@ export function VersionDialog({ open, onOpenChange, versionFallback, repositoryF
               </p>
             )}
           </section>
+
+          <section className="section">
+            <div className="section-head">
+              <History className="h-3.5 w-3.5" aria-hidden="true" />
+              <h3 className="section-title">历史版本与修订记录</h3>
+              <Button size="sm" variant="ghost" onClick={() => void loadHistory()} disabled={loadingHistory}>
+                <RefreshCw className={loadingHistory ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} aria-hidden="true" />
+                刷新
+              </Button>
+            </div>
+
+            <p className="text-[12.5px]" style={{ color: 'var(--surface-ink-muted)' }} aria-live="polite">
+              {historySummary(history)}
+            </p>
+
+            {history && history.releases.length > 0 && (
+              <ol className="release-history" aria-label="历史版本列表">
+                {history.releases.map((item) => (
+                  <ReleaseHistoryRow
+                    key={item.version}
+                    item={item}
+                    expanded={expandedVersion === item.version}
+                    onToggle={() => setExpandedVersion(expandedVersion === item.version ? '' : item.version)}
+                  />
+                ))}
+              </ol>
+            )}
+          </section>
         </div>
       </aside>
     </>
+  );
+}
+
+/**
+ * 单条历史版本：版本号 + 发布时间 + 标签，点击展开完整修订记录。
+ * 当前运行版本高亮并标注「当前」，避免用户误判自己装的是哪一版。
+ */
+function ReleaseHistoryRow({ item, expanded, onToggle }: {
+  item: ReleaseHistoryItem;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <li className={cn('release-history-row', item.current && 'release-history-row-current')}>
+      <button
+        type="button"
+        className="release-history-head"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-label={(expanded ? '收起 ' : '展开 ') + 'v' + item.version + ' 修订记录'}
+      >
+        <span className="release-history-version font-mono">v{item.version}</span>
+        {item.current && <span className="chip chip-accent">当前</span>}
+        {item.prerelease && <span className="chip chip-warning">预览</span>}
+        <span className="release-history-date font-mono">{formatReleaseDate(item.publishedAt)}</span>
+        <ChevronDown
+          className={cn('release-history-chevron h-3.5 w-3.5', expanded && 'release-history-chevron-open')}
+          aria-hidden="true"
+        />
+      </button>
+
+      {expanded ? (
+        <>
+          <pre className="release-history-notes scroll-area">{formatReleaseNotes(item.notes)}</pre>
+          {item.releaseUrl && (
+            <a className="release-history-link" href={item.releaseUrl} target="_blank" rel="noreferrer">
+              在 GitHub 查看该版本
+            </a>
+          )}
+        </>
+      ) : (
+        <p className="release-history-preview">{releaseNotesPreview(item.notes)}</p>
+      )}
+    </li>
   );
 }
 

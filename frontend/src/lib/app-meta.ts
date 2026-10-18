@@ -1,6 +1,6 @@
 // 应用元信息：版本号与运行时常量。
 // 版本号在构建时由 Maven 注入 version.properties；这里的常量只作为接口不可用时的兜底。
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 /** 管理后台与 Gateway 共用监听地址，见 src/main/resources/application.yml。 */
 export const GATEWAY_ENDPOINT = '127.0.0.1:9999';

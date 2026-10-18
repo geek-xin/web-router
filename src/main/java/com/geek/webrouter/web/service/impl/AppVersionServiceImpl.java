@@ -3,6 +3,7 @@ package com.geek.webrouter.web.service.impl;
 import com.geek.webrouter.web.model.dto.AppVersionInfo;
 import com.geek.webrouter.web.service.AppVersionService;
 import com.geek.webrouter.web.support.ReleaseAssets;
+import com.geek.webrouter.web.support.RuntimePlatform;
 import com.geek.webrouter.web.support.UpdatePlatform;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -57,12 +58,27 @@ public class AppVersionServiceImpl implements AppVersionService {
     @Override
     public AppVersionInfo currentVersion() {
         String version = value("app.version", UNKNOWN);
-        String platform = value("app.platform", UNKNOWN);
+        String platform = resolvePlatform(value("app.platform", ""));
         String installMode = value("app.installMode", INSTALL_MODE_JAR);
         String updateChannel = value("app.updateChannel", CHANNEL_STABLE);
         String repository = value("app.repository", "");
         return new AppVersionInfo(version, value("app.buildTime", ""), platform, installMode,
                 updateSupported(installMode, platform), updateChannel, repository);
+    }
+
+    /**
+     * 解析展示用的运行平台标识。
+     *
+     * <p>构建元信息里写入了受支持的平台标识时直接采用；为空或 {@code unknown}
+     * 时按当前 JVM 推导，保证直接 {@code mvn package} / {@code spring-boot:run}
+     * 启动的实例也能显示真实平台，而不是「未识别平台」。</p>
+     */
+    static String resolvePlatform(String configured) {
+        String token = ReleaseAssets.platformToken(configured);
+        if (token != null) {
+            return token;
+        }
+        return RuntimePlatform.currentToken();
     }
 
     /**

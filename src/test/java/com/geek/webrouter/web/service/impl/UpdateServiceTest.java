@@ -2,6 +2,8 @@ package com.geek.webrouter.web.service.impl;
 
 import com.geek.webrouter.common.exception.BusinessException;
 import com.geek.webrouter.web.model.dto.ReleaseAsset;
+import com.geek.webrouter.web.model.dto.ReleaseHistory;
+import com.geek.webrouter.web.model.dto.ReleaseHistoryItem;
 import com.geek.webrouter.web.model.dto.ReleaseInfo;
 import com.geek.webrouter.web.model.dto.UpdateApplyRequest;
 import com.geek.webrouter.web.model.dto.UpdateApplyResult;
@@ -190,6 +192,204 @@ class UpdateServiceTest {
         assertThat(UpdateServiceImpl.normalizeDigest(null)).isNull();
     }
 
+    // ------------------------------------------------------------ 历史版本 --
+
+    @Test
+    void historyListsEveryReleaseNewestFirstAndMarksTheRunningVersion() {
+        UpdateServiceImpl service = service(new FakeReleaseClient(List.of(
+                release("v1.2.0", false), release("v1.10.0", false), release("v1.3.0", false))),
+                new FakeDownloader("x"));
+
+        ReleaseHistory history = service.history();
+
+        assertThat(history.currentVersion()).isEqualTo("1.3.0");
+        assertThat(history.repository()).isEqualTo("geek-xin/web-router");
+        assertThat(history.message()).isEmpty();
+        // 语义化版本排序：1.10.0 必须排在 1.3.0 之前
+        assertThat(history.releases()).extracting(ReleaseHistoryItem::version)
+                .containsExactly("1.10.0", "1.3.0", "1.2.0");
+        assertThat(history.releases()).filteredOn(ReleaseHistoryItem::current)
+                .extracting(ReleaseHistoryItem::version).containsExactly("1.3.0");
+    }
+
+    /** 与「检查更新」不同：历史里必须保留预发布与当前版本，并带上修订记录。 */
+    @Test
+    void historyKeepsPrereleasesAndCarriesReleaseNotes() {
+        ReleaseInfo stable = release("v1.3.0", false);
+        ReleaseInfo beta = new ReleaseInfo("v1.4.0-beta.1", "wrouter 1.4.0-beta.1", "新增历史版本视图",
+                "2026-10-01T00:00:00Z", "https://example.test/releases/beta", true, false, List.of());
+        UpdateServiceImpl service = service(new FakeReleaseClient(List.of(stable, beta)), new FakeDownloader("x"));
+
+        ReleaseHistory history = service.history();
+
+        assertThat(history.releases()).extracting(ReleaseHistoryItem::version)
+                .containsExactly("1.4.0-beta.1", "1.3.0");
+        assertThat(history.releases()).filteredOn(ReleaseHistoryItem::prerelease)
+                .extracting(ReleaseHistoryItem::version).containsExactly("1.4.0-beta.1");
+        assertThat(history.releases().get(1).notes()).isEqualTo("修复若干问题");
+        assertThat(history.releases().get(1).releaseUrl()).isEqualTo("https://example.test/releases/v1.3.0");
+    }
+
+    @Test
+    void historySkipsDraftsAndBlankTags() {
+        ReleaseInfo draft = new ReleaseInfo("v1.9.0", "draft", "未发布", "", "", false, true, List.of());
+        ReleaseInfo blank = new ReleaseInfo("", "blank", "", "", "", false, false, List.of());
+        UpdateServiceImpl service = service(new FakeReleaseClient(List.of(release("v1.3.0", false), draft, blank)),
+                new FakeDownloader("x"));
+
+        assertThat(service.history().releases()).extracting(ReleaseHistoryItem::version)
+                .containsExactly("1.3.0");
+    }
+
+    /** 读取失败不能让接口报错，必须降级为空列表 + 原因。 */
+    @Test
+    void historyReportsFailureWithoutThrowing() {
+        UpdateServiceImpl service = service(new FakeReleaseClient(new IOException("Connection reset")),
+                new FakeDownloader("x"));
+
+        ReleaseHistory history = service.history();
+
+        assertThat(history.releases()).isEmpty();
+        assertThat(history.message()).contains("读取历史版本失败").contains("无法连接 GitHub");
+    }
+
+    @Test
+    void historyReportsMissingRepositoryAndEmptyReleaseList() {
+        UpdateServiceImpl noRepo = service(propertiesWithoutRepository(), new FakeReleaseClient(List.of()),
+                new FakeDownloader("x"));
+        assertThat(noRepo.history().message()).contains("未配置更新仓库地址");
+
+        UpdateServiceImpl empty = service(new FakeReleaseClient(List.of()), new FakeDownloader("x"));
+        assertThat(empty.history().releases()).isEmpty();
+        assertThat(empty.history().message()).contains("暂无可用的发布版本");
+    }
+
+    /** 连续读取应命中缓存，避免把 GitHub 未认证额度耗尽。 */
+    @Test
+    void historyReusesTheCachedReleaseList() {
+        CountingReleaseClient client = new CountingReleaseClient(List.of(release("v1.4.0", false)));
+        UpdateServiceImpl service = service(client, new FakeDownloader("x"));
+
+        service.history();
+        service.history();
+        service.history();
+
+        assertThat(client.calls.get()).isEqualTo(1);
+    }
+
+    /** 失败不写入缓存：网络恢复后下一次调用应立即重试成功。 */
+    @Test
+    void historyRetriesAfterAFailureInsteadOfCachingIt() {
+        FlakyReleaseClient client = new FlakyReleaseClient(release("v1.4.0", false));
+        UpdateServiceImpl service = service(client, new FakeDownloader("x"));
+
+        assertThat(service.history().releases()).isEmpty();
+        assertThat(service.history().releases()).extracting(ReleaseHistoryItem::version)
+                .containsExactly("1.4.0");
+        assertThat(client.calls.get()).isEqualTo(2);
+    }
+
+
+    /**
+     * 缓存过期后刷新失败时，必须回落到**上一次成功的数据**，而不是清空列表。
+     *
+     * <p>这是「读取历史版本失败」体验问题的根因：旧实现直接返回 null，
+     * 于是用户明明几秒前还能看到版本列表，一次网络抖动就变成空列表 + 报错。</p>
+     */
+    @Test
+    void historyFallsBackToStaleCacheWhenRefreshFails() {
+        StaleThenFailingClient client = new StaleThenFailingClient(release("v1.4.0", false));
+        MutableClock clock = new MutableClock();
+        UpdateServiceImpl service = service(client, new FakeDownloader("x"), clock);
+
+        // 第一次成功，写入缓存
+        assertThat(service.history().releases()).extracting(ReleaseHistoryItem::version).containsExactly("1.4.0");
+
+        // 推进到缓存过期，之后的刷新持续失败
+        clock.advance(UpdateServiceImpl.HISTORY_CACHE_MILLIS + 1);
+        ReleaseHistory stale = service.history();
+
+        // 关键：仍然看得到版本列表，而不是空列表
+        assertThat(stale.releases())
+                .as("刷新失败时必须回落到上次成功的数据")
+                .extracting(ReleaseHistoryItem::version).containsExactly("1.4.0");
+        // 同时如实告知这是缓存数据
+        assertThat(stale.message()).contains("缓存数据");
+    }
+
+    /** 刷新成功时不得出现任何缓存提示。 */
+    @Test
+    void historyHasNoStaleNoticeWhenRefreshSucceeds() {
+        CountingReleaseClient client = new CountingReleaseClient(List.of(release("v1.4.0", false)));
+        MutableClock clock = new MutableClock();
+        UpdateServiceImpl service = service(client, new FakeDownloader("x"), clock);
+
+        service.history();
+        clock.advance(UpdateServiceImpl.HISTORY_CACHE_MILLIS + 1);
+        ReleaseHistory refreshed = service.history();
+
+        assertThat(refreshed.releases()).extracting(ReleaseHistoryItem::version).containsExactly("1.4.0");
+        assertThat(refreshed.message()).isEmpty();
+        assertThat(client.calls.get()).isEqualTo(2);
+    }
+
+    /** 从没成功过（无缓存）时，失败仍应如实报错而不是假装有数据。 */
+    @Test
+    void historyReportsFailureWhenNoCacheExistsAtAll() {
+        UpdateServiceImpl service = service(new FakeReleaseClient(new IOException("Connection reset")),
+                new FakeDownloader("x"), new MutableClock());
+
+        ReleaseHistory history = service.history();
+
+        assertThat(history.releases()).isEmpty();
+        assertThat(history.message()).contains("读取历史版本失败").contains("无法连接 GitHub");
+        assertThat(history.message()).doesNotContain("缓存数据");
+    }
+
+    /** 可手动推进的时钟，用于验证缓存过期。 */
+    private static final class MutableClock implements java.util.function.LongSupplier {
+        private long now = 1_700_000_000_000L;
+
+        void advance(long millis) {
+            now += millis;
+        }
+
+        @Override
+        public long getAsLong() {
+            return now;
+        }
+    }
+
+    /** 第一次成功、之后持续失败的假客户端 — 验证缓存回落。 */
+    private static final class StaleThenFailingClient implements ReleaseClient {
+
+        private final ReleaseInfo release;
+        private final AtomicInteger calls = new AtomicInteger();
+
+        StaleThenFailingClient(ReleaseInfo release) {
+            this.release = release;
+        }
+
+        @Override
+        public List<ReleaseInfo> listReleases(String repository) throws Exception {
+            if (calls.incrementAndGet() == 1) {
+                return List.of(release);
+            }
+            throw new IOException("Connection reset");
+        }
+
+        @Override
+        public java.io.InputStream openAsset(String assetUrl) {
+            throw new UnsupportedOperationException("测试不应真实下载资产");
+        }
+    }
+
+    private static Properties propertiesWithoutRepository() {
+        Properties properties = properties();
+        properties.remove("app.repository");
+        return properties;
+    }
+
     private Path writePayload(String payload) throws IOException {
         Path file = tempDir.resolve("payload.bin");
         Files.writeString(file, payload, StandardCharsets.UTF_8);
@@ -208,6 +408,13 @@ class UpdateServiceTest {
                                       Runnable exitAction) {
         return new UpdateServiceImpl(new AppVersionServiceImpl(properties), client, downloader,
                 tempDir, 0L, exitAction);
+    }
+
+    /** 注入可推进时钟，用于验证缓存过期行为。 */
+    private UpdateServiceImpl service(ReleaseClient client, AssetDownloader downloader,
+                                      java.util.function.LongSupplier clock) {
+        return new UpdateServiceImpl(new AppVersionServiceImpl(properties()), client, downloader,
+                tempDir, 0L, () -> { }, clock);
     }
 
     private static Properties properties() {
@@ -266,6 +473,52 @@ class UpdateServiceTest {
 
         @Override
         public java.io.InputStream openAsset(String assetUrl) throws Exception {
+            throw new UnsupportedOperationException("测试不应真实下载资产");
+        }
+    }
+
+    /** 统计调用次数的假客户端 — 验证历史版本缓存生效。 */
+    private static final class CountingReleaseClient implements ReleaseClient {
+
+        private final List<ReleaseInfo> releases;
+        private final AtomicInteger calls = new AtomicInteger();
+
+        CountingReleaseClient(List<ReleaseInfo> releases) {
+            this.releases = releases;
+        }
+
+        @Override
+        public List<ReleaseInfo> listReleases(String repository) {
+            calls.incrementAndGet();
+            return releases;
+        }
+
+        @Override
+        public java.io.InputStream openAsset(String assetUrl) {
+            throw new UnsupportedOperationException("测试不应真实下载资产");
+        }
+    }
+
+    /** 第一次失败、之后成功的假客户端 — 验证失败不被缓存。 */
+    private static final class FlakyReleaseClient implements ReleaseClient {
+
+        private final ReleaseInfo release;
+        private final AtomicInteger calls = new AtomicInteger();
+
+        FlakyReleaseClient(ReleaseInfo release) {
+            this.release = release;
+        }
+
+        @Override
+        public List<ReleaseInfo> listReleases(String repository) throws Exception {
+            if (calls.incrementAndGet() == 1) {
+                throw new IOException("Connection reset");
+            }
+            return List.of(release);
+        }
+
+        @Override
+        public java.io.InputStream openAsset(String assetUrl) {
             throw new UnsupportedOperationException("测试不应真实下载资产");
         }
     }

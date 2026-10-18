@@ -12,6 +12,7 @@ import com.geek.webrouter.web.model.dto.RouteConfigImportResponse;
 import com.geek.webrouter.web.model.entity.RouteConfig;
 import com.geek.webrouter.web.service.RouteConfigService;
 import com.geek.webrouter.web.support.AppHomeResolver;
+import com.geek.webrouter.web.support.AssetVersionResolver;
 import com.geek.webrouter.web.support.RouteTargetUrlNormalizer;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class RouteConfigController {
 
     private final RouteConfigService routeConfigService;
     private final DynamicRouteService dynamicRouteService;
+    private final AssetVersionResolver assetVersionResolver;
 
     @GetMapping
     public String index(Model model) {
@@ -47,6 +49,8 @@ public class RouteConfigController {
                 .toAbsolutePath()
                 .normalize()
                 .toString());
+        // 版本串由产物内容算出，不再手写：改完前端产物无需人工提升，也不会复用旧串
+        model.addAttribute("assetVersion", assetVersionResolver.current());
         return "index";
     }
 

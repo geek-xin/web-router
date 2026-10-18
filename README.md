@@ -1,159 +1,212 @@
+<div align="center">
+
+<img src="docs/assets/wrouter-console.png" alt="wrouter 管理后台" width="880">
+
 # wrouter
 
-<p align="center">
-  <img src="docs/assets/wrouter-console.png" alt="wrouter 管理后台：卡片式路由管理控制台" width="900">
-</p>
+**本地 Web 路由代理 —— 路径前缀转发、独立本地端口、改完即生效**
 
-<p align="center">
-  <a href="https://spring.io/projects/spring-boot"><img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-3.5.2-6DB33F?style=flat-square&logo=springboot&logoColor=white"></a>
-  <a href="https://spring.io/projects/spring-cloud-gateway"><img alt="Spring Cloud Gateway" src="https://img.shields.io/badge/Spring%20Cloud%20Gateway-2024.0.1-6DB33F?style=flat-square&logo=spring&logoColor=white"></a>
-  <img alt="Release" src="https://img.shields.io/badge/Release-1.3.0-111827?style=flat-square">
-  <img alt="Java 21" src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white">
-  <img alt="Maven" src="https://img.shields.io/badge/Maven-build-C71A36?style=flat-square&logo=apachemaven&logoColor=white">
-  <img alt="React" src="https://img.shields.io/badge/UI-React%20%2B%20Vite-149ECA?style=flat-square&logo=react&logoColor=white">
-  <img alt="Config JSON" src="https://img.shields.io/badge/Config-local%20JSON-7C3AED?style=flat-square">
-</p>
+[![Release](https://img.shields.io/github/v/release/geek-xin/web-router?style=flat-square&color=111827)](https://github.com/geek-xin/web-router/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/geek-xin/web-router/release.yml?style=flat-square&label=release)](https://github.com/geek-xin/web-router/actions)
+[![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?style=flat-square&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
+[![License](https://img.shields.io/badge/License-MIT-2F6FED?style=flat-square)](./LICENSE)
 
-<p align="center">
-  <a href="#快速启动">快速启动</a> ·
-  <a href="#功能总览">功能总览</a> ·
-  <a href="./USAGE.md">使用说明</a> ·
-  <a href="./docs/UI-DESIGN-SYSTEM.md">UI 设计系统</a> ·
-  <a href="./wiki/Home.md">Wiki 文档</a>
-</p>
+[快速开始](#快速开始) · [下载](#下载与安装) · [功能](#功能) · [文档](#文档) · [Wiki](https://github.com/geek-xin/web-router/wiki) · [更新日志](./CHANGELOG.md)
 
-`wrouter` 是一个面向本地开发、联调和测试环境的轻量 Web 路由代理。它把多组路径转发规则保存为本地 JSON 文件，并通过 Spring Cloud Gateway、Reactor Netty 和 React 管理后台实现“配置即改即生效”。
+</div>
 
-当前版本：`1.3.0`。
+---
 
-## 功能总览
+## wrouter 是什么
 
-| 功能 | 当前行为 |
+开发、联调、测试环境里，后端服务经常散落在不同的主机和端口：`localhost:8081` 的业务、`10.0.0.12:9000` 的网关、另一台机器上的门户。**wrouter 用一份本地 JSON 把这些入口收拢成一个地址**：
+
+```text
+浏览器 ──▶ wrouter :9999 ──▶ /api/users  → http://localhost:8081
+                          ├─ /portal     → http://10.0.0.12:9000
+                          └─ /static     → http://localhost:8082
+```
+
+- **不需要数据库**：一条路由一个文件，`config/routes/<id>.json`，可读、可手改、可进版本库。
+- **不需要重启**：在后台增删改查后，Gateway 路由与本地端口代理立即刷新。
+- **每个路由可独立监听**：需要固定端口给第三方系统对接时，给路由配 `localIp:localPort` 即可。
+- **看得见流量**：请求数、失败数、平均延迟、最近 30 分钟曲线、SSE 实时日志。
+
+## 功能
+
+| | 能力 | 说明 |
+| --- | --- | --- |
+| 🔀 | **多路径前缀转发** | 一条路由可挂多个前缀（`/test`、`/api/test`），按层级自动 `StripPrefix` |
+| 🔌 | **独立本地端口** | 单条路由可选监听 `127.0.0.1:18081`，保留原始 URI，不剥离前缀 |
+| ♻️ | **动态生效** | 创建 / 更新 / 删除 / 导入后差量刷新，不重启、不中断在途请求 |
+| 📊 | **流量指标** | 最近 60 秒请求数、失败数、累计平均延迟、最近 30 分钟每分钟序列 |
+| 📡 | **实时日志** | 快照 + SSE 推送，按路由筛选，含慢请求 Top 与诊断 |
+| 🎛️ | **卡片式控制台** | 路由卡片、拓扑图、详情视图、深浅主题、列表/卡片切换 |
+| 🔔 | **更新日志** | 顶栏铃铛直接展示最新版本的修订内容，未读有新版本才亮红点 |
+| 📦 | **多平台交付** | Windows `exe`、macOS `dmg`、Linux `deb`/`rpm`，以及免安装 app-image 与传统 JAR |
+| ⬆️ | **无感自动更新** | 静默检查 → 预下载 → 仅在无在途请求时退出重启，失败自动回滚 |
+
+## 截图
+
+| 浅色 | 深色 |
 | --- | --- |
-| 管理后台 | `GET /admin` 打开 React 管理后台；`GET /` 自动重定向到 `/admin`。 |
-| 路由配置 | 每条路由保存为 `config/routes/<id>.json`，创建时自动生成 `route-yyyyMMddHHmmss-xxxxxx` 形式 ID。 |
-| 多路径前缀 | 一条路由支持多个 `pathPrefixes`；旧字段 `pathPrefix` 会与第一项保持同步。 |
-| Gateway 转发 | 启用路由按每个路径前缀注册 Gateway 路由，并按层级执行 `StripPrefix`。 |
-| 独立本地端口代理 | 启用且配置了 `localPort` 的路由会启动独立 `localIp:localPort` 监听。 |
-| 默认地址与代理地址 | 本地监听未命中路径前缀时走 `targetUrl` 默认地址，命中路径前缀时走 `accessPageBaseUrl` 代理地址。 |
-| 访问页 | 可配置 `accessPage`，管理后台“访问”按钮会打开本地监听地址下的访问页或绝对 URL。 |
-| 动态刷新 | 新增、更新、删除路由后即时刷新 Gateway 路由和本地端口代理，无需重启。 |
-| 请求观测 | Gateway 与本地端口代理都会记录请求统计、最近日志、慢请求 Top，并支持 SSE 实时推送。 |
-| 流量指标 | `GET /admin/api/proxy-logs/metrics` 提供每路由的滚动请求数、滚动失败数、平均延迟与最近 30 分钟流量序列，供路由卡片与 KPI 使用。 |
-| 统一响应 | 管理 API 统一返回 `Result<T>`；业务/校验错误通常为 HTTP 200 + `success=false`。 |
-| 多平台打包 | `scripts/build-release.sh` 产出 Windows / macOS / Linux 的**安装包**（`exe` / `dmg` / `deb`+`rpm`）与**免安装 app-image**（内置运行时，无需 JDK）；`scripts/build-dist.sh` 继续产出传统 JAR 分发包（`run.sh` / `run.bat` 启停脚本），原有部署方式不受影响。 |
-| 自动更新 | 管理后台「版本与更新」抽屉调用 `/admin/api/update/check` 比对 GitHub Release，`POST /admin/api/update/apply` 下载并校验 SHA-256 后生成平台更新脚本，退出重启即完成升级，失败自动回滚。 |
-| 版本号展示 | `GET /admin/api/version` 返回版本、构建时间、运行平台、安装方式与更新通道；侧边栏与顶栏常驻显示当前版本，详情见[打包与发布](./docs/PACKAGING.md)。 |
+| ![浅色主题](docs/assets/wrouter-console.png) | ![深色主题](docs/assets/wrouter-console-dark.png) |
 
-## 管理后台视觉语言
+## 下载与安装
 
-管理后台是一套**开发者网络控制台**，不是通用 SaaS 后台。识别特征固定为：
+从 [Releases](https://github.com/geek-xin/web-router/releases/latest) 下载对应平台产物：
 
-| 识别点 | 实现 |
-| --- | --- |
-| 主体 | **卡片式路由列表**（`.route-card-board`），不是表格 |
-| 视觉符号 | Network Node + Route Line（Logo、背景装饰、卡片图标） |
-| 核心数据 | Path → Target → Local Port → Status |
-| 动态图形 | 卡片底部 Traffic Sparkline（最近 30 分钟） |
-| 详情形式 | 右侧 Route Inspector 抽屉（概览 / 配置 / 日志 / 指标） |
-| 核心图形 | `Client → wrouter → 本地端口 → 目标服务` 拓扑 |
-| 每卡强调色 | 按列表序号分配的 Accent，只作用于图标、曲线、状态点 |
+| 平台 | 安装包 | 免安装 |
+| --- | --- | --- |
+| macOS (Apple Silicon) | `wrouter-<version>-macos-arm64.dmg` | `wrouter-<version>-macos-arm64-app.zip` |
+| macOS (Intel) | `wrouter-<version>-macos-x64.dmg` | `wrouter-<version>-macos-x64-app.zip` |
+| Windows x64 | `wrouter-<version>-windows-x64.exe` | `wrouter-<version>-windows-x64-app.zip` |
+| Linux x64 | `wrouter-<version>-linux-x64.deb` / `.rpm` | `wrouter-<version>-linux-x64-app.tar.gz` |
+| 任意（需 JDK 21） | — | `wrouter-<version>-jar.zip` |
 
-完整规范见 [docs/UI-DESIGN-SYSTEM.md](./docs/UI-DESIGN-SYSTEM.md)，类名与数据契约见 [docs/UI-IMPLEMENTATION.md](./docs/UI-IMPLEMENTATION.md)。
-后台展示的数据来自 [核心功能说明](./docs/CORE-FEATURES.md) 中描述的配置管理、动态转发与请求观测能力。
+校验下载内容：
 
-## 技术栈
+```bash
+shasum -a 256 -c SHA256SUMS.txt
+```
 
-| 类型 | 技术 |
-| --- | --- |
-| 运行框架 | Spring Boot 3.5.2 |
-| 路由代理 | Spring Cloud Gateway 2024.0.1 |
-| 本地代理 | Reactor Netty |
-| 管理后台 | React 19 + Vite + Tailwind |
-| 页面挂载 | Thymeleaf |
-| 配置存储 | 本地 JSON 文件 |
-| 构建工具 | Maven |
-| Java 版本 | JDK 21 |
+> 安装包与免安装程序都内置运行时，**不需要预装 JDK**。macOS / Windows 未签名应用的首次打开提示见 [打包与发布](./docs/PACKAGING.md)。
 
-## 架构概览
+安装完成后打开 <http://localhost:9999/admin>。
+
+## 快速开始
+
+### 从源码运行
+
+```bash
+git clone https://github.com/geek-xin/web-router.git
+cd web-router
+
+mvn test                # 198 个后端测试（含 UI 契约测试）
+mvn spring-boot:run     # 默认监听 127.0.0.1:9999
+```
+
+前端源码在 `frontend/`，产物已提交到 `src/main/resources/static/admin/`；只有改前端时才需要：
+
+```bash
+cd frontend && npm ci && npm run build
+```
+
+### 第一条路由
+
+打开 <http://localhost:9999/admin> → 新增路由，或直接调 API：
+
+```bash
+curl -X POST http://localhost:9999/admin/api/routes \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "测试服务",
+    "pathPrefixes": ["/test", "/api/test"],
+    "targetUrl": "localhost:8081",
+    "accessPageBaseUrl": "localhost:8082",
+    "accessPage": "/test/hello",
+    "localIp": "127.0.0.1",
+    "localPort": 18081,
+    "enabled": true
+  }'
+```
+
+保存后立即生效：
+
+| 请求 | 上游收到 | 为什么 |
+| --- | --- | --- |
+| `http://localhost:9999/test/hello` | `http://localhost:8081/hello` | Gateway 按层级剥离前缀 |
+| `http://127.0.0.1:18081/test/hello` | `http://localhost:8082/test/hello` | 本地端口命中前缀 → 代理地址，保留 URI |
+| `http://127.0.0.1:18081/other` | `http://localhost:8081/other` | 本地端口未命中前缀 → 默认地址 |
+
+> **两条入口语义不同**：Gateway 剥离前缀，本地端口代理保留原始 URI。完整对照见 [核心功能说明](./docs/CORE-FEATURES.md)。
+
+## 架构
 
 ```mermaid
 flowchart LR
     Client["浏览器 / curl / 调用方"] --> Gateway["Spring Cloud Gateway\n127.0.0.1:9999"]
-    Gateway --> DynamicRoutes["DynamicRouteService\n动态 Gateway 路由"]
-    DynamicRoutes --> Target["目标服务"]
+    Client --> LocalProxy["LocalPortProxyService\n每路由可选本地端口"]
 
-    Admin["管理后台 / 管理 API"] --> RouteService["RouteConfigServiceImpl\nJSON 读写与校验"]
-    RouteService --> JsonFiles["config/routes/*.json"]
-    Admin --> DynamicRoutes
-
-    Client --> LocalProxy["LocalPortProxyService\n可选每路由本地端口"]
+    Gateway --> Dynamic["DynamicRouteService\n动态路由注册"]
+    Dynamic --> Target["目标服务"]
     LocalProxy --> Target
 
-    Gateway --> Logs["ProxyRequestLogService\n统计 / 最近日志 / SSE / 流量指标"]
+    Admin["React 管理后台\n/admin"] --> Config["RouteConfigServiceImpl\nJSON 读写与校验"]
+    Config --> Files["config/routes/*.json"]
+    Admin --> Dynamic
+
+    Gateway --> Logs["ProxyRequestLogService\n统计 / 最近日志 / SSE"]
     LocalProxy --> Logs
     Logs --> Admin
 ```
 
-## 快速启动
+| 层 | 技术 |
+| --- | --- |
+| 运行框架 | Spring Boot 3.5 / WebFlux（Reactor Netty） |
+| 路由代理 | Spring Cloud Gateway |
+| 配置存储 | 本地 JSON 文件（无数据库） |
+| 管理后台 | React 19 + Vite + Tailwind CSS |
+| 页面挂载 | Thymeleaf |
+| 打包 | Maven + jpackage（app-image / installer） |
+
+## 配置
+
+路由字段、校验规则与转发语义的权威说明见 [docs/CORE-FEATURES.md](./docs/CORE-FEATURES.md)。常用字段速查：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `name` | ✅ | 展示名称，全局唯一 |
+| `pathPrefixes` | — | 路径前缀列表，每项以 `/` 开头 |
+| `targetUrl` | ✅ | 默认地址（兜底），可省略协议 |
+| `accessPageBaseUrl` | 配前缀时必填 | 本地端口命中前缀时使用的代理地址 |
+| `accessPage` | — | 后台「访问」按钮打开的页面 |
+| `localIp` / `localPort` | `localPort` 必填 | 本地独立监听地址 |
+| `enabled` | — | 停用后保留配置但不注册路由 |
+
+应用级配置在 `src/main/resources/application.yml`（端口、Gateway、Thymeleaf、Actuator），自动更新开关在 `wrouter.update.*`。
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [核心功能说明](./docs/CORE-FEATURES.md) | 数据模型、动态转发、本地端口代理、观测口径、API、校验规则、关键不变量、已知边界 |
+| [使用说明](./USAGE.md) | 启动、配置、API、打包与排障的完整操作路径 |
+| [打包与发布](./docs/PACKAGING.md) | 交付形态、资产命名契约、自动更新流程、CI 发布 |
+| [UI 设计系统](./docs/UI-DESIGN-SYSTEM.md) | 令牌、排版、布局、组件、动效、拓扑与验收清单 |
+| [UI 实现映射](./docs/UI-IMPLEMENTATION.md) | 设计规范到文件、类名与数据契约的映射 |
+| [Wiki](https://github.com/geek-xin/web-router/wiki) | 更短的上手指南、架构速查与常见问题 |
+| [变更说明](./CHANGELOG.md) | 每个版本的能力与行为变化 |
+
+## 开发
 
 ```bash
-mvn test
-mvn spring-boot:run
-```
-
-默认监听：`127.0.0.1:9999`（见 `src/main/resources/application.yml`）。
-
-启动后访问：
-
-- 管理后台：<http://localhost:9999/admin>
-- 健康检查：<http://localhost:9999/actuator/health>
-- 应用信息：<http://localhost:9999/actuator/info>
-
-## 最小路由示例
-
-```json
-{
-  "name": "测试服务",
-  "pathPrefixes": ["/test", "/api/test"],
-  "targetUrl": "localhost:8081",
-  "accessPageBaseUrl": "localhost:8082",
-  "accessPage": "/test/hello",
-  "localIp": "127.0.0.1",
-  "localPort": 18081,
-  "enabled": true
-}
-```
-
-保存后：
-
-- Gateway：`http://localhost:9999/test/hello` -> `http://localhost:8081/hello`
-- 本地端口代理命中前缀：`http://127.0.0.1:18081/test/hello` -> `http://localhost:8082/test/hello`
-- 本地端口代理未命中前缀：`http://127.0.0.1:18081/other` -> `http://localhost:8081/other`
-
-> 差异点：Gateway 会剥离匹配前缀；本地端口代理保留原始 URI，并按是否命中路径前缀选择代理地址或默认地址。
-
-## 文档入口
-
-- [核心功能说明](./docs/CORE-FEATURES.md)：路由配置、Gateway 动态转发、本地端口代理、请求观测、管理 API、校验规则与关键不变量。
-- [使用说明](./USAGE.md)：启动、配置、API、打包和排障。
-- [UI 设计系统](./docs/UI-DESIGN-SYSTEM.md)：颜色、排版、布局、组件、动效、拓扑与验收清单。
-- [UI 实现映射](./docs/UI-IMPLEMENTATION.md)：设计规范到文件、类名与数据契约的对应关系。
-- [变更说明](./CHANGELOG.md)：当前版本能力清单。
-- [Wiki 首页](./wiki/Home.md)：适合发布到 GitHub Wiki 的分章节文档。
-
-## 开发与验证
-
-```bash
-mvn test                                  # 后端测试，含 AdminUiContractTest
+mvn test                                              # 后端测试
 cd frontend && npm run typecheck && npm test && npm run build
-scripts/build-dist.sh --with-tests
 ```
 
-管理后台源码位于 `frontend/`，`npm run build` 输出到 `src/main/resources/static/admin/`，再由 Spring Boot 提供页面入口。
+打包：
 
-> 改动 UI 时必须同时满足 `docs/UI-DESIGN-SYSTEM.md`，并运行 `mvn test`（`AdminUiContractTest` 会把规范中的关键契约当作断言校验）。
+```bash
+scripts/build-dist.sh --skip-tests                        # 传统 JAR 分发包
+scripts/build-package.sh --type app-image --skip-tests    # 免安装程序（当前平台）
+scripts/build-package.sh --type installer --skip-tests    # 安装包 dmg / deb+rpm / exe
+scripts/build-release.sh --only jar,app-image,installer   # 全量契约资产 + SHA256SUMS.txt
+```
+
+jpackage 不支持交叉构建，一个平台必须在对应机器（或 CI 矩阵）上构建。
+
+> 改管理后台 UI 前请先读 [UI 设计系统](./docs/UI-DESIGN-SYSTEM.md)：`AdminUiContractTest` 会把规范中的关键契约当作断言校验。
+
+## 贡献
+
+1. Fork 并切出分支：`git checkout -b feat/your-feature`
+2. 按 [AGENTS.md](./AGENTS.md) 的修改约定同步文档与测试
+3. 确保 `mvn test` 与 `npm run build` 通过
+4. 提交 PR，描述变更动机与验证方式
 
 ## 许可证
 
-当前仓库未声明许可证。如需对外发布，请先补充明确的 LICENSE 文件。
+[MIT](./LICENSE) © geek-xin

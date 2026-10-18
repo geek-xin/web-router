@@ -3,7 +3,6 @@ import {
   Activity,
   ArrowDownRight,
   ArrowUpRight,
-  Bell,
   ChevronDown,
   ChevronUp,
   CircleHelp,
@@ -28,10 +27,12 @@ import {
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
+import { Select, type SelectOption } from '@/components/ui/select';
 import { fetchJson, jsonRequest } from '@/lib/api';
 import { stripProtocol } from '@/lib/utils';
 import { APP_REPOSITORY, APP_VERSION, GATEWAY_ENDPOINT } from '@/lib/app-meta';
+import { ChangelogBell } from '@/features/system/ChangelogBell';
 import { VersionDialog } from '@/features/system/VersionDialog';
 import type { AppVersionInfo } from '@/features/system/types';
 import { normalizeVersionInfo, fallbackVersionInfo, platformLabel } from '@/features/system/version-utils';
@@ -77,7 +78,7 @@ import {
   type ThemeMode,
 } from '@/lib/preferences';
 import { RouteFormDialog } from '@/features/routes/RouteFormDialog';
-import { RouteDetailDrawer } from '@/features/routes/RouteDetailDrawer';
+import { RouteDetailView } from '@/features/routes/RouteDetailView';
 import { DeleteConfirmDialog } from '@/features/routes/DeleteConfirmDialog';
 import { RouteLogPanel } from '@/features/logs/RouteLogDialog';
 import './styles.css';
@@ -98,8 +99,7 @@ interface RouteImportResponse {
   routes: RouteConfig[];
 }
 
-interface DetailDrawerState {
-  open: boolean;
+interface DetailViewState {
   route: RouteConfig | null;
   fileName: string;
   content: string;
@@ -140,7 +140,8 @@ export default function App() {
   const [sidebarMode, setSidebarMode] = React.useState<SidebarMode>(() => resolveSidebarMode(normalizeSidebarMode(readPreference(safeStorage(), SIDEBAR_STORAGE_KEY))));
   const [bandMode, setBandMode] = React.useState<BandMode>(() => resolveBandMode(normalizeBandMode(readPreference(safeStorage(), BAND_STORAGE_KEY))));
   const [form, setForm] = React.useState<FormState>({ open: false, mode: 'create', route: null });
-  const [detailDrawer, setDetailDrawer] = React.useState<DetailDrawerState>({ open: false, route: null, fileName: '', content: '', loading: false, error: '' });
+  // 详情占用控制台版面本身（非抽屉）：route 非空即进入详情视图
+  const [detail, setDetail] = React.useState<DetailViewState>({ route: null, fileName: '', content: '', loading: false, error: '' });
   const [deleteIds, setDeleteIds] = React.useState<string[]>([]);
 
   const configPathFull = React.useMemo(() => readConfigPath(), []);
@@ -259,6 +260,18 @@ export default function App() {
 
   const totals = React.useMemo(() => computeTotals(routes, metricsById), [routes, metricsById]);
   const logRoute = React.useMemo(() => routes.find((route) => route.id === logRouteId) || null, [routes, logRouteId]);
+  // 日志视图的路由下拉：首项是「全部」，其余带本地端口提示
+  const logRouteOptions = React.useMemo<SelectOption[]>(
+    () => [
+      { value: '', label: '全部路由', hint: '聚合所有日志' },
+      ...routes.map((route) => ({
+        value: route.id,
+        label: route.name,
+        hint: localBinding(route.localIp, route.localPort) || '未配置端口',
+      })),
+    ],
+    [routes],
+  );
 
   async function handleSaveRoute(payload: RouteConfigPayload, mode: 'create' | 'edit' | 'copy', route?: RouteConfig | null) {
     const url = mode === 'edit' && route ? '/admin/api/routes/' + encodeURIComponent(route.id) : '/admin/api/routes';
@@ -269,15 +282,22 @@ export default function App() {
     await loadMetrics();
   }
 
+  /** 进入详情视图：占用控制台版面，不弹抽屉。 */
   async function openDetail(route: RouteConfig) {
-    setDetailDrawer({ open: true, route, fileName: route.id + '.json', content: '', loading: true, error: '' });
+    setDetail({ route, fileName: route.id + '.json', content: '', loading: true, error: '' });
+    setView('routes');
     try {
       const raw = await fetchJson<RawConfigResponse>('/admin/api/routes/' + encodeURIComponent(route.id) + '/raw');
-      setDetailDrawer({ open: true, route, fileName: raw.fileName, content: formatJsonContent(raw.content), loading: false, error: '' });
+      setDetail({ route, fileName: raw.fileName, content: formatJsonContent(raw.content), loading: false, error: '' });
     } catch (error) {
-      setDetailDrawer({ open: true, route, fileName: route.id + '.json', content: '', loading: false, error: error instanceof Error ? error.message : '读取配置失败' });
+      setDetail({ route, fileName: route.id + '.json', content: '', loading: false, error: error instanceof Error ? error.message : '读取配置失败' });
       toast.error(error instanceof Error ? error.message : '读取配置失败');
     }
+  }
+
+  /** 返回列表。 */
+  function closeDetail() {
+    setDetail({ route: null, fileName: '', content: '', loading: false, error: '' });
   }
 
   async function saveDetailRoute(payload: RouteConfigPayload, _mode: 'edit', route: RouteConfig) {
@@ -285,7 +305,7 @@ export default function App() {
     toast.success('路由已更新');
     await loadRoutes();
     await loadMetrics();
-    setDetailDrawer((current) => (current.route && current.route.id === route.id ? { ...current, route: { ...current.route, ...payload } as RouteConfig } : current));
+    setDetail((current) => (current.route && current.route.id === route.id ? { ...current, route: { ...current.route, ...payload } as RouteConfig } : current));
   }
 
   async function exportRoutes() {
@@ -340,8 +360,8 @@ export default function App() {
       toast.success(ids.length > 1 ? '选中路由已删除' : '路由已删除');
       setSelectedIds([]);
       setDeleteIds([]);
-      if (detailDrawer.route && ids.includes(detailDrawer.route.id)) {
-        setDetailDrawer((current) => ({ ...current, open: false, route: null }));
+      if (detail.route && ids.includes(detail.route.id)) {
+        closeDetail();
       }
       await loadRoutes();
       await loadMetrics();
@@ -389,17 +409,33 @@ export default function App() {
 
           <div className="app-main">
             <AppTopbar
-              gatewayState={gatewayState}
-              version={versionInfo?.version || APP_VERSION}
               theme={theme}
               search={search}
               onSearchChange={(value) => { setSearch(value); setView('routes'); }}
               onToggleTheme={toggleTheme}
+              versionFallback={versionInfo?.version || APP_VERSION}
               onOpenVersion={() => setVersionOpen(true)}
             />
 
             <div className="app-content scroll-area">
-              {view === 'routes' ? (
+              {view === 'routes' && detail.route ? (
+                <RouteDetailView
+                  route={detail.route}
+                  index={Math.max(0, visibleRoutes.findIndex((item) => item.id === detail.route?.id))}
+                  metrics={metricsById[detail.route.id]}
+                  fileName={detail.fileName}
+                  content={detail.content}
+                  loading={detail.loading}
+                  error={detail.error}
+                  existingNames={routes.map((item) => item.name)}
+                  existingBindings={routes.map(activeLocalBinding).filter(Boolean)}
+                  onBack={closeDetail}
+                  onSaveRoute={saveDetailRoute}
+                  onAccess={openAccess}
+                  onDelete={(route) => setDeleteIds([route.id])}
+                  onOpenLogs={openLogs}
+                />
+              ) : view === 'routes' ? (
                 <>
                   <OverviewBand
                     totals={totals}
@@ -495,21 +531,15 @@ export default function App() {
                       <h2 className="toolbar-title">请求日志</h2>
                       <p className="toolbar-note">默认展示全部路由日志，可按路由筛选；支持实时流、耗时 Top 与诊断分析</p>
                     </div>
-                    <label className="search-field">
-                      <span className="sr-only">选择路由</span>
+                    <div className="search-field">
                       <Search className="search-field-icon" aria-hidden="true" />
-                      <select
-                        className="field-select w-full"
+                      <Select
                         value={logRouteId || ''}
-                        onChange={(event) => setLogRouteId(event.target.value || null)}
+                        onValueChange={(value) => setLogRouteId(value || null)}
+                        options={logRouteOptions}
                         aria-label="选择要查看日志的路由"
-                      >
-                        <option value="">全部路由（聚合所有日志）</option>
-                        {routes.map((route) => (
-                          <option key={route.id} value={route.id}>{route.name} · {localBinding(route.localIp, route.localPort) || '未配置端口'}</option>
-                        ))}
-                      </select>
-                    </label>
+                      />
+                    </div>
                     <Button variant="outline" onClick={() => setView('routes')}>返回路由列表</Button>
                   </div>
                   {/* 日志面板同样只让内部区域滚动，页面本身不出现滚动条。
@@ -538,23 +568,6 @@ export default function App() {
         names={routes.filter((route) => deleteIds.includes(route.id)).map((route) => route.name)}
         onOpenChange={(open) => !open && setDeleteIds([])}
         onConfirm={() => void deleteRoutes(deleteIds)}
-      />
-      <RouteDetailDrawer
-        open={detailDrawer.open}
-        route={detailDrawer.route}
-        index={Math.max(0, visibleRoutes.findIndex((route) => route.id === detailDrawer.route?.id))}
-        metrics={detailDrawer.route ? metricsById[detailDrawer.route.id] : null}
-        fileName={detailDrawer.fileName}
-        content={detailDrawer.content}
-        loading={detailDrawer.loading}
-        error={detailDrawer.error}
-        onOpenChange={(open) => setDetailDrawer((current) => ({ ...current, open }))}
-        onSaveRoute={saveDetailRoute}
-        existingNames={routes.map((route) => route.name)}
-        existingBindings={routes.map(activeLocalBinding).filter(Boolean)}
-        onAccess={openAccess}
-        onDelete={(route) => setDeleteIds([route.id])}
-        onOpenLogs={openLogs}
       />
       <VersionDialog
         open={versionOpen}
@@ -764,17 +777,20 @@ function SplitStat({ label, value, icon, tone, active = false, onClick }: { labe
   );
 }
 
-function AppTopbar({ gatewayState, version, theme, search, onSearchChange, onToggleTheme, onOpenVersion }: {
-  gatewayState: GatewayState;
-  version: string;
+/**
+ * 顶栏只保留「全局操作」：搜索、主题、更新日志、头像。
+ * Gateway 状态与版本号归属左侧菜单栏的运行卡（见 AppSidebar 的 .status-panel），
+ * 避免同一信息在两处重复表达。
+ */
+function AppTopbar({ theme, search, onSearchChange, onToggleTheme, versionFallback, onOpenVersion }: {
   theme: ThemeMode;
   search: string;
   onSearchChange: (value: string) => void;
   onToggleTheme: () => void;
+  /** 更新日志铃铛的版本兜底与「查看全部」入口。 */
+  versionFallback: string;
   onOpenVersion: () => void;
 }) {
-  const running = gatewayState === 'running';
-  const stateText = running ? 'Gateway 运行中' : gatewayState === 'checking' ? '正在检查' : 'Gateway 未响应';
   return (
     <header className="app-topbar">
       <div className="topbar-heading">
@@ -788,14 +804,6 @@ function AppTopbar({ gatewayState, version, theme, search, onSearchChange, onTog
           <Input value={search} onChange={(event) => onSearchChange(event.target.value)} type="search" placeholder="搜索路由名称、Path、Target" />
           <span className="topbar-search-key">⌘K</span>
         </label>
-        <span className="state-pill" title={running ? 'Gateway 运行中' : gatewayState === 'checking' ? '正在检查 Gateway 状态' : 'Gateway 未响应'}>
-          <span className={'dot ' + (running ? 'state-running' : gatewayState === 'checking' ? 'state-checking' : 'state-error')} aria-hidden="true" />
-          {stateText}
-          <span className="state-pill-address">{GATEWAY_ENDPOINT}</span>
-        </span>
-        <button type="button" className="version-pill" onClick={onOpenVersion} aria-label={'当前版本 v' + version + '，查看版本与更新'} title="版本与更新">
-          v{version}
-        </button>
         <button
           type="button"
           className="icon-button"
@@ -805,7 +813,7 @@ function AppTopbar({ gatewayState, version, theme, search, onSearchChange, onTog
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
         </button>
-        <button type="button" className="icon-button icon-button-dot" aria-label="通知"><Bell className="h-4 w-4" aria-hidden="true" /></button>
+        <ChangelogBell versionFallback={versionFallback} onOpenVersion={onOpenVersion} />
         <span className="topbar-avatar" aria-hidden="true">WR</span>
       </div>
     </header>
@@ -910,14 +918,25 @@ function AppSidebar({ mode, onToggleMode, routeCount, gatewayState, view, onView
 
       <div className="side-spacer" />
 
+      {/*
+        Gateway 状态与版本号统一放在左侧菜单栏（原先顶栏的状态胶囊/版本胶囊已移除）。
+        展开态显示完整信息；收起态（默认）只留状态点 + 版本号，仍可点开版本抽屉。
+      */}
       <div className="status-panel">
         <div className="status-panel-head">
           <span className={'dot ' + (running ? 'state-running' : gatewayState === 'checking' ? 'state-checking' : 'state-error')} aria-hidden="true" />
           <span className="status-panel-title">{running ? '网关运行中' : gatewayState === 'checking' ? '正在检查网关' : '网关未响应'}</span>
         </div>
         <span className="status-panel-address">{GATEWAY_ENDPOINT}</span>
-        <button type="button" className="status-panel-meta" onClick={onOpenVersion} title={platformLabel(platform) + ' · 查看版本与更新'}>
-          v{version} · {platformLabel(platform)}
+        <button
+          type="button"
+          className="status-panel-meta"
+          onClick={onOpenVersion}
+          title={platformLabel(platform) + ' · 查看版本与更新'}
+          aria-label={'当前版本 v' + version + '，' + platformLabel(platform) + '，查看版本与更新'}
+        >
+          <span className="status-panel-version font-mono">v{version}</span>
+          <span className="status-panel-platform"> · {platformLabel(platform)}</span>
         </button>
       </div>
 

@@ -2,32 +2,35 @@
 
 ## 管理后台
 
-<http://localhost:9999/admin> 是一套深色开发者控制台，主要能力：
+<http://localhost:9999/admin> 是一套开发者网络控制台：
 
-- **KPI 行**：路由总数 / 运行中 / 已停用 / 请求数·分钟 / 平均延迟；前三项点击即筛选。
-- **工具栏**：搜索（名称 / Path / Target / 监听地址 / id）、状态筛选、排序、导出、导入、新增。
-- **路由卡片**：状态点、Path 标签、Target、本地端口、请求数·分钟、平均延迟与 30 分钟流量曲线。
-- **详情抽屉**：路由拓扑、基本信息、运行状态、最近日志，另有配置 / 日志 / 指标标签页。
-- **日志视图**：实时流、Top 路径、单耗时 Top、诊断分析。
+| 区域 | 能力 |
+| --- | --- |
+| 概览带 | 本分钟请求、最近 30 分钟曲线、路由总数 / 运行中 / 已停用，前三项点击即筛选 |
+| 工具栏 | 搜索（名称 / Path / Target / 监听地址 / id）、状态筛选、排序、卡片·列表切换、导出、导入、新增 |
+| 路由卡片 | 状态点、Path 标签、Target、本地端口、请求数·分钟、平均延迟、30 分钟 Sparkline |
+| 路由详情 | 占用控制台版面的页内视图：① 路由拓扑 ② 基本信息 ③ 运行状态 ④ 最近日志，另有配置 / 日志 / 指标标签页 |
+| 日志视图 | 实时流、Top 路径、单耗时 Top、诊断分析；默认聚合全部路由 |
+| 版本与更新 | 侧边栏运行卡的版本号可点开抽屉：当前安装、自动更新、手动更新、历史版本 |
+| 更新日志铃铛 | 顶栏铃铛直接展示最新发布版本的修订内容，未读有新版本才亮红点 |
 
 保存、启停或删除路由后，Gateway 与本地端口代理会立即刷新。
-
 视觉与交互规范见 [UI 设计系统](../docs/UI-DESIGN-SYSTEM.md)，文件映射见 [UI 实现映射](../docs/UI-IMPLEMENTATION.md)。
 
 ## 路由字段
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `id` | 系统生成 | 内部 ID，同时是配置文件名与 Gateway routeId 基础值，格式 `route-yyyyMMddHHmmss-xxxxxx`。 |
-| `name` | 是 | 展示名称，≤50 字，全局唯一。 |
-| `pathPrefixes` | 否 | 路径前缀列表，每项以 `/` 开头；同路由内不重复，不同路由可复用。 |
-| `pathPrefix` | 否 | 旧字段，写回时始终与 `pathPrefixes[0]` 同步。 |
-| `targetUrl` | 是 | 默认地址（兜底），保存前归一化为带协议 URL。 |
-| `accessPageBaseUrl` | 配置前缀时必填 | 代理地址，**只被本地端口代理使用**。 |
-| `accessPage` | 否 | 访问页，后台「访问」按钮优先打开它。 |
-| `localIp` | 否 | 本地监听 IP，为空时默认 `127.0.0.1`。 |
-| `localPort` | 管理 API 必填 | 本地监听端口，`1-65535`。 |
-| `enabled` | 否 | 禁用后保留配置文件，但不注册 Gateway 路由、不启动本地代理。 |
+| `id` | 系统生成 | 内部 ID，同时是配置文件名与 Gateway routeId 基础值，格式 `route-yyyyMMddHHmmss-xxxxxx` |
+| `name` | ✅ | 展示名称，≤50 字，全局唯一 |
+| `pathPrefixes` | — | 路径前缀列表，每项以 `/` 开头；同路由内不重复，不同路由可复用 |
+| `pathPrefix` | — | 旧字段，写回时始终与 `pathPrefixes[0]` 同步 |
+| `targetUrl` | ✅ | 默认地址（兜底），保存前归一化为带协议 URL；允许与其他路由重复 |
+| `accessPageBaseUrl` | 配前缀时必填 | 代理地址，**只被本地端口代理使用** |
+| `accessPage` | — | 访问页，后台「访问」按钮优先打开它 |
+| `localIp` | — | 本地监听 IP，为空时默认 `127.0.0.1` |
+| `localPort` | 管理 API 必填 | 本地监听端口，`1-65535` |
+| `enabled` | — | 禁用后保留配置文件，但不注册 Gateway 路由、不启动本地代理 |
 
 ## 校验规则
 
@@ -52,13 +55,14 @@
 | 前缀处理 | 按层级 `StripPrefix` | **不剥离**，保留原始 URI（含 query） |
 | 上游选择 | 配置 `localPort` 时交给本地代理，否则走 `targetUrl` | 命中 `pathPrefixes` 走 `accessPageBaseUrl`，否则走 `targetUrl` |
 | 未命中路径 | 不命中该 Gateway 路由 | 转发到 `targetUrl` |
+| 失败响应 | Gateway 默认错误页 | HTTP 502 + 文本 `Proxy request failed` |
 
-> 要点：**`accessPageBaseUrl` 只影响本地端口代理**。配置了 `localPort` 的路由会改写 Gateway 目标并把剥离层级降为 0，由本地代理统一决定最终上游。
+> **要点**：`accessPageBaseUrl` 只影响本地端口代理。配置了 `localPort` 的路由会改写 Gateway 目标并把剥离层级降为 0，由本地代理统一决定最终上游。
 
 ## 导入与导出
 
-- 导出 `GET /admin/api/routes/export`，下载为 `wrouter-routes-yyyyMMdd-HHmmss.json`。
-- 导入 `POST /admin/api/routes/import` 总是**新增**（重新生成 ID），不覆盖同名路由；批次内冲突会整体回滚。
+- 导出：`GET /admin/api/routes/export`，下载为 `wrouter-routes-yyyyMMdd-HHmmss.json`。
+- 导入：`POST /admin/api/routes/import` 总是**新增**（重新生成 ID），不覆盖同名路由；批次内冲突整体回滚。
 
 ## 请求观测
 
@@ -72,5 +76,16 @@
 | `uniqueIpCount` | 去重 IP 数 |
 
 派生 routeId `<id>__<n>` 在日志、SSE 与指标中统一归并到基础 ID。统计全部在内存中，应用重启后清空。
+
+## 版本与更新
+
+| 位置 | 内容 |
+| --- | --- |
+| 侧边栏运行卡 | 状态点 + 版本号，点击打开「版本与更新」抽屉 |
+| 顶栏铃铛 | 只读更新日志：最新版本修订内容、未读点、跳转完整历史 |
+| 版本抽屉 | 当前安装、自动更新状态（在途请求 / 空闲判定 / 待应用版本 / 静默阈值）、手动检查与一键更新、历史版本与修订记录 |
+
+自动更新是「无感」三段式：静默检查 → 预下载（不退出）→ 仅在**无在途请求且静默达标**时退出重启。
+失败会自动回滚，日志写在应用根目录的 `updates/update.log`。
 
 观测口径的完整定义见 [核心功能说明](../docs/CORE-FEATURES.md)。

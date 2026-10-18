@@ -48,7 +48,7 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
    正文、标签与技术数据一律不用衬线，保证小字号可读。
 3. **Single Gradient Band** — 概览带（`.band`）是唯一允许出现装饰性渐变的位置：
    左侧白色主数字卡 + 右侧蓝色柱状带。
-4. **Topology-first Detail** — 路由详情抽屉首屏永远是 `Client → wrouter → Local Port → Target` 拓扑。
+4. **Topology-first Detail** — 路由详情（占用控制台版面的页内视图）首屏永远是 `Client → wrouter → Local Port → Target` 拓扑。
 
 > 品牌识别来自 **Paper Shell + Editorial Heading + Single Gradient Band + Route Card + Topology-first Detail**，
 > 不来自发光、玻璃、大圆角或多色渐变。
@@ -178,6 +178,7 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | `--radius-band` | `20px` | 白色外壳、概览带 |
 | `--radius-pill` | `999px` | 胶囊：搜索框、状态胶囊、版本胶囊、徽标 |
 | `--sidebar-width` | `236px` | 侧边栏宽度（收起态见 §6.2） |
+| `--list-actions-column` | `296px` | 路由列表操作列宽度；表头与数据行共用，保证列对齐（见 §6.8） |
 
 禁止在普通组件上使用超过 20px 的圆角（胶囊除外）。
 
@@ -193,7 +194,7 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | slate | `#64748B` | `#94A3B8` |
 
 **分配规则**：按路由在列表中的序号取模分配（`routeAccentClass(index)`），
-保证同一路由在卡片视图、列表视图与详情抽屉中颜色一致。
+保证同一路由在卡片视图、列表视图与路由详情中颜色一致。
 
 **使用范围**：图标底色、Sparkline 描边与渐变、状态点。**禁止整卡换色、禁止正文着色。**
 
@@ -366,9 +367,9 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 
         ⋮  .side-spacer 把底部区推到底
 ┌──────────────────────┐   ← .status-panel 底部运行卡
-│ ● 网关运行中          │
+│ ● 网关运行中          │   ← Gateway 状态（顶栏已无状态胶囊）
 │ 127.0.0.1:9999        │
-│ v1.3.0 · macOS · …    │   ← .status-panel-meta，点击开版本抽屉
+│ v1.3.0 · macOS        │   ← .status-panel-meta，点击开版本抽屉（顶栏已无版本胶囊）
 └──────────────────────┘
 ──────────────────────────   ← .sidebar-footer 上分隔线
 [⇤ 收起侧边栏]               ← .sidebar-toggle 固定在侧栏最下方
@@ -380,11 +381,11 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | `.sidebar-footer` | 侧栏底部区（运行卡之下），承载收起按钮；有 1px 上分隔线 |
 | `.sidebar-toggle` | 收起 / 展开按钮，**固定在侧栏最下方**；展开态显示文案，收起态只剩图标并居中 |
 | `.sidebar-toggle-label` | 按钮文案；窄轨与 ≤980px 下隐藏 |
-| `.side-section` / `.side-label` | 分组；`.side-section-status` 在 ≤980px 隐藏（顶栏已表达网关状态） |
+| `.side-section` / `.side-label` | 分组；`.side-section-status` 在 ≤980px 隐藏（运行卡已表达网关状态） |
 | `.nav-item` / `.nav-item-active` | 38px 高、10px 圆角；当前项**白底 + `--shadow-hairline`**，不用彩色底也不用左侧指示条 |
 | `.nav-icon` / `.nav-text` / `.nav-count` | 16px 图标 / 省略号文本 / 等宽计数徽标 |
 | `.side-spacer` | 把运行卡推到最底 |
-| `.status-panel` / `.status-panel-head` / `.status-panel-title` / `.status-panel-address` / `.status-panel-meta` / `.status-panel-paths` | 运行卡各部件；`.status-panel-paths` 展示配置目录，可换行 |
+| `.status-panel` / `.status-panel-head` / `.status-panel-title` / `.status-panel-address` / `.status-panel-meta` / `.status-panel-version` / `.status-panel-platform` / `.status-panel-paths` | 运行卡各部件；`.status-panel-meta` 是**版本与更新的唯一入口**（顶栏版本胶囊已移除），`.status-panel-version` / `-platform` 是它的两段，`.status-panel-paths` 展示配置目录，可换行 |
 
 #### 收起态（icon rail，**默认**）
 
@@ -404,12 +405,14 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | --- | --- |
 | 侧栏宽度 | 76px（`.app-shell-collapsed { --sidebar-width: 76px }`） |
 | 品牌行 | 竖排：标记在上、切换按钮在下 |
-| 隐藏 | `.brand-text`、`.side-label`、`.nav-text`、`.nav-count`、`.status-panel-title`、`.status-panel-address`、`.status-panel-meta`、`.status-panel-paths`、`.side-section-status` |
-| 保留 | 全部图标按钮（`.nav-item` 居中）、运行卡状态点 |
-| 可达性 | 收起时每个导航项都必须带 `title`，切换按钮带 `aria-label` + `aria-expanded` |
-| ≤980px | 切换按钮隐藏，始终按展开态渲染（顶部横向导航不需要收起） |
+| 隐藏 | `.brand-text`、`.side-label`、`.nav-text`、`.nav-count`、`.status-panel-title`、`.status-panel-address`、`.status-panel-platform`、`.status-panel-paths`、`.side-section-status` |
+| 保留 | 全部图标按钮（`.nav-item` 居中）、运行卡**状态点 + 版本号**（`.status-panel-meta` 仍可点击） |
+| 可达性 | 收起时每个导航项都必须带 `title`，切换按钮带 `aria-label` + `aria-expanded`；版本按钮带完整 `aria-label` |
+| ≤980px | 切换按钮隐藏，始终按展开态渲染；运行卡改为横向一行并 `position: sticky` 固定在右侧，避免被横向导航滚出视口 |
 
 > 收起态**不隐藏功能**：所有操作仍可点击，只是文案让位给图标。
+> **例外（必须保留）**：版本号在收起态仍然可见——顶栏的版本胶囊已移除，
+> 运行卡是版本与更新的唯一入口，收起它会让用户无处进入版本抽屉。
 > 因此新增侧栏项时必须同时提供 `title`（收起态）与 `.nav-text`（展开态）。
 
 ### 6.3 状态点 `.dot`
@@ -430,9 +433,13 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 ### 6.4 顶栏 `.app-topbar`
 
 `@text
-路由控制台                          [🔍 搜索…  ⌘K] ● Gateway 运行中 127.0.0.1:9999 v1.3.0 [主题][通知][WR]
+路由控制台                          [🔍 搜索…  ⌘K] [主题][🔔][WR]
 管理本地路由、代理端口和请求转发
 `@
+
+> Gateway 状态与版本号**不在顶栏**：它们属于左侧菜单栏底部的运行卡
+> （展开态显示状态 + 地址 + 版本，收起态只留状态点 + 版本号，见 §6.2）。
+> 顶栏只保留与当前页面无关的全局操作。
 
 | 类名 | 要点 |
 | --- | --- |
@@ -440,9 +447,9 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | `.topbar-actions` | `flex: 1 1 auto` + `flex-wrap`；空间不足时整块换行，**不允许挤压标题** |
 | `.topbar-search` | 胶囊搜索框，`flex: 0 1 240px`，`min-width: 160px` |
 | `.topbar-search-icon` / `topbar-search-key` | 左侧图标 / 右侧 `⌘K` 提示 |
-| `.state-pill` / `.state-pill-address` | 网关状态胶囊；地址在 ≤1320px 隐藏 |
-| `.version-pill` | 等宽 `v<版本>`，点击开版本抽屉；≤760px 隐藏 |
+| ~~`.state-pill` / `.version-pill`~~ | **已移除**：Gateway 状态与版本号统一放在左侧菜单栏运行卡，顶栏只保留全局操作 |
 | `.icon-button` / `.icon-button-dot` | 38px 圆形图标按钮，必须有 `aria-label`；`-dot` 带红点 |
+| `.changelog-bell` + `.changelog-pop` | 铃铛是**更新日志入口**（只读，见 §6.17）；红点表示「有未读的新版本日志」，不是装饰 |
 | `.topbar-avatar` | `WR` 等宽字标；≤760px 隐藏 |
 
 ### 6.5 概览带 `.band`（签名组件）
@@ -549,58 +556,80 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 ### 6.8 路由列表视图 `.route-list`（可选）
 
 `@text
-   路由                     PATH          TARGET / 本地端口   请求/MIN  延迟  30 分钟   操作
-☐ ● 用户服务 运行中   /api/user /user   127.0.0.1:18100     42      18ms  ▁▂▃▅▇    查看 日志 …
+   路由                    TARGET / 本地端口   请求/MIN  延迟  30 分钟   操作
+☐ ● 用户服务 运行中      127.0.0.1:18100     42      18ms  ▁▂▃▅▇    查看 日志 …
 `@
 
 | 类名 | 要点 |
 | --- | --- |
 | `.route-list` / `.route-list-head` / `.route-list-head-cell` | 容器与列头（10.5px，`--surface-ink-subtle`） |
 | `.route-list-row` / `.route-list-row-selected` / `.route-list-row-muted` | 行状态，规则与卡片一致 |
-| `.route-list-main` / `.route-list-name` / `.route-list-desc` | 名称列（含状态点） |
-| `.route-list-paths` / `.route-list-port` | Path 列与端口列；chip 超出必须省略 |
+| `.route-list-main` / `.route-list-name` / `.route-list-desc` | 名称列（含状态点与行为摘要） |
+| `.route-list-targets` / `.route-list-port` | Target 与端口列 |
 | `.route-list-metrics` / `.route-list-num` | 两个数字列；`.route-list-metrics` 默认 `display: contents`，折叠时变 `flex` 并排 |
 | `.route-list-spark` / `.route-list-actions` | 曲线列与操作列 |
 | `.route-list-stacked-label` | 仅 ≤1100px 显示：列头消失后用行内小标签补回列语义 |
 
+- **列表不展示 Path 列**：路由名下方的行为摘要已表达「命中前缀走代理地址」，
+  完整前缀在卡片视图与详情里可见；列表聚焦「转发到哪、跑得怎么样」。
+  因此列表的 Path 语义**由卡片视图承担**，改列表列时不要顺手加回。
 - 与卡片视图**共享同一套数据、强调色与操作**。
 - 两种视图都**不是** `<table>`：用 CSS Grid 保证与卡片同一套视觉语言。
-- 操作按钮在 ≤1100px 退化为纯图标（保留 `aria-label`）。
+- 操作按钮在 **≤1100px 与 ≥1720px** 退化为纯图标（保留 `title` 与 `aria-label`）：
+  两端都放不下带文字的 6 个按钮。
+- **操作列宽度用共用变量 `--list-actions-column`（296px）**，不能用 `max-content`：
+  表头与每一行都是**独立的 grid 容器**，内容相关的轨道会各算各的——
+  表头只有「操作」二字（约 21px）、数据行有 6 个按钮（约 289px），
+  两边列宽不一致会让整张表列错位（实测偏 39px）。固定值同时保证按钮放得下。
+- 卡片操作行必须允许 `flex-wrap: wrap`：4 列布局（≥1720px）时卡片内容区仅约 307px，
+  6 个带文字按钮需要约 325px，会换行把卡片撑高到 325px 并被列表可视区裁掉。
 
-### 6.9 详情抽屉 `.drawer`（Topology-first，签名组件）
+### 6.9 路由详情 `.route-detail-view`（页内视图，Topology-first，签名组件）
 
-宽度 468px，从右侧滑入，结构固定：
+**详情占用路由控制台版面本身，不是覆盖式抽屉。** 点击卡片「查看」后，概览带与列表被详情替换，
+共用同一栅格宽度；返回列表用头部左侧的「返回列表」。
 
 `@text
-演示环境                        ● 运行中      [×]
-/realTimeMonitor
+[← 返回列表]  演示环境                              ● 运行中 · route-xxx.json
+              /realTimeMonitor
 
 概览   配置   日志   指标
-──────────────────────────────────
-① 路由拓扑  Client → wrouter → 本地端口 → 目标服务
-② 基本信息  路由名称 / Path Prefix / Target URL / 代理地址 / 本地绑定 / 状态 / 访问页
-③ 运行状态  请求数 / 成功率 / 平均延迟 + 30 分钟曲线
-④ 最近日志  时间 方法 路径 状态 耗时（最多 5 条 + 查看全部）
-──────────────────────────────────
-[编辑] [访问] [日志]              [删除]
+──────────────────────────────────────────────────────────
+① 路由拓扑（通栏）      Client → wrouter → 本地端口 → 目标服务
+② 基本信息（左列）      路由名称 / Path Prefix / Target URL / 代理地址 / 本地绑定 / 访问页
+③ 运行状态（右列）      请求数 / 成功率 / 平均延迟 + 30 分钟曲线
+④ 最近日志（通栏）      时间 方法 路径 状态 耗时（最多 6 条 + 查看全部）
+──────────────────────────────────────────────────────────
+概览态  [编辑] [访问] [日志]                        [删除]
+配置态  [保存] [访问] [日志]                        [删除]
 `@
 
 | 类名 | 要点 |
 | --- | --- |
-| `.drawer-scrim` / `.drawer` | 遮罩（z-index 40）/ 抽屉（z-index 41），`--shadow-float` |
-| `.drawer-head` / `.drawer-title-row` / `.drawer-title` | 头部；标题衬线 23px |
-| `.drawer-file` | 头部配置文件名，**必须省略号截断**，不能撑破抽屉 |
-| `.drawer-paths` | Path 标签行 |
-| `.drawer-tabs` / `.drawer-tab` | 标签页；当前项用 2px 底部墨色条 |
-| `.drawer-body` / `.drawer-actions` | 滚动主体 / 常驻底部操作栏 |
+| `.route-detail-view` | 详情根节点；与列表共用 `.surface-panel`，`flex:1; min-height:0` |
+| `.detail-head` / `.detail-back` | 头部与「返回列表」；头部底边 1px 细线 |
+| `.detail-heading` / `.detail-title` / `.detail-meta` / `.detail-file` | 标题衬线 24px；文件名**必须省略号截断** |
+| `.detail-paths` | Path 标签行，占满一行 |
+| `.detail-body` | 详情内**唯一滚动区**，与 `.panel-scroll` 同约定 |
+| `.detail-overview` / `.detail-span-2` | 概览两列栅格；通栏分节用 `-span-2` |
+| `.detail-metric-row` / `.detail-metric` / `.detail-metric-icon` / `.detail-metric-value` | 指标卡：图标底 + 数值（等宽 18px） |
+| `.detail-spark` | 30 分钟曲线容器，52px |
+| `.detail-actions` | 常驻底部操作栏；`删除` 用 `margin-left:auto` 推右 |
 | `.section` / `.section-head` / `.section-index` / `.section-title` | ①②③④ 分节；序号是**真实序列**，不是装饰 |
 | `.field-grid` / `.field` / `.field-value` | 基本信息两列网格 |
-| `.metric-grid` / `.metric-grid-5` / `.metric-figure` | 指标卡；`-5` 用于日志视图 5 项 |
 | `.log-rows` / `.log-row` / `.log-row-path` | 最近日志列表（等宽 11.5px） |
 | `.json-editor` | JSON 文本域（等宽、可编辑态高亮） |
 
-- **概览首屏必须是拓扑**，不允许先放表单或 JSON。
-- 底部操作栏常驻：`编辑` 主色，`删除` 危险描边。
+- **概览首屏必须是拓扑**，不允许先放表单或 JSON；分节顺序固定 ①拓扑 ②基本信息 ③运行状态 ④最近日志。
+- 详情**不出现遮罩与 `aria-modal`**：它不是模态，列表被替换而非被覆盖。
+- 宽屏下 `.detail-overview .topology` 横向四列铺开（隐藏纵向连接线），窄屏回落为纵向链路。
+- 底部操作栏常驻：`删除` 危险描边；最左侧按钮按状态切换，**位置固定在「访问」之前**：
+  - **概览态**（默认进入详情、或从配置页切回）：显示 `编辑`，主色，点击切到「配置」标签页。
+  - **配置态**（停在「配置」标签页）：`编辑` 隐藏，原位换成 `保存`，通过 `form={DETAIL_FORM_ID}` 提交配置表单。
+- 因此**默认进入详情不出现「保存」**；配置表单内不再放重复的保存按钮（`showActions={false}`），保存入口只有底部操作栏一处。
+- 文案统一为 `保存`（不用「保存配置」）；保存中显示 `保存中…` 并禁用。
+
+> `.drawer-*` 现在只服务于日志面板与版本抽屉；路由详情不再使用抽屉。
 
 ### 6.10 拓扑 `.topology`
 
@@ -612,8 +641,28 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | `.topology` | 纵向排列 |
 | `.topology-node` / `.topology-node-{client,gateway,port,target}` | 四段节点；`-gateway` 用强调底 + 强调边框 |
 | `.topology-node-icon` / `.topology-node-body` / `.topology-node-kicker` / `.topology-node-value` / `.topology-node-note` | 节点内部结构 |
-| `.topology-link` / `.topology-link-flow` / `.topology-link-idle` | 连线 1px + 1.8s 流动光点；停用时静止 |
+| `.topology-link` / `.topology-link-active` | 连接段容器；`-active` 才播放流动 |
+| `.topology-link-svg-v` / `.topology-link-svg-h` | 纵向 / 横向两条线，由断点决定显示哪条 |
+| `.topology-link-base` / `.topology-link-flow` | 静止底线 + 流动虚线（`stroke-dasharray` + `stroke-dashoffset`） |
+| `.topology-link-arrow` / `.topology-link-arrow-down` / `.topology-link-arrow-right` | 方向箭头；纵向朝下、横向朝右 |
+| `.topology-flow-live` / `.topology-flow-error` / `.topology-flow-idle` | 实时状态：正常走主色、有失败请求转告警色、停用则静止 |
 | `.topology-fallback` / `.topology-fallback-label` / `.topology-fallback-value` | 虚线兜底分支「未命中 → 默认地址」 |
+
+**拓扑是实时画面**：连线沿链路方向持续流动，速度由**最近一分钟请求数**分档驱动。
+
+| 最近一分钟请求 | 流动周期 | 含义 |
+| --- | --- | --- |
+| 停用 | 静止 | 链路未启用 |
+| 0 | 2.6s | 无流量 |
+| 1–9 | 1.8s | 少量 |
+| 10–99 | 1.1s | 正常 |
+| ≥100 | 0.7s | 高峰 |
+
+- 出现**失败请求**时整条链路转告警色（`--surface-warning`），一眼看出「通不通」。
+- 分档而非线性映射：线性会让速度差异过小、看起来像随机抖动。
+- 实现用 SVG 虚线平移（`stroke-dashoffset`），**不用粒子 / 3D / 渐变 / 缩放**——§7 明令禁止那几类效果。
+- 宽屏用 7 列栅格（节点-线-节点-线-节点-线-节点）保留横向连线；早先直接 `display:none` 会让宽屏**完全看不到流动方向**。
+- 栅格 `gap: 0`，间距交给连线列本身，否则虚线在卡片之间会断开。
 
 ### 6.11 表单与弹窗
 
@@ -629,9 +678,21 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 
 | 类名 | 要点 |
 | --- | --- |
-| `.field-input` / `.field-select` | 38px 高、10px 圆角；focus 主色边框 + 3px 光环；下拉箭头用内联 SVG |
+| `.field-input` | 38px 高、10px 圆角；focus 主色边框 + 3px 光环 |
+| `.field-select` | **已弃用（仅兜底）**：原生 `<select>` 的展开列表由操作系统绘制，无法跟随主题 |
+| `.select-trigger` / `.select-value` / `.select-hint` / `.select-placeholder` / `.select-caret` | 下拉触发框；几何与 `.field-input` 一致，展开时箭头旋转 180° |
+| `.select-content` / `.select-viewport` / `.select-item` / `.select-item-text` / `.select-item-label` / `.select-item-hint` / `.select-item-check` | 下拉弹层；白底 + `.--radius-control` + `--shadow-float`，跟随深浅色 |
 | `.btn` / `.btn-primary` / `.btn-danger` / `.btn-ghost` / `.btn-sm` / `.btn-icon` | 按钮族；主按钮用 `--surface-navy` 底（深色下用 `--surface-accent`） |
 | `.chip` / `.chip-accent` / `.chip-success` / `.chip-warning` / `.chip-danger` | 徽标族（胶囊） |
+
+**下拉一律用 `components/ui/select.tsx`（Radix Select），不用原生 `<select>`。**
+原生下拉的**展开列表由操作系统绘制**，CSS 只能作用于触发框——结果是同一界面里出现两套视觉语言：
+触发框是设计系统的白底圆角，展开列表却是系统灰底直角，深浅色主题也不跟随。
+统一后触发框与弹层共用同一套令牌（38px 高 / 10px 圆角 / `--shadow-float`）。
+
+> API 是**值模型** `onValueChange(value)`，不是原生的 `onChange(event)`：弹层不是表单控件，承载不了原生 change 事件。
+> `.search-field` 内的下拉由 `.search-field .select-trigger` 补 `padding-left: 33px` 让开左侧图标——
+> 这条规则原生 `.field-input` 有、`.field-select` 此前漏了，导致图标压在文案上。
 
 `Button` 变体：`primary` / `default` / `outline` / `ghost` / `danger`；
 尺寸：`sm` 32px、`default` 38px、`icon` 38px 方形。
@@ -675,7 +736,8 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 结构：① 当前安装（版本号 / 构建时间 / 运行平台 / 安装方式 / 更新通道 / 自动更新）
 ② **自动更新**（策略说明 + 在途请求 / 空闲判定 / 待应用版本 / 静默阈值 + 等待原因）
 ③ 手动更新（[`检查更新`] → 状态文案 → 最新版本 / 资产大小 / 通道 → 下载资产 / 更新说明
-→ [`一键更新`] [`查看 Release 说明`]）。
+→ [`一键更新`] [`查看 Release 说明`]）
+④ **历史版本与修订记录**（全部已发布版本，按版本号倒序，见 §6.16）。
 
 **自动更新小节**（打开抽屉时每 3 秒轮询 `/admin/api/update/auto`）：
 
@@ -694,9 +756,88 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 - 版本号、构建时间、资产名一律等宽；版本号带 `v` 前缀。
 - 打开时自动静默检查一次；检查中图标旋转。
 - 「一键更新」仅在「有更新 + 有匹配资产 + 当前安装支持自更新」时可用，否则禁用并在下方说明原因（不弹错误 toast）。
-- 平台与安装方式用中文文案：`macOS · Apple Silicon`、`免安装程序`、`JAR 服务`。
+- 平台只展示**系统名**：`macOS`、`Linux`、`Windows`；不展示 CPU 架构。
+  「macOS · Apple Silicon」这类文案过长会挤占抽屉与侧栏，而架构对使用者没有决策价值
+  （更新包由后端按 `platform` 标识自动选）。安装方式仍用中文文案：`免安装程序`、`JAR 服务`。
 
-### 6.16 轻提示
+### 6.16 历史版本与修订记录
+
+版本抽屉第 ④ 节：列出仓库里**全部已发布版本**（含预发布与当前版本），回答「每个版本改了什么」。
+
+`@text
+[History] 历史版本与修订记录                          [刷新]
+共 12 个已发布版本 · geek-xin/web-router
+┌──────────────────────────────────────────────┐
+│ v1.4.0  [当前]          2026-10-01        ⌄ │
+│ 新增历史版本与修订记录视图                     │
+└──────────────────────────────────────────────┘
+│ v1.4.0-beta.1  [预览]   2026-09-28        ⌄ │
+│ 预发布：仅内部验证                             │
+`@
+
+| 项 | 约定 |
+| --- | --- |
+| 排序 | 按语义化版本从新到旧（`ReleaseVersionComparator`），不是按提交顺序 |
+| 当前版本 | 强调边框 + 强调底 + `chip-accent`「当前」徽标，双重表达 |
+| 预发布 | `chip-warning`「预览」徽标；**不隐藏**，历史要完整 |
+| 折叠 | 默认只显示修订记录首行（`releaseNotesPreview()`），点击整行展开全文 |
+| 展开 | 同时只展开一条；`aria-expanded` 表达状态，chevron 旋转 180° |
+| 来源 | 每行可跳转 GitHub Release 页面 |
+| 失败 | 读取失败时显示原因文案，不弹错误 toast、不影响其它小节 |
+
+> 与「手动更新」的区别：那里只关心**有没有更新**，这里回答**每个版本改了什么**。
+> 历史列表包含当前版本与预发布版本，不做「只显示比当前新」的过滤。
+
+### 6.17 顶栏「更新日志」铃铛
+
+顶栏的铃铛是**只读的更新日志入口**，回答「最新一版改了什么」，不参与下载与重启。
+
+`@text
+路由控制台                          [🔍 搜索…  ⌘K] [主题][🔔][WR]
+管理本地路由、代理端口和请求转发                │
+                                        ┌───────┴──────────────────┐
+                                        │ ✦ 更新日志          [刷新] │
+                                        │ 共 4 个已发布版本 · owner/repo│
+                                        ├──────────────────────────┤
+                                        │ v1.3.0 [当前]    2026-10-01 ⌄│
+                                        │ 多平台打包、自动更新与版本号展示 │
+                                        │ v1.2.0           2026-08-08 ⌄│
+                                        ├──────────────────────────┤
+                                        │ 查看全部版本与更新           │
+                                        └──────────────────────────┘
+`@
+
+| 类名 | 要点 |
+| --- | --- |
+| `.changelog-bell` | 触发器容器，`position: relative` 作为弹层定位上下文 |
+| `.changelog-pop` | 弹层：`right: 0` 与铃铛右对齐、`z-index: 70`（高于抽屉 40/50 与下拉 60）、`max-height: min(70vh, 520px)` |
+| 弹层宽度 | `min(calc(100vw - 48px), 396px)`。**不要用 `92vw`**：弹层右对齐铃铛，而铃铛距视口右缘还有画布与顶栏内边距，`92vw` 会在窄屏向左溢出（实测 430px 视口 `x=-6.6`） |
+| 窄屏 | ≤760px 时 `max-height` 压到 `min(60vh, 460px)`：顶栏换行后面板起点更低，压一档才能保证底部入口可见 |
+| `.changelog-pop-head` / `-heading` / `-title` / `-sub` | 标题（衬线）与条数/仓库说明；刷新按钮在右侧 |
+| `.changelog-list` / `.changelog-item` / `-item-current` | 条目列表（内部滚动）；当前运行版本用强调边框 + 强调底 |
+| `.changelog-item-head` / `.changelog-version` / `.changelog-date` / `.changelog-chevron` / `-chevron-open` | 版本号 + 日期 + 展开箭头；`aria-expanded` 与箭头旋转同步 |
+| `.changelog-preview` / `.changelog-notes` / `.changelog-link` | 折叠态首行摘要 / 展开态全文（等宽底、可滚）/ GitHub 跳转 |
+| `.changelog-pop-empty` / `.changelog-pop-error` / `.changelog-pop-foot` / `.changelog-pop-link` | 空态、读取失败提示、底部「查看全部版本与更新」 |
+| `.icon-button-sm` | 面板内的次级图标按钮（28px），用于刷新 |
+
+**行为约定**：
+
+| 项 | 约定 |
+| --- | --- |
+| 数据来源 | `GET /admin/api/update/history`（全部已发布版本，含预发布与当前版本） |
+| 触发 | 挂载时静默拉一次（未读点必须在点开前就有结论）；打开面板不重复请求，可点刷新 |
+| 条数 | 默认最多 4 条（`CHANGELOG_VISIBLE_LIMIT`），完整历史在版本抽屉 §6.16 |
+| 未读点 | 最新版本 **比「上次看过的版本」新** 才亮；无记录时基线为当前运行版本，刚装好不亮 |
+| 已读 | 打开面板即把已读推进到最新版本（`localStorage` 键 `wrouter.changelog.seen`） |
+| 展开 | 打开面板默认展开最新一条；同时只展开一条 |
+| 关闭 | 点击面板外部或 `Esc` 关闭，焦点回到铃铛按钮 |
+| 窄屏 | 弹层宽度按 `100vw - 48px` 收窄，面板不溢出视口（见上表「弹层宽度」） |
+| 降级 | 接口失败时保留已有数据并把原因写进面板，不弹错误 toast、不影响其他区域 |
+
+> 与 §6.15「手动更新」的分工：铃铛只读、零副作用；下载/校验/重启全部在版本抽屉里发生。
+> 铃铛也不展示「是否支持自动更新」这类安装形态信息——那是抽屉「当前安装」的职责。
+
+### 6.18 轻提示
 
 `[data-sonner-toast]` 系列覆盖 sonner 默认样式，使 Toast 跟随主题
 （表面 `--surface-raised`、边框 `--surface-line-strong`、阴影 `--shadow-float`、字体 `--font-sans`）。
@@ -712,7 +853,7 @@ Route → Gateway → Local Port → Target → Traffic → Logs → Debug
 | Drawer 滑入 `drawer-in` | 220ms | `cubic-bezier(.22,.61,.36,1)` | `@keyframes` |
 | 遮罩淡入 `scrim-in` | 160ms | `ease-out` | `@keyframes` |
 | 状态点呼吸 `dot-pulse` | 1.6s 循环 | `ease-in-out` | `@keyframes` |
-| 拓扑流动 `link-flow` | 1.8s 循环 | `linear` | `@keyframes` |
+| 拓扑流动 `topology-flow` | 0.7–2.6s 循环（按流量分档） | `linear` | `@keyframes` + `stroke-dashoffset` |
 | 骨架微光 `shimmer` | 1.4s 循环 | `ease-in-out` | `@keyframes` |
 
 **禁止**大幅缩放、旋转、粒子、3D、彩虹渐变、闪烁。
@@ -789,7 +930,7 @@ Logo 由节点与连线构成，禁止盾牌 / 云 / 服务器 / 齿轮作为核
 - [ ] Route Card 包含 Traffic / Latency
 - [ ] 存在 Sparkline
 
-详情抽屉类：
+路由详情类：
 
 - [ ] 存在 Route Detail Drawer
 - [ ] Drawer 首屏是 Route Topology，不允许先放表单或 JSON

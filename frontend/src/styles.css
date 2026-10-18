@@ -275,10 +275,17 @@ button {
   overscroll-behavior: contain;
 }
 
-/* 视口够高时列表区至少放得下一张卡片；再矮就让概览带继续压缩 */
+/*
+ * 视口够高时列表区"期望"至少放得下一张卡片。
+ *
+ * 这里用 flex-basis（期望值）而不是 min-height（硬下限）：min-height 会让
+ * .panel-scroll 拒绝被压缩，把 .panel-footnote 和卡片一起顶出 .surface-panel，
+ * 表现为卡片压在底部统计行上。flex-basis 在空间不足时会被正常压缩，
+ * 面板内容始终留在面板内。
+ */
 @media (min-height: 700px) {
   .panel-scroll {
-    min-height: 212px;
+    flex: 1 1 212px;
   }
 }
 
@@ -584,13 +591,18 @@ button {
   padding: 2px 0 0;
 }
 
+/*
+ * 收起态（默认）只保留图标与最关键的一行信息。
+ * 注意：.status-panel-meta 不再整体隐藏——顶栏的版本胶囊已移除，
+ * 运行卡是版本号的唯一入口，收起态必须仍能看到并点开它。
+ */
 .app-shell-collapsed .brand-text,
 .app-shell-collapsed .side-label,
 .app-shell-collapsed .nav-text,
 .app-shell-collapsed .nav-count,
 .app-shell-collapsed .status-panel-title,
 .app-shell-collapsed .status-panel-address,
-.app-shell-collapsed .status-panel-meta,
+.app-shell-collapsed .status-panel-platform,
 .app-shell-collapsed .status-panel-paths,
 .app-shell-collapsed .side-section-status {
   display: none;
@@ -619,10 +631,24 @@ button {
   align-items: stretch;
 }
 
+/* 收起态运行卡：状态点在上、版本号在下，整体仍可点击打开版本抽屉 */
 .app-shell-collapsed .status-panel {
-  display: grid;
-  place-items: center;
-  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.app-shell-collapsed .status-panel-head {
+  justify-content: center;
+}
+
+.app-shell-collapsed .status-panel-meta {
+  width: auto;
+  margin-top: 0;
+  padding: 2px 6px;
+  text-align: center;
 }
 
 @media (max-width: 980px) {
@@ -800,44 +826,216 @@ button {
   border: 1px solid var(--surface-line);
 }
 
-/* 状态胶囊 */
-.state-pill {
+/* =========================================================================
+   顶栏「更新日志」铃铛
+   ========================================================================= */
+
+/* 触发器与弹层的定位上下文：弹层相对铃铛右对齐，不参与文档流 */
+.changelog-bell {
+  position: relative;
+  flex: none;
+}
+
+/* 面板内的次级图标按钮（刷新）：比顶栏的 38px 更紧凑 */
+.icon-button-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+}
+
+.changelog-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  /* 宽度按视口收窄而不是按 92vw：弹层右对齐铃铛，铃铛本身离视口右缘还有画布+顶栏内边距，
+     用 92vw 会在窄屏上向左溢出约 6px（实测 430px 视口 x=-6.6）。 */
+  width: min(calc(100vw - 48px), 396px);
+  max-height: min(70vh, 520px);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised, var(--surface-panel));
+  box-shadow: var(--shadow-float);
+  animation: changelog-in 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes changelog-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.changelog-pop-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--surface-line-faint);
+}
+
+.changelog-pop-heading {
+  min-width: 0;
+}
+
+.changelog-pop-title {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 14px;
-  border: 1px solid var(--surface-line);
-  border-radius: var(--radius-pill);
-  background: var(--surface-panel);
-  color: var(--surface-ink-muted);
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--surface-ink);
 }
 
-.state-pill-address {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+.changelog-pop-sub {
+  margin-top: 3px;
   color: var(--surface-ink-subtle);
+  font-size: 11.5px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
-.version-pill {
-  height: 38px;
-  padding: 0 14px;
-  border: 1px solid var(--surface-line);
-  border-radius: var(--radius-pill);
-  background: var(--surface-panel);
+.changelog-pop-error {
+  margin: 10px 14px 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(192, 57, 43, 0.32);
+  border-radius: var(--radius-control);
+  background: rgba(192, 57, 43, 0.08);
+  color: var(--surface-error);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.changelog-pop-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 14px;
+  color: var(--surface-ink-subtle);
+  font-size: 12.5px;
+}
+
+.changelog-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 8px 4px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.changelog-item {
+  padding: 2px 6px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  transition: border-color 140ms ease-out, background 140ms ease-out;
+}
+
+.changelog-item + .changelog-item {
+  margin-top: 2px;
+}
+
+.changelog-item:hover {
+  background: var(--surface-panel-hover);
+}
+
+/* 当前运行版本：强调边框 + 强调底，与「当前」徽标双重表达 */
+.changelog-item-current {
+  border-color: var(--surface-accent-border);
+  background: var(--surface-accent-soft);
+}
+
+.changelog-item-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
   color: var(--surface-ink-muted);
-  font-family: var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.changelog-version {
+  color: var(--surface-ink);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.changelog-date {
+  margin-left: auto;
+  color: var(--surface-ink-subtle);
+  font-size: 11px;
+}
+
+.changelog-chevron {
+  flex: none;
+  color: var(--surface-ink-subtle);
+  transition: transform 140ms ease-out;
+}
+
+.changelog-chevron-open {
+  transform: rotate(180deg);
+}
+
+.changelog-preview {
+  margin: 0;
+  padding: 0 2px 4px;
+  color: var(--surface-ink-subtle);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.changelog-notes {
+  max-height: 200px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  color: var(--surface-ink-muted);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+}
+
+.changelog-link {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0 2px;
+  color: var(--surface-accent);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.changelog-link:hover {
+  text-decoration: underline;
+}
+
+.changelog-pop-foot {
+  flex: none;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--surface-line-faint);
+}
+
+.changelog-pop-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--surface-accent);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 140ms ease-out, color 140ms ease-out;
 }
 
-.version-pill:hover {
-  border-color: var(--surface-line-strong);
-  color: var(--surface-ink);
+.changelog-pop-link:hover {
+  text-decoration: underline;
 }
 
 /* =========================================================================
@@ -1324,9 +1522,167 @@ button {
   cursor: pointer;
 }
 
-.field-select option {
+/* 原生 select 的展开列表由系统绘制，无法跟随主题；保留类名只为兜底，
+   界面上的下拉一律用 components/ui/select.tsx（Radix）。 */
+
+/* =========================================================================
+   下拉选择器（Radix Select）
+   触发框复用 .field-input/.field-select 的几何，弹层与整体风格一致
+   ========================================================================= */
+
+.select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 38px;
+  /* 不设 min-width：调用点可用 width 精确控制（如日志抽屉的「显示 50 条」需 76px）。
+     内联 width 优先于这里的 width，但会输给 min-width——所以下限交给 padding 兜底。 */
+  padding: 0 11px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-control);
   background: var(--surface-panel);
   color: var(--surface-ink);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.select-trigger:hover:not(:disabled) {
+  border-color: var(--surface-line-strong);
+}
+
+.select-trigger:focus-visible,
+.select-trigger[data-state='open'] {
+  outline: none;
+  border-color: var(--surface-accent);
+  box-shadow: 0 0 0 3px var(--surface-focus-ring);
+}
+
+.select-trigger:disabled {
+  background: var(--surface-sunken);
+  color: var(--surface-ink-subtle);
+  cursor: not-allowed;
+}
+
+.select-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-hint {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--surface-ink-subtle);
+}
+
+.select-placeholder {
+  color: var(--surface-ink-subtle);
+}
+
+.select-caret {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--surface-ink-subtle);
+  transition: transform 160ms ease-out;
+}
+
+.select-trigger[data-state='open'] .select-caret {
+  transform: rotate(180deg);
+}
+
+/* 弹层：白底圆角 + 与抽屉同级的浮起阴影，跟随深浅色主题 */
+.select-content {
+  z-index: 60;
+  min-width: var(--radix-select-trigger-width);
+  max-height: var(--radix-select-content-available-height);
+  overflow: hidden;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised, var(--surface-panel));
+  box-shadow: var(--shadow-float);
+  animation: select-in 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes select-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.select-viewport {
+  padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: var(--surface-ink-muted);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.select-item[data-highlighted] {
+  background: var(--surface-sunken);
+  color: var(--surface-ink);
+}
+
+.select-item[data-state='checked'] {
+  color: var(--surface-ink);
+  font-weight: 600;
+}
+
+.select-item[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 文案与右侧提示是同一行里的两段：必须有间距，否则会连成 "全部路由聚合所有日志" */
+.select-item-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.select-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-item-hint {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--surface-ink-subtle);
+}
+
+.select-item-check {
+  flex: none;
+  color: var(--surface-accent);
+}
+
+/* .search-field 里的下拉：为左侧图标留出内边距，
+   否则图标会压在文案上（原生 .field-input 有这条规则，下拉此前漏了）。 */
+.search-field .select-trigger {
+  width: 100%;
+  padding-left: 33px;
 }
 
 /* 按钮 */
@@ -1604,13 +1960,6 @@ button {
   color: var(--surface-ink-subtle);
 }
 
-/* 列表视图里 Path 列窄，单个 chip 必须自己省略而不是撑破网格 */
-.route-list-paths .route-prefix-chip {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .route-card-meta {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -1679,10 +2028,17 @@ button {
   margin-top: auto;
 }
 
+/*
+ * 操作行必须容得下 6 个按钮。4 列布局（≥1720px）时卡片仅约 339px 宽、
+ * 内容区 307px，而按钮合计约 325px，超出的部分会溢出到卡片外。
+ * flex-wrap 兜底 + 收紧内边距，保证任何列数下按钮都留在卡片内。
+ */
 .route-card-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
+  row-gap: 4px;
   margin-top: 10px;
   padding-top: 9px;
   border-top: 1px solid var(--surface-line-faint);
@@ -1691,9 +2047,9 @@ button {
 .route-card-action {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 5px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -1773,6 +2129,11 @@ button {
    ========================================================================= */
 
 .route-list {
+  /*
+   * 操作列宽度的唯一来源，供表头与数据行共用。
+   * 6 个按钮实测 5×52 + 24（图标）+ 5×1（间距）= 289px，留余量取 296px。
+   */
+  --list-actions-column: 296px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--surface-line);
@@ -1781,17 +2142,26 @@ button {
   overflow: hidden;
 }
 
+/*
+ * 列表列：路由 / Target·本地端口 / 请求·min / 延迟 / 30 分钟 / 操作。
+ * 不展示 Path 列——路由名下方已用行为摘要表达「命中前缀走代理地址」，
+ * 完整前缀在卡片视图与详情里可见，列表聚焦「这一条转发到哪、跑得怎么样」。
+ *
+ * 操作列宽度用**共用变量**而不是 max-content：表头与每一行都是独立的 grid 容器，
+ * 内容相关的轨道会各算各的——表头只有「操作」二字（约 21px），
+ * 数据行有 6 个按钮（约 289px），两边列宽不一致会让整张表错位（实测偏 39px）。
+ * 固定值同时保证按钮放得下，不会像早期写死 250px 那样向左溢出压住曲线。
+ */
 .route-list-head,
 .route-list-row {
   display: grid;
   grid-template-columns:
-    minmax(0, 1.45fr)
-    minmax(0, 1.15fr)
-    minmax(0, 1fr)
+    minmax(0, 1.6fr)
+    minmax(0, 1.1fr)
     74px
     66px
     88px
-    250px;
+    var(--list-actions-column);
   align-items: center;
   gap: 10px;
   padding: 0 14px;
@@ -1861,14 +2231,6 @@ button {
   white-space: nowrap;
 }
 
-.route-list-paths {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-
 .route-list-targets {
   display: flex;
   flex-direction: column;
@@ -1906,12 +2268,11 @@ button {
   .route-list-head,
   .route-list-row {
     grid-template-columns:
-      minmax(0, 1.45fr)
-      minmax(0, 1.15fr)
-      minmax(0, 1fr)
+      minmax(0, 1.6fr)
+      minmax(0, 1.1fr)
       74px
       66px
-      250px;
+      var(--list-actions-column);
   }
 
   .route-list-spark,
@@ -1948,7 +2309,7 @@ button {
     grid-template-columns: minmax(0, 1fr) 190px;
     grid-template-areas:
       'main actions'
-      'paths targets'
+      'targets targets'
       'metrics metrics';
     gap: 10px 14px;
     padding: 12px 14px;
@@ -1956,7 +2317,6 @@ button {
 
   .route-list-main { grid-area: main; }
   .route-list-actions { grid-area: actions; }
-  .route-list-paths { grid-area: paths; }
   .route-list-targets { grid-area: targets; }
 
   /* 折叠后两个数字并排成一行，而不是各自占满整行 */
@@ -1966,6 +2326,17 @@ button {
     gap: 24px;
   }
 
+  .route-card-action-label {
+    display: none;
+  }
+}
+
+/*
+ * 4 列布局（≥1720px）时卡片内容区仅约 307px，6 个带文字按钮需要约 325px，
+ * 会换行成两排、把卡片撑高到 325px，超出列表可视高度后按钮被裁掉。
+ * 此时退化为纯图标（保留 title 与 aria-label），按钮回到单行 38px。
+ */
+@media (min-width: 1720px) {
   .route-card-action-label {
     display: none;
   }
@@ -2194,6 +2565,332 @@ button {
   color: var(--surface-ink);
 }
 
+/* 版本抽屉的历史版本列表：折叠显示修订记录首行，展开看全文 */
+.release-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.release-history-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-card);
+  background: var(--surface-panel);
+}
+
+/* 当前运行版本：用强调边框标出，避免用户误判装的是哪一版 */
+.release-history-row-current {
+  border-color: var(--surface-accent-border);
+  background: var(--surface-accent-soft);
+}
+
+.release-history-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.release-history-version {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--surface-ink);
+}
+
+.release-history-date {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--surface-ink-subtle);
+}
+
+.release-history-chevron {
+  flex: none;
+  color: var(--surface-ink-subtle);
+  transition: transform 140ms ease-out;
+}
+
+.release-history-chevron-open {
+  transform: rotate(180deg);
+}
+
+.release-history-preview {
+  margin: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--surface-ink-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.release-history-notes {
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  color: var(--surface-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.release-history-link {
+  align-self: flex-start;
+  font-size: 11.5px;
+  color: var(--surface-accent);
+  text-decoration: none;
+}
+
+.release-history-link:hover {
+  text-decoration: underline;
+}
+
+/* =========================================================================
+   路由详情（页内视图，非抽屉）
+   ========================================================================= */
+
+/* 详情占用控制台版面本身：与列表共用栅格，长内容有足够横向空间 */
+.route-detail-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  flex: none;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--surface-line-faint);
+}
+
+.detail-back {
+  flex: none;
+}
+
+.detail-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.detail-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--surface-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--surface-ink-muted);
+}
+
+.detail-file {
+  color: var(--surface-ink-subtle);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* 操作栏常驻底部，与列表面板的底部统计行同一视觉位置 */
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--surface-line-faint);
+}
+
+/* 详情主体是唯一滚动区，与列表面板一致 */
+.detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: 16px;
+}
+
+/* 概览用两列栅格：拓扑与最近日志通栏，指标与基本信息各占一列 */
+.detail-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.detail-span-2 {
+  grid-column: 1 / -1;
+}
+
+.detail-metric-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detail-metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+  min-width: 0;
+}
+
+.detail-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-control);
+  background: var(--surface-accent-soft);
+  color: var(--surface-accent);
+}
+
+.detail-metric-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detail-metric-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--surface-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-spark {
+  height: 52px;
+  margin-top: 10px;
+}
+
+/*
+ * 详情里的拓扑比抽屉宽得多，横向铺开更接近真实链路。
+ *
+ * 用 7 列栅格（节点-连线-节点-连线-节点-连线-节点）而不是 4 列：
+ * 早先的做法是把连线整体 display:none，代价是宽屏上**完全看不到流动方向**，
+ * 只剩四个孤立的块。现在给连线留出固定的 26px 列，横向虚线照样流动。
+ */
+.detail-overview .topology {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) 26px
+    minmax(0, 1fr) 26px
+    minmax(0, 1fr) 26px
+    minmax(0, 1fr);
+  /* 不留 gap：间距交给 26px 的连线列本身。
+     否则卡片与连线之间各留 10px 空隙，虚线看起来是断开的。 */
+  gap: 0;
+  align-items: center;
+}
+
+/* 横向链路：显示横线 + 右向箭头，隐藏竖线与下向箭头 */
+.detail-overview .topology-link-svg-v,
+.detail-overview .topology-link-arrow-down {
+  display: none;
+}
+
+.detail-overview .topology-link-svg-h,
+.detail-overview .topology-link-arrow-right {
+  display: block;
+}
+
+.detail-overview .topology-link {
+  height: 24px;
+}
+
+.detail-overview .topology-fallback {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1100px) {
+  .detail-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 窄屏回到纵向堆叠：连线也要跟着换回竖线 + 下向箭头。
+     gap 同样为 0，让竖线从上一张卡片连续接到下一张。 */
+  .detail-overview .topology {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .detail-overview .topology-link-svg-h,
+  .detail-overview .topology-link-arrow-right {
+    display: none;
+  }
+
+  .detail-overview .topology-link-svg-v,
+  .detail-overview .topology-link-arrow-down {
+    display: block;
+  }
+
+  .detail-overview .topology-link {
+    height: 26px;
+  }
+}
+
+@media (max-width: 760px) {
+  .detail-metric-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-actions > * {
+    flex: 1 1 auto;
+  }
+}
+
 .log-rows {
   display: flex;
   flex-direction: column;
@@ -2321,45 +3018,100 @@ button {
   white-space: nowrap;
 }
 
+/*
+ * 连接段：一条静止底线 + 一条沿链路方向流动的虚线 + 方向箭头。
+ *
+ * 流动用 SVG 的 stroke-dasharray + stroke-dashoffset 实现：
+ * 虚线整体平移即「线条在流动」，天然表达方向，也不违反 §7 的动效禁令
+ * （不用粒子 / 3D / 渐变 / 缩放）。速度由 --flow-duration 控制，
+ * 该变量由 RouteTopology 按最近一分钟请求数写入容器。
+ */
 .topology-link {
   position: relative;
-  display: grid;
-  place-items: center;
-  height: 24px;
+  display: block;
+  height: 26px;
   color: var(--surface-ink-subtle);
 }
 
-.topology-link::before {
-  content: '';
+.topology-link-svg {
   position: absolute;
-  left: 24px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--surface-line-strong);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.topology-link-flow::after {
-  content: '';
-  position: absolute;
-  left: 23.5px;
-  top: 0;
-  width: 2px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--surface-accent);
-  animation: link-flow 1.8s linear infinite;
-}
-
-@keyframes link-flow {
-  0% { transform: translateY(0); opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { transform: translateY(16px); opacity: 0; }
-}
-
-.topology-link-idle::after {
+/* 默认纵向链路：只显示竖线 */
+.topology-link-svg-h {
   display: none;
+}
+
+.topology-link-base {
+  stroke: var(--surface-line-strong);
+  stroke-width: 1;
+}
+
+.topology-link-flow {
+  stroke: var(--surface-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  /* 6 实 6 虚：短划线让「流动」在小高度里也看得清 */
+  stroke-dasharray: 6 6;
+  stroke-dashoffset: 0;
+  opacity: 0;
+}
+
+.topology-link-active .topology-link-flow {
+  opacity: 1;
+  animation: topology-flow var(--flow-duration, 1.8s) linear infinite;
+}
+
+@keyframes topology-flow {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* 方向箭头：纵向链路朝下，横向（宽屏四列）朝右 */
+.topology-link-arrow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  color: var(--surface-ink-subtle);
+  background: var(--surface-panel);
+  border-radius: 50%;
+}
+
+.topology-link-arrow-right {
+  display: none;
+}
+
+.topology-link-active .topology-link-arrow {
+  color: var(--surface-accent);
+}
+
+/* 实时状态三态：
+   live  = 有流量且无失败，走主色（默认色，这里显式声明以便与告警态对称）
+   error = 出现失败请求，整条链路转告警色
+   idle  = 路由停用，完全静止 */
+.topology-flow-live .topology-link-flow {
+  stroke: var(--surface-accent);
+}
+
+.topology-flow-error .topology-link-flow {
+  stroke: var(--surface-warning);
+}
+
+.topology-flow-error .topology-link-active .topology-link-arrow,
+.topology-flow-error .topology-link-arrow {
+  color: var(--surface-warning);
+}
+
+.topology-flow-idle .topology-link-flow {
+  animation: none;
+  opacity: 0;
 }
 
 .topology-fallback {
@@ -2705,20 +3457,37 @@ button {
    响应式
    ========================================================================= */
 
-@media (max-width: 1320px) {
-  /* 空间不足时先收起地址等次要信息，保证顶栏只占一行 */
-  .state-pill-address {
-    display: none;
+/*
+ * 窄视口：概览带改为单列会把高度从 177px 翻到 314px，把路由列表挤到几乎没有高度
+ * （面板 120px、滚动区 5px），卡片被压到底部统计行上。
+ * 因此只在真正放不下两列（≤560px）时才堆叠，561–1100px 保持两列。
+ */
+@media (min-width: 561px) and (max-width: 1100px) {
+  .band {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .band-chart {
+    padding-top: 0;
   }
 }
 
-@media (max-width: 1100px) {
+/*
+ * 极窄视口（手机）：概览带堆叠后，概览带 + 工具栏已经超过可用高度，
+ * 列表区会被压成 0。此时允许内容区整体滚动兜底——
+ * 这是唯一会让"页面滚动"的断点，避免列表在窄屏上完全不可用。
+ */
+@media (max-width: 560px) {
   .band {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .band-chart {
     padding-top: 4px;
+  }
+
+  .app-content {
+    overflow-y: auto;
   }
 }
 
@@ -2734,13 +3503,14 @@ button {
 
   .app-sidebar {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 8px 10px;
     padding: 10px 12px;
     border-right: 0;
     border-bottom: 1px solid var(--surface-line);
-    overflow-x: auto;
-    overflow-y: hidden;
+    /* 换行而不是横向滚动：避免固定定位的状态卡压住导航项 */
+    overflow: visible;
   }
 
   /* 紧凑侧栏里品牌只留标记与名称，副标题换行会撑高整条导航 */
@@ -2763,12 +3533,49 @@ button {
   }
 
   .side-label,
-  .side-spacer,
-  .status-panel {
+  .side-spacer {
     display: none;
   }
 
-  /* 紧凑侧栏里 Gateway 状态已由顶栏状态胶囊表达，避免重复占宽 */
+  /*
+   * ≤980px 是顶部横向导航：状态卡改为横向一行插在导航右侧，
+   * 而不是整块隐藏——顶栏的状态/版本胶囊已移除，这里必须继续承载它们。
+   *
+   * 横向空间紧张，只保留「状态点 + 版本号」这两个关键信息；
+   * 监听地址与平台文案在此断点省略（地址与顶栏 Gateway 状态重复，
+   * 平台在版本抽屉里仍可见）。
+   */
+  /*
+   * 横向导航项较多时不再横向滚动，而是**换行**：
+   * 横向滚动 + 固定在右侧的状态卡会让卡片盖住「导入配置 / 关于」等导航项
+   * （实测重叠 0.98）。换行后所有导航项与状态卡都完整可见，互不遮挡。
+   */
+  .status-panel {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    margin-left: auto;
+    padding: 6px 10px;
+  }
+
+  .status-panel-head {
+    gap: 6px;
+  }
+
+  .status-panel-address,
+  .status-panel-platform {
+    display: none;
+  }
+
+  .status-panel-meta {
+    width: auto;
+    margin-top: 0;
+    padding: 4px 8px;
+    white-space: nowrap;
+  }
+
+  /* 横向导航里「运行状态」小节与运行卡重复，仍隐藏 */
   .side-section-status {
     display: none;
   }
@@ -2801,6 +3608,11 @@ button {
 }
 
 @media (max-width: 760px) {
+  /* 窄屏顶栏会换行、面板起点更低，压一档高度保证底部「查看全部版本与更新」始终可见 */
+  .changelog-pop {
+    max-height: min(60vh, 460px);
+  }
+
   .form-grid,
   .field-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2818,8 +3630,7 @@ button {
     font-size: 27px;
   }
 
-  .state-pill-address,
-  .version-pill,
+  /* 顶栏胶囊已移除；窄屏只收起头像，版本号仍在左侧运行卡里可见 */
   .topbar-avatar {
     display: none;
   }

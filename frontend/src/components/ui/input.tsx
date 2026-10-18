@@ -6,7 +6,5 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
 ));
 Input.displayName = 'Input';
 
-export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(({ className, ...props }, ref) => (
-  <select ref={ref} className={cn('field-select', className)} {...props} />
-));
-Select.displayName = 'Select';
+// 下拉见 @/components/ui/select（Radix Select）：
+// 原生 <select> 的展开列表由系统绘制，无法跟随主题与设计令牌。

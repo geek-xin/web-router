@@ -34,14 +34,24 @@ public enum UpdatePlatform {
         return current();
     }
 
-    /** 当前运行系统对应的平台。 */
+    /**
+     * 当前运行系统对应的平台。
+     *
+     * <p>macOS/Darwin 必须先于 Windows 判断：{@code "darwin"} 本身包含
+     * {@code "win"}，顺序反了会为 Darwin 生成 Windows 批处理更新脚本。</p>
+     */
     public static UpdatePlatform current() {
-        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        if (osName.contains("win")) {
-            return WINDOWS;
-        }
-        if (osName.contains("mac") || osName.contains("darwin")) {
+        return of(System.getProperty("os.name"));
+    }
+
+    /** 由 {@code os.name} 解析平台，无法识别时按 Unix 处理。 */
+    static UpdatePlatform of(String osName) {
+        String name = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
+        if (name.contains("mac") || name.contains("darwin")) {
             return MACOS;
+        }
+        if (name.contains("win")) {
+            return WINDOWS;
         }
         return LINUX;
     }

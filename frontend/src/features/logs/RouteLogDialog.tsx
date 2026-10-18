@@ -3,7 +3,8 @@ import { Eye, Pause, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
-import { Input, Select } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
+import { Select, type SelectOption } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchJson } from '@/lib/api';
 import { copyText, formatDuration, formatTime } from '@/lib/utils';
@@ -212,13 +213,17 @@ export function RouteLogPanel({ open, route }: RouteLogPanelProps) {
               <Search className="search-field-icon" aria-hidden="true" />
               <Input value={pathSearch} onChange={(event) => setPathSearch(event.target.value)} type="search" placeholder="搜索路径" />
             </label>
-            <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px]" style={{ color: 'var(--surface-ink-muted)' }}>
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[12px]" style={{ color: 'var(--surface-ink-muted)' }}>
               显示
-              <Select className="w-[76px] min-w-[76px]" value={String(limit)} onChange={(event) => setLimit(normalizeLimit(event.target.value))} aria-label="显示条数">
-                {[20, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}
-              </Select>
+              <Select
+                value={String(limit)}
+                onValueChange={(value) => setLimit(normalizeLimit(value))}
+                options={LIMIT_OPTIONS}
+                width={76}
+                aria-label="显示条数"
+              />
               条
-            </label>
+            </div>
           </div>
         </div>
 
@@ -419,6 +424,12 @@ function pathStatsRows(state: LogViewState, keyword: string) {
     .filter((row) => !search || row.path.toLowerCase().includes(search))
     .sort((left, right) => right.total - left.total || left.path.localeCompare(right.path));
 }
+
+const LIMIT_OPTIONS: SelectOption[] = [
+  { value: '20', label: '20' },
+  { value: '50', label: '50' },
+  { value: '100', label: '100' },
+];
 
 function normalizeLimit(value: string): number {
   const number = Number(value);

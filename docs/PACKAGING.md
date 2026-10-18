@@ -2,7 +2,7 @@
 
 本文说明 wrouter 的交付形态、发布资产命名契约、本地打包方式、自动更新机制与 CI 发布流程。
 
-约定：下文 `<version>` 指 Maven 版本号（`pom.xml` 的 `<version>`，当前 `1.3.0`），不带 `v` 前缀。
+约定：下文 `<version>` 指 Maven 版本号（`pom.xml` 的 `<version>`，当前 `1.4.0`），不带 `v` 前缀。
 `<platform>` 取 `macos-arm64`、`macos-x64`、`linux-x64`、`linux-arm64`、`windows-x64` 之一。
 
 ## 交付形态对照
@@ -251,6 +251,7 @@ cd wrouter-<version>
 | `Option [--linux-package-name] is not valid with type [app-image]` 或 `Option [--win-menu] is not valid with type [app-image]` | 把安装包专用参数传给了 `--type app-image` | 已修复：安装包专用参数由 `installer_only_args()` 单独维护，只传给 `build_installer` |
 | `missing expected asset: wrouter-<version>-<platform>-app.tar.gz` | `--only` 只选了部分类型，但契约校验按所选类型逐项要求 | 补齐 `--only` 中的类型，或确认该平台确实能产出该资产 |
 | 检查更新报「当前安装形态不支持自动更新」 | `installMode` 非 `jar`/`app-image`，或平台标识无法识别 | 用契约命名的产物；`platform` 必须是五个受支持标识之一 |
+| 后台「运行平台」显示 `unknown` | 该构建没传 `-Dwrouter.platform`（如直接 `mvn package`），且 JVM 的 `os.name`/`os.arch` 无法映射到契约平台 | 正常路径下 `RuntimePlatform` 会自动按运行系统推导；确认运行在受支持的系统与架构上 |
 | 检查更新报「没有匹配当前平台的更新包」 | Release 缺少该形态该平台的资产 | 补齐资产或改用其他形态下载 |
 | 检查更新报「无法连接 GitHub」 | 网络不可达或 API 限流 | 检查网络；设置 `WROUTER_GITHUB_TOKEN` |
 | 摘要校验失败 | 下载文件与 Release 摘要不一致 | 应用已删除该文件；重试或手动下载 |

@@ -92,6 +92,7 @@ class CoreFeaturesDocContractTest {
                 "/admin/api/proxy-logs/routes/{routeId}",
                 "/admin/api/proxy-logs/stream",
                 "/admin/api/update/auto",
+                "/admin/api/update/history",
                 "/actuator/health",
         }) {
             assertThat(doc).as("文档必须记录接口 %s", endpoint).contains(endpoint);
@@ -150,6 +151,69 @@ class CoreFeaturesDocContractTest {
         // 状态接口可观测
         assertThat(controller).contains("/update/auto");
         assertThat(doc).contains("/admin/api/update/auto");
+    }
+
+    /**
+     * 阻塞式 GitHub 调用必须离开 WebFlux 事件循环。
+     *
+     * <p>历史缺陷：{@code AppVersionController} 直接调用阻塞的
+     * {@code HttpReleaseClient.listReleases()}（内部 {@code HttpClient.send()}），
+     * 而事件循环线程数 = CPU 核数。实测 12 个并发阻塞调用会让纯内存接口
+     * {@code /admin/api/version} 从 0.9ms 恶化到 537ms，网络抖动时直接抛
+     * {@code ConnectException}（表现为「读取历史版本失败」）。</p>
+     */
+    @Test
+    void blockingGitHubCallsStayOffTheEventLoop() throws Exception {
+        String doc = read("docs/CORE-FEATURES.md");
+        String controller = read("src/main/java/com/geek/webrouter/web/controller/AppVersionController.java");
+        String releaseClient = read("src/main/java/com/geek/webrouter/web/service/impl/HttpReleaseClient.java");
+
+        // 控制器必须把阻塞调用切到 boundedElastic，且返回 Mono
+        assertThat(controller).contains("Schedulers.boundedElastic()");
+        assertThat(controller).contains("Mono.fromCallable");
+        assertThat(controller).contains("public Mono<Result<ReleaseHistory>> history()");
+        assertThat(controller).contains("public Mono<Result<UpdateCheckResult>> check()");
+
+        // 客户端必须对瞬时连接故障做有限次重试
+        assertThat(releaseClient).contains("MAX_ATTEMPTS");
+        assertThat(releaseClient).contains("withRetry");
+        assertThat(releaseClient).contains("IOException");
+
+        // 文档必须记录这条约束（锚定本节标题，避免命中别处的泛泛描述）
+        assertThat(doc).contains("阻塞调用必须离开事件循环");
+        assertThat(doc).contains("Schedulers.boundedElastic()");
+        assertThat(doc).contains("ConnectException");
+    }
+
+    /**
+     * 平台兜底：构建元信息缺省时必须按运行期推导，且推导结果受发布契约约束。
+     * 文档与实现必须同时记录这条不变量，避免「未识别平台」回归。
+     */
+    @Test
+    void runtimePlatformFallbackIsDocumentedAndImplemented() throws Exception {
+        String doc = read("docs/CORE-FEATURES.md");
+        String service = read("src/main/java/com/geek/webrouter/web/service/impl/AppVersionServiceImpl.java");
+        String runtime = read("src/main/java/com/geek/webrouter/web/support/RuntimePlatform.java");
+        String updatePlatform = read("src/main/java/com/geek/webrouter/web/support/UpdatePlatform.java");
+
+        // 版本服务在构建值不可用时按运行期推导
+        assertThat(service).contains("resolvePlatform(");
+        assertThat(service).contains("RuntimePlatform.currentToken()");
+        assertThat(runtime).contains("os.name");
+        assertThat(runtime).contains("os.arch");
+        // 推导结果必须过发布契约，不能引入契约外标识
+        assertThat(runtime).contains("ReleaseAssets.platformToken");
+
+        // macOS 必须先于 Windows 判定："darwin" 含子串 "win"，
+        // 顺序反了会把 macOS 认成 Windows（显示错平台 + 生成 .bat 更新脚本）
+        assertThat(runtime.indexOf("name.contains(\"mac\")"))
+                .isLessThan(runtime.indexOf("name.contains(\"win\")"));
+        assertThat(updatePlatform.indexOf("name.contains(\"mac\")"))
+                .isLessThan(updatePlatform.indexOf("name.contains(\"win\")"));
+
+        // 文档必须记录这条兜底与顺序约束
+        assertThat(doc).contains("RuntimePlatform.currentToken()");
+        assertThat(doc).contains("darwin");
     }
 
     @Test

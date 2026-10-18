@@ -7,13 +7,18 @@ import {
   fallbackVersionInfo,
   formatBuildTime,
   formatBytes,
+  formatReleaseDate,
+  formatReleaseNotes,
+  historySummary,
   installModeLabel,
+  normalizeReleaseHistory,
   normalizeVersionInfo,
   platformLabel,
+  releaseNotesPreview,
   updateChannelLabel,
   updateStatusText,
 } from './version-utils';
-import type { AppVersionInfo, AutoUpdateStatus, UpdateCheckResult } from './types';
+import type { AppVersionInfo, AutoUpdateStatus, ReleaseHistory, UpdateCheckResult } from './types';
 
 function autoStatus(overrides: Partial<AutoUpdateStatus> = {}): AutoUpdateStatus {
   return {
@@ -78,13 +83,158 @@ describe('auto update status copy', () => {
 
 describe('version-utils', () => {
   it('labels platforms and install modes in Chinese', () => {
-    expect(platformLabel('macos-arm64')).toBe('macOS · Apple Silicon');
-    expect(platformLabel('windows-x64')).toBe('Windows · x64');
-    expect(platformLabel('solaris')).toBe('未识别平台');
+    // 只展示系统名：架构对使用者没有决策价值，且会让文案过长
+    expect(platformLabel('macos-arm64')).toBe('macOS');
+    expect(platformLabel('macos-x64')).toBe('macOS');
+    expect(platformLabel('linux-x64')).toBe('Linux');
+    expect(platformLabel('linux-arm64')).toBe('Linux');
+    expect(platformLabel('windows-x64')).toBe('Windows');
     expect(installModeLabel('jar')).toBe('JAR 服务');
     expect(installModeLabel('app-image')).toBe('免安装程序');
     expect(updateChannelLabel('prerelease')).toBe('预览通道');
     expect(updateChannelLabel('stable')).toBe('稳定通道');
+  });
+
+  it('shows only the OS name and never the CPU architecture', () => {
+    // 同系统的不同架构必须折叠成同一个标签
+    expect(platformLabel('macos-arm64')).toBe(platformLabel('macos-x64'));
+    expect(platformLabel('linux-x64')).toBe(platformLabel('linux-arm64'));
+    // 任何平台标签都不应包含架构后缀
+    const platforms = ['macos-arm64', 'macos-x64', 'linux-x64', 'linux-arm64', 'windows-x64',
+      'linux-riscv64', 'windows-arm64', 'macos-aarch64'];
+    for (const token of platforms) {
+      const label = platformLabel(token);
+      expect(label).not.toContain('·');
+      expect(label).not.toMatch(/arm64|x64|x86|Apple Silicon|Intel/i);
+    }
+  });
+
+  it('degrades gracefully instead of showing an unrecognised platform', () => {
+    // 契约外的组合按前缀识别系统名，不再一律「未识别平台」
+    expect(platformLabel('linux-riscv64')).toBe('Linux');
+    expect(platformLabel('windows-arm64')).toBe('Windows');
+    expect(platformLabel('macos-aarch64')).toBe('macOS');
+    // 认不出的标识原样显示，不吞掉后端上报的信息
+    expect(platformLabel('solaris-sparc')).toBe('solaris-sparc');
+    expect(platformLabel('freebsd')).toBe('freebsd');
+    // 只有确实没有平台信息时才是「未知平台」
+    expect(platformLabel('')).toBe('未知平台');
+    expect(platformLabel('unknown')).toBe('未知平台');
+    expect(platformLabel('UNKNOWN')).toBe('未知平台');
+    expect(platformLabel('  ')).toBe('未知平台');
+  });
+
+  it('normalizes the release history and survives a missing payload', () => {
+    const history = normalizeReleaseHistory(
+      {
+        currentVersion: '1.3.0',
+        repository: 'geek-xin/web-router',
+        releases: [
+          { version: '1.4.0', name: 'v1.4.0', publishedAt: '2026-10-01T00:00:00Z', releaseUrl: 'u', prerelease: false, current: false, notes: '新增历史版本' },
+          // 缺 version 的脏数据必须被过滤，否则渲染出空行
+          { version: '', name: 'broken' } as never,
+        ],
+        message: '',
+      },
+      '1.3.0',
+    );
+
+    expect(history.releases).toHaveLength(1);
+    expect(history.releases[0].version).toBe('1.4.0');
+    expect(history.repository).toBe('geek-xin/web-router');
+
+    const empty = normalizeReleaseHistory(null, '1.3.0');
+    expect(empty.currentVersion).toBe('1.3.0');
+    expect(empty.releases).toEqual([]);
+    expect(empty.message).toBe('');
+  });
+
+  it('summarises the history for the loading, empty and populated states', () => {
+    expect(historySummary(null)).toContain('正在读取');
+
+    const empty: ReleaseHistory = { currentVersion: '1.3.0', repository: 'o/r', releases: [], message: '无法连接 GitHub' };
+    expect(historySummary(empty)).toBe('无法连接 GitHub');
+
+    const noMessage: ReleaseHistory = { currentVersion: '1.3.0', repository: '', releases: [], message: '' };
+    expect(historySummary(noMessage)).toBe('暂无可用的历史版本');
+
+    const populated = normalizeReleaseHistory(
+      { currentVersion: '1.3.0', repository: 'o/r', releases: [{ version: '1.4.0', name: '', publishedAt: '', releaseUrl: '', prerelease: false, current: false, notes: '' }], message: '' },
+      '1.3.0',
+    );
+    expect(historySummary(populated)).toBe('共 1 个已发布版本 · o/r');
+  });
+
+  /**
+   * 有数据但带 message = 后端刷新失败、回落到缓存数据。
+   * 这种提示必须显示出来，否则用户会以为看到的就是最新列表。
+   */
+  it('surfaces the stale-cache notice even when releases are present', () => {
+    const stale = normalizeReleaseHistory(
+      {
+        currentVersion: '1.3.0',
+        repository: 'o/r',
+        releases: [{ version: '1.4.0', name: '', publishedAt: '', releaseUrl: '', prerelease: false, current: false, notes: '' }],
+        message: '读取最新版本失败，以下为缓存数据：ConnectException',
+      },
+      '1.3.0',
+    );
+
+    const summary = historySummary(stale);
+
+    expect(summary).toContain('共 1 个已发布版本');
+    expect(summary).toContain('缓存数据');
+  });
+
+  it('strips markdown markers from release notes for plain-text display', () => {
+    const notes = [
+      '## wrouter 1.3.0',
+      '',
+      '### 下载 / Downloads',
+      '',
+      '| 方式 | 文件 |',
+      '| --- | --- |',
+      '| 免安装 · macOS | `wrouter-1.3.0-macos-arm64-app.zip` |',
+      '',
+      '- **新增** 历史版本视图',
+      '- 见 [文档](https://example.test/docs)',
+    ].join('\n');
+
+    const formatted = formatReleaseNotes(notes);
+
+    // 标记符号不该出现在展示文本里
+    expect(formatted).not.toContain('##');
+    expect(formatted).not.toContain('**');
+    expect(formatted).not.toContain('|');
+    // 内容本身必须保留
+    expect(formatted).toContain('wrouter 1.3.0');
+    expect(formatted).toContain('wrouter-1.3.0-macos-arm64-app.zip');
+    expect(formatted).toContain('新增 历史版本视图');
+    expect(formatted).toContain('文档');
+    expect(formatted).not.toContain('https://example.test/docs');
+    // 表格行折叠为一行
+    expect(formatted).toContain('方式 · 文件');
+  });
+
+  it('keeps code fences intact and handles empty notes', () => {
+    const withFence = formatReleaseNotes('说明\n```\n## 保留原文\n```\n结尾');
+    expect(withFence).toContain('## 保留原文');
+
+    expect(formatReleaseNotes('')).toBe('该版本未提供修订记录');
+    expect(formatReleaseNotes('   ')).toBe('该版本未提供修订记录');
+  });
+
+  it('formats release dates and previews notes defensively', () => {
+    expect(formatReleaseDate('2026-10-01T00:00:00Z')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(formatReleaseDate('')).toBe('—');
+    expect(formatReleaseDate('not-a-date')).toBe('not-a-date');
+
+    expect(releaseNotesPreview('## 新增历史版本\n- 其它')).toBe('新增历史版本');
+    expect(releaseNotesPreview('')).toBe('该版本未提供修订记录');
+    expect(releaseNotesPreview('   ')).toBe('该版本未提供修订记录');
+    const long = releaseNotesPreview('a'.repeat(200), 20);
+    expect(long).toHaveLength(21);
+    expect(long.endsWith('…')).toBe(true);
   });
 
   it('falls back when the backend version endpoint is unavailable', () => {

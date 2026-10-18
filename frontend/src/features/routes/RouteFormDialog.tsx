@@ -72,21 +72,38 @@ export function RouteFormPanel({ active = true, mode, route, existingNames, exis
   const [errors, setErrors] = React.useState<string[]>([]);
   const [saving, setSaving] = React.useState(false);
 
+  /**
+   * 用路由 id + 模式标识"该重置了"，而不是依赖数组引用。
+   *
+   * <p>父组件每次渲染都会新建 existingNames / existingBindings 数组（例如每 5 秒的
+   * 指标轮询），把它们放进依赖会让表单在用户输入过程中被反复重置——
+   * 表现为刚填好的端口过几秒自己变回旧值。这里只在真正切换路由/模式时重置。</p>
+   */
+  const resetKey = React.useMemo(
+    () => [active ? 'active' : 'idle', mode, route?.id || ''].join('|'),
+    [active, mode, route?.id],
+  );
+  const latestRef = React.useRef({ route, existingNames, onValuesChange });
+  latestRef.current = { route, existingNames, onValuesChange };
+
   React.useEffect(() => {
     if (!active) {
       return;
     }
-    const nextValues = mode === 'create' || !route
+    const { route: currentRoute, existingNames: names, onValuesChange: notify } = latestRef.current;
+    const nextValues = mode === 'create' || !currentRoute
       ? emptyValues
       : (() => {
-          const next = routeToFormValues(route);
-          return { ...next, name: mode === 'copy' ? nextCopyName(next.name, existingNames) : next.name, enabled: mode === 'copy' ? false : next.enabled };
+          const next = routeToFormValues(currentRoute);
+          return { ...next, name: mode === 'copy' ? nextCopyName(next.name, names) : next.name, enabled: mode === 'copy' ? false : next.enabled };
         })();
     setValues(nextValues);
-    onValuesChange?.(nextValues);
+    notify?.(nextValues);
     setPrefixInput('');
     setErrors([]);
-  }, [active, mode, route, existingNames, onValuesChange]);
+    // 仅在 resetKey 变化时重置；其余 props 通过 latestRef 读取最新值
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
 
   function update<K extends keyof RouteFormValues>(key: K, value: RouteFormValues[K]) {
     setValues((current) => {
@@ -125,6 +142,10 @@ export function RouteFormPanel({ active = true, mode, route, existingNames, exis
       if (closeAfterSubmit) {
         onCancel?.();
       }
+    } catch (submitError) {
+      // 保存失败必须回显在表单里：否则 Promise 变成未处理的 rejection，
+      // 用户只看到按钮闪一下，完全不知道失败了（例如端口被占用）。
+      setErrors([submitError instanceof Error ? submitError.message : '保存失败，请重试']);
     } finally {
       setSaving(false);
     }

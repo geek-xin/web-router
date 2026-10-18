@@ -6,11 +6,11 @@
     <meta name="routes-config-dir" th:content="${routesConfigDir}" content="">
     <title>wrouter — 路由管理</title>
     <link rel="icon" type="image/svg+xml" href="/admin/favicon.svg">
-    <link rel="stylesheet" href="/admin/assets/app.css?v=20261002-paper">
+    <link rel="stylesheet" th:href="@{/admin/assets/app.css(v=${assetVersion})}">
 </head>
 <body>
 <noscript>请启用 JavaScript 后使用 wrouter 路由管理后台。</noscript>
 <div id="root"></div>
-<script type="module" src="/admin/assets/app.js?v=20261002-paper"></script>
+<script type="module" th:src="@{/admin/assets/app.js(v=${assetVersion})}"></script>
 </body>
 </html>
