@@ -92,10 +92,18 @@ jobs:
         shell: bash
         run: |
           set -eu
+          # 版本来源优先级：手动输入 > tag 名 > pom.xml 的 project.version。
+          #
+          # 不能用 `sed ... <version> | head -n 1`：pom.xml 里第一个 <version>
+          # 是 <parent> 的 Spring Boot 版本（3.5.2），会把发布版本解析成 3.5.2，
+          # 产物名随之变成 wrouter-3.5.2-*.zip，与 tag / pom 都不符。
+          # 这里只取 </parent> 之后的第一处 <version>，即 project.version。
           if [ -n "${{ inputs.version }}" ]; then
             version="${{ inputs.version }}"
+          elif [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
           else
-            version=$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' pom.xml | head -n 1)
+            version=$(awk '/<\/parent>/{seen=1; next} seen && /<version>/{gsub(/.*<version>|<\/version>.*/, ""); print; exit}' pom.xml)
           fi
           version=$(printf '%s' "${version}" | tr -d '[:space:]')
           [ -n "${version}" ] || { echo "could not resolve a version" >&2; exit 1; }
@@ -166,7 +174,9 @@ jobs:
             version="${{ github.ref_name }}"
             version="${version#v}"
           else
-            version=$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' pom.xml | head -n 1)
+            # 只取 </parent> 之后的第一处 <version>（project.version）；
+            # 直接取第一个 <version> 会拿到 <parent> 的 Spring Boot 版本。
+            version=$(awk '/<\/parent>/{seen=1; next} seen && /<version>/{gsub(/.*<version>|<\/version>.*/, ""); print; exit}' pom.xml)
           fi
           version=$(printf '%s' "${version}" | tr -d '[:space:]')
           [ -n "${version}" ] || { echo "could not resolve a version" >&2; exit 1; }
